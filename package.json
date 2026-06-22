@@ -1,0 +1,18 @@
+{
+  "name": "director-stage-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "3D 导演台融合 Demo — 多角色 GLB 摆姿 + 几何道具 + 取景截图",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.vite/
+# 自测产物
+selftest_*.png
+clean_*.png

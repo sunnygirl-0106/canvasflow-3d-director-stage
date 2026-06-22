@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D 导演台</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0d12'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='%2334c759'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/src/styles/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="logo">3D导演台</div>
+      <div class="viewtabs" id="viewtabs">
+        <button data-v="director" class="on">导演视角</button>
+        <button data-v="camera">机位视角</button>
+      </div>
+      <div class="right">
+        <button class="ic" id="helpBtn" title="操作说明">?</button>
+        <button class="ic" id="closeBtn" title="关闭">×</button>
+      </div>
+    </header>
+    <main>
+      <!-- 左：场景清单 -->
+      <aside class="side left">
+        <h3>场景</h3>
+        <div class="searchbox">
+          <input id="search" placeholder="请输入搜索内容" />
+          <span class="si" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          </span>
+        </div>
+        <div id="outliner"></div>
+      </aside>
+
+      <!-- 中：视口 -->
+      <div id="viewport">
+        <div id="frame"></div>
+        <div id="labelLayer"></div>
+        <div id="navg" title="重置视角">
+          <svg width="74" height="74" viewBox="0 0 74 74" id="navsvg"></svg>
+          <div class="lab">重置视角</div>
+        </div>
+        <div id="dock"></div>
+      </div>
+
+      <!-- 右：未选中=场景面板 / 选中=属性·姿势 -->
+      <aside class="side right" id="rightPanel">
+        <div id="scenePanel"></div>
+        <div id="inspector" hidden></div>
+      </aside>
+    </main>
+  </div>
+  <div id="toast"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
