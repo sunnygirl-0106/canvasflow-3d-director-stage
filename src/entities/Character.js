@@ -151,11 +151,17 @@ export class Character extends Entity {
 
   /** 播放预设动画；与手动摆姿互斥（先清零滑条）。 */
   playClip(name) {
-    if (!this.clips[name] || !this.mixer) return;
+    const clip = this.clips[name];
+    if (!clip || !this.mixer) return;
     for (const j of JOINTS) this.values[j.key] = 0;
     this.mixer.stopAllAction();
-    const act = this.mixer.clipAction(this.clips[name]);
+    const act = this.mixer.clipAction(clip);
     act.reset();
+    // 短姿势片段（如 sad_pose / sneak_pose 仅 2 帧）若循环，会在 rest↔pose 间高频闪烁；
+    // 改为播放一次并定格到末帧姿势。其余动画正常循环。
+    const isPose = clip.duration <= 0.25 || /pose/i.test(name);
+    act.setLoop(isPose ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
+    act.clampWhenFinished = isPose;
     act.play();
     this.poseMode = 'preset';
     this.currentClip = name;
