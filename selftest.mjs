@@ -66,10 +66,13 @@ ok('移动/旋转/缩放三模式可用', tm);
 
 // 7 取景 + 截图裁剪
 const dims = async (dataurl) => page.evaluate((u) => new Promise((res) => { const i = new Image(); i.onload = () => res({ w: i.naturalWidth, h: i.naturalHeight }); i.src = u; }), dataurl);
-const s1 = await page.evaluate(async () => { const a = window.__app; a.setCameraView(true); a.ratioIndex = 0; a.rig.setRatio('16:9'); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); a.captureShot(); return a.latestShot; });
+const s1 = await page.evaluate(async () => { const a = window.__app; a.setRatio('16:9'); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); a.captureShot(); return a.latestShot; });
 const d1 = await dims(s1); ok('截图 16:9 裁剪', Math.abs(d1.w / d1.h - 16 / 9) < 0.06, `${d1.w}×${d1.h}`);
-const s2 = await page.evaluate(async () => { const a = window.__app; a.rig.setRatio('9:16'); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); a.captureShot(); return a.latestShot; });
+const s2 = await page.evaluate(async () => { const a = window.__app; a.setRatio('9:16'); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); a.captureShot(); return a.latestShot; });
 const d2 = await dims(s2); ok('截图 9:16 裁剪', Math.abs(d2.w / d2.h - 9 / 16) < 0.06, `${d2.w}×${d2.h}`);
+const s3 = await page.evaluate(async () => { const a = window.__app; a.setRatio('4:3'); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); a.captureShot(); return a.latestShot; });
+const d3 = await dims(s3); ok('截图 4:3 裁剪（比例菜单扩展）', Math.abs(d3.w / d3.h - 4 / 3) < 0.06, `${d3.w}×${d3.h}`);
+await page.evaluate(() => { window.__app.setCameraView(false); window.__app.setRatio('auto'); });
 
 // 8 场景级控制
 const sc = await page.evaluate(() => {
@@ -94,8 +97,110 @@ const crud = await page.evaluate(() => {
 });
 ok('显隐/删除 + 未选中显示场景面板', crud.h && crud.scenePanelShown && crud.removed);
 
+// 10 添加机位：实体 + helper 在 scene + 导演视角下可见
+const camAdd = await page.evaluate(() => {
+  const a = window.__app;
+  const c = a.entities.find((e) => e.type === 'character'); if (c) a.select(c.id);
+  const cam = a.addCamera('front_mid');
+  const inScene = a.stage.scene.children.includes(cam.helper);
+  return { isCam: cam.type === 'camera', inScene, bodyVis: cam.body.visible, helperVis: cam.helper.visible, hasFov: cam.cam.fov > 0, id: cam.id };
+});
+ok('添加机位：实体/视锥/导演视角可见', camAdd.isCam && camAdd.inScene && camAdd.bodyVis && camAdd.helperVis && camAdd.hasFov);
+
+// 11 机位视角 / 截图 隐藏相机可视化
+const camHide = await page.evaluate(() => {
+  const a = window.__app;
+  a.setCameraView(true);
+  const cam = a.entities.find((e) => e.type === 'camera');
+  const hidden = !cam.body.visible && !cam.helper.visible;
+  a.setCameraView(false);
+  const shown = cam.body.visible && cam.helper.visible;
+  return { hidden, shown };
+});
+ok('机位视角隐藏相机体+视锥，导演视角恢复', camHide.hidden && camHide.shown);
+
+// 12 相机不支持缩放 + 删除清理 helper
+const camMisc = await page.evaluate(() => {
+  const a = window.__app;
+  const cam = a.entities.find((e) => e.type === 'camera'); a.select(cam.id);
+  a.setTransformMode('scale'); const notScale = a.gizmo.control.mode !== 'scale';
+  a.setTransformMode('translate');
+  const n0 = a.entities.length; a.remove(cam.id);
+  const removed = a.entities.length === n0 - 1;
+  const helperGone = !a.stage.scene.children.includes(cam.helper);
+  return { notScale, removed, helperGone };
+});
+ok('相机禁缩放 + 删除清理视锥', camMisc.notScale && camMisc.removed && camMisc.helperGone);
+
+// 13 全景背景：设置后球可见，移除后恢复
+const pano = await page.evaluate(async () => {
+  const a = window.__app;
+  const assets = await import('/src/util/assetLibrary.js').then((m) => m.listCanvasAssets());
+  a.setPanoramaFromAsset(assets[0]);
+  await new Promise((r) => setTimeout(r, 300));
+  const onState = a.panoActive && a.stage.hasPanorama();
+  a.clearPanorama();
+  const offState = !a.panoActive && !a.stage.hasPanorama();
+  return { onState, offState };
+});
+ok('全景背景：设置/移除', pano.onState && pano.offState);
+
+// 14 机位视角 POV：切换渲染相机 / 禁环绕 / 退出恢复
+const povT = await page.evaluate(() => {
+  const a = window.__app;
+  const cam = a.cameras[0] || a.addCamera('front_mid'); a.select(cam.id);
+  a.setCameraView(true);
+  const active = a.stage.activeCamera === cam.cam;
+  const render = a.getRenderCamera() === cam.cam;
+  const orbitOff = a.rig.controls.enabled === false;
+  a.setCameraView(false);
+  const restored = a.stage.activeCamera === null && a.rig.controls.enabled === true;
+  return { active, render, orbitOff, restored };
+});
+ok('机位视角 POV：切换渲染相机/禁环绕/退出恢复', povT.active && povT.render && povT.orbitOff && povT.restored, JSON.stringify(povT));
+
+// 15 截图入库 + 自动建机位 + 按机位分组
+const shotsT = await page.evaluate(() => {
+  const a = window.__app; a.clearShots();
+  const c = a.entities.find((e) => e.type === 'character'); a.select(c.id);
+  const camsBefore = a.cameras.length;
+  const shot = a.captureShot();
+  return {
+    hasCamId: !!shot.cameraId, inShots: a.shots.includes(shot),
+    autoCam: a.cameras.length === camsBefore + 1, grouped: a.shotsForCamera(shot.cameraId).length,
+  };
+});
+ok('截图入库 + 自动建机位 + 按机位分组', shotsT.hasCamId && shotsT.inShots && shotsT.autoCam && shotsT.grouped >= 1, JSON.stringify(shotsT));
+
+// 16 多选 + 删除 + 清空
+const selT = await page.evaluate(() => {
+  const a = window.__app;
+  const cam = a.cameras[0]; a.select(cam.id); a.captureShot(); a.captureShot();
+  const ids = a.shots.slice(-2).map((s) => s.id);
+  a.selectedShotIds.clear();
+  a.toggleShotSelected(ids[0]);
+  const onlyOne = a.selectedShotIds.size === 1 && a.selectedShotIds.has(ids[0]);
+  a.toggleShotSelected(ids[0]); const cleared = a.selectedShotIds.size === 0;
+  const before = a.shots.length; a.removeShot(ids[1]); const removed = a.shots.length === before - 1;
+  a.clearShots(); const emptied = a.shots.length === 0;
+  return { onlyOne, cleared, removed, emptied };
+});
+ok('截图多选 / 删除 / 清空', selT.onlyOne && selT.cleared && selT.removed && selT.emptied, JSON.stringify(selT));
+
+// 17 注视一次性对准 + FOV
+const aimT = await page.evaluate(() => {
+  const a = window.__app;
+  const cam = a.cameras[0] || a.addCamera('front_mid');
+  const char = a.entities.find((e) => e.type === 'character');
+  const center = a.aimCameraAtObject(cam.id, char.id);
+  const lookSet = center && Math.abs(cam.lookTarget.x - center.x) < 1e-6 && Math.abs(cam.lookTarget.y - center.y) < 1e-6;
+  cam.setFov(70); const fov = Math.abs(cam.cam.fov - 70) < 1e-6;
+  return { hasCenter: !!center, lookSet, fov };
+});
+ok('注视一次性对准 + FOV', aimT.hasCenter && aimT.lookSet && aimT.fov, JSON.stringify(aimT));
+
 // 截一张页面图，便于人工对齐截图
-await page.evaluate(() => window.__app.select(null));
+await page.evaluate(() => { window.__app.setCameraView(false); window.__app.select(null); });
 await new Promise((r) => setTimeout(r, 400));
 await page.screenshot({ path: 'selftest_view.png' });
 console.log('📸 已保存 selftest_view.png（未选中态）');

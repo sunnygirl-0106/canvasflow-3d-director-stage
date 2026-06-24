@@ -21,15 +21,38 @@ export function sliderRow({ label, min, max, step = 1, value = 0, disabled = fal
   return { el: row, set(v) { input.value = v; setFill(v); valbox.textContent = format(v); } };
 }
 
-// 三元 XYZ 行。axes: [{key:'x', get:()=>num, set:(v)=>{}}]; deg=true 时显示整数度
-export function tripleRow({ label, axes, deg = false }) {
+// 轴标签 hover 左右拖动改值（scrubber，§C.3）。
+function attachScrub(elm, { get, set, step, after }) {
+  let startX = 0, startV = 0, dragging = false;
+  elm.classList.add('scrub');
+  elm.addEventListener('pointerdown', (e) => {
+    dragging = true; startX = e.clientX; startV = get();
+    try { elm.setPointerCapture(e.pointerId); } catch { /* noop */ }
+    e.preventDefault();
+  });
+  elm.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    set(startV + (e.clientX - startX) * step);
+    after && after();
+  });
+  const end = (e) => { if (dragging) { dragging = false; try { elm.releasePointerCapture(e.pointerId); } catch { /* noop */ } } };
+  elm.addEventListener('pointerup', end);
+  elm.addEventListener('pointercancel', end);
+}
+
+// 三元 XYZ 行。axes: [{key:'x', get:()=>num, set:(v)=>{}, step?}]; deg=true 显示整数度；
+// 轴标签可左右拖动改值（每轴 step 可覆盖整体 step）。
+export function tripleRow({ label, axes, deg = false, step }) {
   const fx = (v) => (deg ? String(Math.round(v)) : (Math.round(v * 100) / 100).toFixed(2));
+  const baseStep = step != null ? step : (deg ? 1 : 0.05);
   const inputs = {};
-  const fields = axes.map(({ key, get, set }) => {
+  const fields = axes.map(({ key, get, set, step: axStep }) => {
     const input = el('input', { value: fx(get()) });
     input.addEventListener('input', () => { const v = parseFloat(input.value); if (!isNaN(v)) set(v); });
     inputs[key] = { input, get };
-    return el('div', { class: 'fld' }, [el('span', { class: 'ax', text: key.toUpperCase() }), input]);
+    const ax = el('span', { class: 'ax', text: key.toUpperCase() });
+    attachScrub(ax, { get, set, step: axStep != null ? axStep : baseStep, after: () => { input.value = fx(get()); } });
+    return el('div', { class: 'fld' }, [ax, input]);
   });
   const row = el('div', { class: 'field' }, [
     label != null ? el('label', { text: label }) : null,
@@ -45,6 +68,45 @@ export function tripleRow({ label, axes, deg = false }) {
       }
     },
   };
+}
+
+// 下拉行（注视目标 / 切换机位）。options: [{value,label}]
+export function dropdownRow({ label, options, value, onChange }) {
+  const sel = el('select', { class: 'dropdown' });
+  for (const o of options) {
+    const opt = el('option', { value: o.value });
+    opt.textContent = o.label;
+    if (o.value === value) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => onChange(sel.value));
+  const row = el('div', { class: 'field' }, [label != null ? el('label', { text: label }) : null, sel]);
+  return { el: row, set(v) { sel.value = v; } };
+}
+
+// ⓘ 提示气泡（hover 显示）
+export function infoTip(text) {
+  const tip = el('span', { class: 'infotip', text: 'ⓘ' });
+  tip.appendChild(el('span', { class: 'infotip-bubble', text }));
+  return tip;
+}
+
+// 截图缩略卡片：hover 遮罩（发送气泡 + 删除/发送/全屏）+ 多选勾选态
+export function shotCard({ shot, selected, onToggle, onDelete, onSend, onExpand }) {
+  const card = el('div', { class: 'shot-card' + (selected ? ' sel' : '') });
+  const img = el('img', { src: shot.dataURL, alt: shot.name });
+  const check = el('span', { class: 'shot-check', text: selected ? '✓' : '' });
+  const ov = el('div', { class: 'shot-ov' }, [
+    el('div', { class: 'shot-send-bubble', text: '发送到画布', onclick: (e) => { e.stopPropagation(); onSend?.(); } }),
+    el('div', { class: 'shot-ops' }, [
+      el('button', { class: 'shot-op', title: '删除', text: '🗑', onclick: (e) => { e.stopPropagation(); onDelete?.(); } }),
+      el('button', { class: 'shot-op', title: '发送到画布', text: '⤴', onclick: (e) => { e.stopPropagation(); onSend?.(); } }),
+      el('button', { class: 'shot-op', title: '全屏扩大', text: '⤢', onclick: (e) => { e.stopPropagation(); onExpand?.(); } }),
+    ]),
+  ]);
+  card.append(img, check, ov, el('div', { class: 'shot-name', text: shot.name }));
+  card.addEventListener('click', () => onToggle?.());
+  return card;
 }
 
 // 颜色行：色块 + #hex 文本

@@ -23,28 +23,30 @@ export class Outliner {
     clear(this.container);
     const tree = el('div', { class: 'tree' });
 
-    // 机位1（固定项）：点选切到机位视角
-    const cam = el('div', { class: 'node' }, [
-      el('span', { class: 'ic-type', html: ICON.camera }),
-      el('span', { class: 'nm', text: '机位1' }),
-    ]);
-    cam.addEventListener('click', () => app.setCameraView(true));
-    if (!this.query || '机位1'.includes(this.query)) tree.appendChild(cam);
-
     for (const ent of app.entities) {
       if (this.query && !ent.name.includes(this.query)) continue;
       const sel = ent.id === app.selectedId;
       const node = el('div', { class: 'node' + (sel ? ' sel' : '') });
-      node.append(
-        el('span', { class: 'ic-type', html: ent.type === 'character' ? ICON.person : ICON.cube }),
-        el('span', { class: 'nm', text: ent.name }),
-        el('div', { class: 'ops' }, [
-          el('button', { class: 'op', title: '显隐', text: ent.visible ? '◉' : '○', onclick: (e) => { e.stopPropagation(); app.toggleVisible(ent.id); } }),
-          el('button', { class: 'op', title: '重命名', text: '✎', onclick: (e) => { e.stopPropagation(); const n = prompt('重命名', ent.name); if (n != null) app.rename(ent.id, n); } }),
-          el('button', { class: 'op', title: '删除', text: '✕', onclick: (e) => { e.stopPropagation(); app.remove(ent.id); } }),
-        ]),
+      const icon = ent.type === 'character' ? ICON.person : ent.type === 'camera' ? ICON.camera : ICON.cube;
+      const ops = [];
+      if (ent.type === 'camera') {
+        ops.push(el('button', { class: 'op', title: '看向该机位', text: '⊙', onclick: (e) => { e.stopPropagation(); app.focusCamera(ent.id); } }));
+      }
+      ops.push(
+        el('button', { class: 'op', title: '显隐', text: ent.visible ? '◉' : '○', onclick: (e) => { e.stopPropagation(); app.toggleVisible(ent.id); } }),
+        el('button', { class: 'op', title: '重命名', text: '✎', onclick: (e) => { e.stopPropagation(); const n = prompt('重命名', ent.name); if (n != null) app.rename(ent.id, n); } }),
+        el('button', { class: 'op', title: '删除', text: '✕', onclick: (e) => { e.stopPropagation(); app.remove(ent.id); } }),
       );
-      node.addEventListener('click', () => app.select(ent.id));
+      node.append(
+        el('span', { class: 'ic-type', html: icon }),
+        el('span', { class: 'nm', text: ent.name }),
+        el('div', { class: 'ops' }, ops),
+      );
+      // 机位视角下点相机 = 切换 POV active；其余 = 选中
+      node.addEventListener('click', () => {
+        if (ent.type === 'camera' && app.cameraView) app.setActiveCamera(ent.id);
+        else app.select(ent.id);
+      });
       node.querySelector('.nm').addEventListener('dblclick', (e) => { e.stopPropagation(); const n = prompt('重命名', ent.name); if (n != null) app.rename(ent.id, n); });
       tree.appendChild(node);
     }

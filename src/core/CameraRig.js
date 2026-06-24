@@ -25,7 +25,31 @@ export class CameraRig {
 
     this.ratio = 16 / 9;          // 当前取景比例（null=自由）
     this.frameRect = null;        // 当前取景框 CSS 像素矩形（自由模式为 null=全幅）
+    this._buildFrameExtras();     // 三分构图网格 overlay + 开关（§A）
     this.setRatio('16:9');
+  }
+
+  // 取景框内：三分构图网格（默认关）+ 右上角「⌗」开关
+  _buildFrameExtras() {
+    this.gridOn = false;
+    this.gridEl = document.createElement('div');
+    this.gridEl.className = 'frame-grid';
+    this.gridEl.innerHTML = '<i class="v1"></i><i class="v2"></i><i class="h1"></i><i class="h2"></i>';
+    this.frameEl.appendChild(this.gridEl);
+
+    const btn = document.createElement('button');
+    btn.className = 'frame-grid-toggle';
+    btn.title = '三分构图网格';
+    btn.textContent = '⌗';
+    btn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleGrid(); });
+    this.frameEl.appendChild(btn);
+    this.gridBtn = btn;
+  }
+
+  toggleGrid() {
+    this.gridOn = !this.gridOn;
+    this.gridEl.classList.toggle('on', this.gridOn);
+    this.gridBtn.classList.toggle('on', this.gridOn);
   }
 
   update() {
@@ -73,9 +97,9 @@ export class CameraRig {
     this.controls.update();
   }
 
-  /** 设取景比例并重排取景框。ratioStr ∈ '16:9'|'9:16'|'1:1'|'free' */
+  /** 设取景比例并重排取景框。ratioStr ∈ 'free' | 任意 'w:h'（21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16 …） */
   setRatio(ratioStr) {
-    if (ratioStr === 'free') {
+    if (ratioStr === 'free' || ratioStr === 'auto' || ratioStr == null) {
       this.ratio = null;
       this.frameEl.style.display = 'none';
       this.frameRect = null;

@@ -21,6 +21,9 @@ export class Stage {
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.05, 1000);
     this.camera.position.set(0, 1.6, 6.2);
 
+    // 机位视角 POV：非 null 时主视口透过该相机出画面（§B.1）
+    this.activeCamera = null;
+
     // world：承载所有实体，供「场景缩放/平移/旋转」整体控制
     this.world = new THREE.Group();
     this.scene.add(this.world);
@@ -85,6 +88,41 @@ export class Stage {
     this.groundGroup.add(new THREE.Line(zg, axisMat(0x3a4a8a)));
   }
 
+  // ---- 全景背景（§3.c）：BackSide 大球承载等距柱状贴图，支持旋转/半径 ----
+  setPanorama(texture) {
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    if (this._panoTex && this._panoTex !== texture) this._panoTex.dispose();
+    this._panoTex = texture;
+    if (!this.panoSphere) {
+      const geo = new THREE.SphereGeometry(1, 60, 40);
+      const mat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, toneMapped: false, depthWrite: false });
+      this.panoSphere = new THREE.Mesh(geo, mat);
+      this.panoSphere.renderOrder = -1;
+      this.panoSphere.rotation.y = THREE.MathUtils.degToRad(this._panoRotDeg || 0);
+      this.panoSphere.scale.setScalar(this._panoRadius || 60);
+      this.scene.add(this.panoSphere);
+    }
+    this.panoSphere.material.map = texture;
+    this.panoSphere.material.needsUpdate = true;
+    this.panoSphere.visible = true;
+    // 弱化雾，避免全景被雾染色（记录原值，clearPanorama 时恢复）
+    if (this.scene.fog && this._fogSaved === undefined) {
+      this._fogSaved = { near: this.scene.fog.near, far: this.scene.fog.far };
+      this.scene.fog.near = 1000; this.scene.fog.far = 2000;
+    }
+  }
+  clearPanorama(skyHex) {
+    if (this.panoSphere) { this.panoSphere.visible = false; this.panoSphere.material.map = null; }
+    if (this._panoTex) { this._panoTex.dispose(); this._panoTex = null; }
+    if (this.scene.fog && this._fogSaved) {
+      this.scene.fog.near = this._fogSaved.near; this.scene.fog.far = this._fogSaved.far; this._fogSaved = undefined;
+    }
+    if (skyHex != null) this.setSkyColor(skyHex);
+  }
+  hasPanorama() { return !!(this.panoSphere && this.panoSphere.visible); }
+  setPanoramaRotation(deg) { this._panoRotDeg = deg; if (this.panoSphere) this.panoSphere.rotation.y = THREE.MathUtils.degToRad(deg); }
+  setPanoramaRadius(r) { this._panoRadius = r; if (this.panoSphere) this.panoSphere.scale.setScalar(r); }
+
   // ---- scene-level controls ----
   setSkyColor(hex) { this.scene.background = new THREE.Color(hex); if (this.scene.fog) this.scene.fog.color = new THREE.Color(hex); }
   setGroundVisible(v) { this.groundGroup.visible = v; }
@@ -102,11 +140,13 @@ export class Stage {
     const W = this.viewport.clientWidth;
     const H = this.viewport.clientHeight;
     this.renderer.setSize(W, H);
-    this.camera.aspect = W / Math.max(1, H);
+    const aspect = W / Math.max(1, H);
+    this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
+    if (this.activeCamera) { this.activeCamera.aspect = aspect; this.activeCamera.updateProjectionMatrix(); }
   }
 
-  render() { this.renderer.render(this.scene, this.camera); }
+  render() { this.renderer.render(this.scene, this.activeCamera || this.camera); }
 
   startLoop(tick) {
     this._tick = tick;

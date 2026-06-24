@@ -37,18 +37,30 @@ export class ScenePanel {
     // ---- 全景背景 ----
     const sec2 = el('div', { class: 'sec' });
     sec2.appendChild(el('div', { class: 'sec-title', text: '全景背景' }));
-    sec2.appendChild(el('div', { class: 'field' }, [
-      el('label', { text: '已连接全景图' }),
-      el('div', { class: 'placeholder-box', html: '<span>⃝</span><span>请将图片节点连接到导演台左侧输入口</span>' }),
-    ]));
+    const panoField = el('div', { class: 'field' }, [el('label', { text: '已连接全景图' })]);
+    if (app.panoActive && app.panoramaInfo) {
+      const thumb = el('div', { class: 'pano-connected' }, [
+        el('div', { class: 'pano-preview' }),
+        el('div', { class: 'pano-meta' }, [
+          el('div', { class: 'pano-title', text: app.panoramaInfo.title || '全景图' }),
+          el('button', { class: 'pano-remove', text: '移除', onclick: () => app.clearPanorama() }),
+        ]),
+      ]);
+      thumb.querySelector('.pano-preview').style.backgroundImage = `url(${app.panoramaInfo.thumb})`;
+      panoField.appendChild(thumb);
+    } else {
+      panoField.appendChild(el('div', { class: 'placeholder-box', html: '<span>⃝</span><span>底部「全景图」按钮：本地上传或选历史记录</span>' }));
+    }
+    sec2.appendChild(panoField);
     sec2.appendChild(colorRow({ label: '天空颜色', hex: toHex(s.sky), onChange: (h) => app.setSkyColor(h) }).el);
     root.appendChild(sec2);
 
-    // ---- 全景球（占位，无全景图时不可用）----
+    // ---- 全景球（有全景图时可用，§3.c）----
     const sec3 = el('div', { class: 'sec' });
     sec3.appendChild(el('div', { class: 'sec-title', text: '全景球' }));
-    sec3.appendChild(sliderRow({ label: '水平旋转', min: 0, max: 360, value: 0, disabled: true, format: (v) => Math.round(v) + '°' }).el);
-    sec3.appendChild(sliderRow({ label: '球形半径', min: 10, max: 200, value: 60, disabled: true, format: (v) => Math.round(v) }).el);
+    const pano = app.panoActive;
+    sec3.appendChild(sliderRow({ label: '水平旋转', min: 0, max: 360, value: s.panoRot, disabled: !pano, format: (v) => Math.round(v) + '°', onInput: (v) => app.setPanoramaRotation(v) }).el);
+    sec3.appendChild(sliderRow({ label: '球形半径', min: 10, max: 200, value: s.panoRadius, disabled: !pano, format: (v) => Math.round(v), onInput: (v) => app.setPanoramaRadius(v) }).el);
     root.appendChild(sec3);
 
     // ---- 角色标签 / 网格吸附 ----
