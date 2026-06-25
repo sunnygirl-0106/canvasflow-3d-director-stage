@@ -1,8 +1,9 @@
 import { el } from '../util/dom.js';
 import { DockMenu } from './dockMenu.js';
+import { HistoryModal } from './HistoryModal.js';
 import { groupedPresets } from '../core/cameraPresets.js';
 import { listCanvasAssets } from '../util/assetLibrary.js';
-import { RATIO_OPTIONS } from '../app/App.js';
+import { RATIO_OPTIONS, isPanoRatio, BODY_TYPES } from '../app/App.js';
 
 // 内联图标
 const IC = {
@@ -20,17 +21,14 @@ const IC = {
   expand: '<path d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6"/>',
   upload: '<path d="M12 16V5M8 9l4-4 4 4M5 19h14"/>',
   cube: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 3v18M4 7.5l8 4.5 8-4.5"/>',
+  group: '<circle cx="7" cy="7" r="2.1"/><circle cx="17" cy="7" r="2.1"/><circle cx="7" cy="17" r="2.1"/><circle cx="17" cy="17" r="2.1"/>',
   history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4M12 7v5l3 2"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>',
 };
 const svg = (name, w = 21) => `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${IC[name]}</svg>`;
 
-// 与截图一致的素体清单（按现有模型映射）
-const CHARACTERS = [
-  ['Xbot', 'Xbot 素体'],
-  ['Soldier', 'Soldier 士兵'],
-  ['Robot', 'Robot 机器人'],
-];
+// 素体清单从体型注册表生成（单一事实来源，见 App.BODY_TYPES）
+const CHARACTERS = Object.entries(BODY_TYPES).map(([key, v]) => [key, v.label]);
 const GEO = [['box', '方块'], ['cylinder', '圆柱'], ['sphere', '球体'], ['mannequin', '人体素模']];
 const TF_MODES = [['translate', 'move', '移动'], ['rotate', 'rotate', '旋转'], ['scale', 'scale', '缩放']];
 
@@ -42,6 +40,13 @@ export class Dock {
     this.modeBtns = {};
     this._assets = [];
     listCanvasAssets().then((a) => { this._assets = a; });
+    this._history = new HistoryModal({
+      getAssets: () => this._assets,
+      onPick: (a) => app.setPanoramaFromAsset(a),
+      // 仅 2:1 图片可作全景；其余（非 2:1、视频）在弹层中置灰禁用
+      isEligible: (a) => a.type === 'image' && isPanoRatio(a.w, a.h),
+      ineligibleReason: (a) => (a.type !== 'image' ? '视频不可作全景' : '需 2:1 全景图'),
+    });
     this.render();
   }
 
@@ -129,23 +134,10 @@ export class Dock {
     const app = this.app;
     const items = [];
 
-    const fileInput = el('input', { type: 'file', accept: '.glb,.gltf' });
-    fileInput.addEventListener('change', (e) => {
-      const f = e.target.files && e.target.files[0];
-      if (f) app.addCharacterFromFile(f);
-      e.target.value = '';
-      this.menu.close();
-    });
-    items.push(el('label', { class: 'menu-item' }, [
-      el('span', { class: 'mi-ic', html: svg('upload', 17) }),
-      el('span', { class: 'mi-label', text: '本地上传' }),
-      fileInput,
-    ]));
-    items.push(el('div', { class: 'menu-sep' }));
-
     for (const [key, label] of CHARACTERS) {
       items.push(this._item('person', label, () => { app.addCharacter(key); this.menu.close(); }));
     }
+    items.push(this._buildCrowdItem());
     items.push(el('div', { class: 'menu-sep' }));
 
     const sub = el('div', { class: 'submenu' }, GEO.map(([kind, label]) =>
@@ -157,6 +149,43 @@ export class Dock {
       sub,
     ]));
     return items;
+  }
+
+  // ---- 群众阵列：菜单项 + 行列/间距表单（hover 展开侧栏）----
+  _buildCrowdItem() {
+    const app = this.app;
+    const st = { rows: 3, cols: 3, spacing: 1.2 };
+    const count = el('span', { class: 'crowd-count', text: '共9人' });
+    const upd = () => { count.textContent = '共' + (st.rows * st.cols) + '人'; };
+
+    const numField = (label, key, step, min, max) => {
+      const inp = el('input', { class: 'crowd-inp', type: 'number', value: st[key], min, max, step });
+      const fix = () => { let v = parseFloat(inp.value); if (isNaN(v)) return; v = Math.max(min, Math.min(max, v)); st[key] = v; upd(); };
+      inp.addEventListener('input', fix);
+      inp.addEventListener('click', (e) => e.stopPropagation());
+      return el('div', { class: 'crowd-field' }, [el('span', { class: 'crowd-lab', text: label }), inp]);
+    };
+
+    const form = el('div', { class: 'submenu crowd-form', onclick: (e) => e.stopPropagation() }, [
+      el('div', { class: 'crowd-head' }, [el('span', { text: '添加群众阵列' }), count]),
+      el('div', { class: 'crowd-rc' }, [
+        numField('行数', 'rows', 1, 1, 6),
+        el('span', { class: 'crowd-x', text: '×' }),
+        numField('列数', 'cols', 1, 1, 6),
+      ]),
+      numField('间距', 'spacing', 0.1, 0.5, 5),
+      el('div', { class: 'crowd-btns' }, [
+        el('button', { class: 'crowd-btn cancel', text: '取消', onclick: (e) => { e.stopPropagation(); this.menu.close(); } }),
+        el('button', { class: 'crowd-btn add', text: '添加', onclick: (e) => { e.stopPropagation(); app.addCrowd(st.rows, st.cols, st.spacing); this.menu.close(); } }),
+      ]),
+    ]);
+
+    return el('div', { class: 'menu-item has-sub' }, [
+      el('span', { class: 'mi-ic', html: svg('group', 17) }),
+      el('span', { class: 'mi-label', text: '群众 (3x3)' }),
+      el('span', { class: 'mi-arrow', html: svg('chevron', 14) }),
+      form,
+    ]);
   }
 
   // ---- 全景图菜单（§3.c）----
@@ -176,22 +205,14 @@ export class Dock {
       el('span', { class: 'mi-label', text: '本地上传' }),
       fileInput,
     ]));
+    // 一期限制：仅支持 2:1 等距柱状全景，提前告知避免无效上传
+    items.push(el('div', { class: 'menu-hint', text: '仅支持 2:1 全景图（如 2048×1024）' }));
 
-    // 历史记录 ▸ 九宫格资产网格
-    const grid = el('div', { class: 'panogrid' }, this._assets.length
-      ? this._assets.map((a) => {
-          const cell = el('div', { class: 'pano-cell', title: a.title });
-          cell.style.backgroundImage = `url(${a.thumb})`;
-          cell.appendChild(el('span', { class: 'pano-cap', text: a.title }));
-          cell.addEventListener('click', () => { app.setPanoramaFromAsset(a); this.menu.close(); });
-          return cell;
-        })
-      : [el('div', { class: 'pano-empty', text: '暂无历史资产（画布嵌入后开放）' })]);
-    items.push(el('div', { class: 'menu-item has-sub' }, [
+    // 历史记录 → 打开全屏历史记录弹层（含预设全景资产）
+    items.push(el('div', { class: 'menu-item', onclick: () => { this.menu.close(); this._openHistory(); } }, [
       el('span', { class: 'mi-ic', html: svg('history', 17) }),
       el('span', { class: 'mi-label', text: '历史记录' }),
       el('span', { class: 'mi-arrow', html: svg('chevron', 14) }),
-      el('div', { class: 'submenu submenu-wide' }, [grid]),
     ]));
 
     if (app.panoActive) {
@@ -199,6 +220,11 @@ export class Dock {
       items.push(this._item(null, '移除全景', () => { app.clearPanorama(); this.menu.close(); }));
     }
     return items;
+  }
+
+  _openHistory() {
+    if (!this._assets.length) { listCanvasAssets().then((a) => { this._assets = a; this._history.open(); }); return; }
+    this._history.open();
   }
 
   // ---- 添加机位菜单（§3.d）----

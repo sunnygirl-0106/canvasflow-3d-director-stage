@@ -91,6 +91,54 @@ export class CameraRig {
     this.controls.update();
   }
 
+  /**
+   * 自动取景：把主体（角色/道具，跳过相机）拉到占满画面，使其成为主角、背景退为陪衬。
+   * 关键点——**宽度只按主体「身体中心跨度 + 身宽余量」算，忽略 T-pose 张开的手臂**，
+   * 这样相机能贴得足够近、人物足够大；张开的手臂允许裁出画面边缘（电影常规构图）。
+   * 高度用骨骼盒全高。结果设为 home（「重置视角」回到此构图）。
+   */
+  frameAll(entities, { margin = 1.06, bodyPad = 0.32 } = {}) {
+    const box = new THREE.Box3();        // 垂直 + 中心（角色用骨骼盒）
+    const p = new THREE.Vector3();
+    let any = false;
+    let minX = Infinity, maxX = -Infinity; // 主体「中心」的水平跨度（忽略张开手臂）
+    for (const e of entities) {
+      if (!e || e.type === 'camera' || !e.visible) continue;
+      e.root.updateMatrixWorld(true);
+      if (e.type === 'character') {
+        e.root.traverse((o) => { if (o.isBone) { o.getWorldPosition(p); box.expandByPoint(p); any = true; } });
+      } else {
+        const b = new THREE.Box3().setFromObject(e.root);
+        if (!b.isEmpty()) { box.union(b); any = true; }
+      }
+      const c = e.root.getWorldPosition(new THREE.Vector3());
+      minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x);
+    }
+    if (!any || box.isEmpty()) return;
+
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const vfov = THREE.MathUtils.degToRad(this.camera.fov);
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
+    const halfH = size.y * 0.5;
+    const halfW = (maxX - minX) * 0.5 + bodyPad; // 中心跨度 + 身宽，不含手臂
+    const dH = halfH / Math.tan(vfov / 2);
+    const dW = halfW / Math.tan(hfov / 2);
+    let dist = Math.max(dH, dW) * margin;
+    dist = Math.max(this.controls.minDistance, Math.min(dist, this.controls.maxDistance));
+
+    this.controls.target.copy(center);
+    const dir = new THREE.Vector3().subVectors(this.camera.position, this.controls.target);
+    if (dir.lengthSq() < 1e-6) dir.set(0, 0.12, 1);
+    dir.normalize();
+    this.camera.position.copy(center).addScaledVector(dir, dist);
+    this.controls.update();
+
+    // 重置视角回到该自动取景
+    this._home.pos.copy(this.camera.position);
+    this._home.target.copy(this.controls.target);
+  }
+
   resetView() {
     this.camera.position.copy(this._home.pos);
     this.controls.target.copy(this._home.target);

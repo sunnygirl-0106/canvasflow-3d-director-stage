@@ -2,17 +2,41 @@ import * as THREE from 'three';
 import { Character } from '../entities/Character.js';
 import { Prop } from '../entities/Prop.js';
 import { CameraEntity } from '../entities/Camera.js';
+import { Crowd } from '../entities/Crowd.js';
 import { CAMERA_PRESETS } from '../core/cameraPresets.js';
 import { capture, downloadDataURL, sendToCanvas } from '../util/capture.js';
 import { toast, el } from '../util/dom.js';
 
-const MODEL_URLS = { Xbot: './assets/Xbot.glb', Soldier: './assets/Soldier.glb', Robot: './assets/Robot.glb' };
+// 体型素体注册表（单一事实来源）：一期全部由中性 Xbot 派生，按 height(身高) + girth(横向围度)
+// 程序化缩放出 高/矮/胖/瘦 等"简单区分"。全部为 mixamorig 骨骼 → 姿势/动画对每种都生效。
+const XBOT = './assets/Xbot.glb';
+export const BODY_TYPES = {
+  standard: { url: XBOT, label: '标准素体', height: 1.75, girth: 1.00 },
+  tall:     { url: XBOT, label: '高大素体', height: 2.05, girth: 1.06 },
+  small:    { url: XBOT, label: '矮小素体', height: 1.25, girth: 0.94 },
+  broad:    { url: XBOT, label: '宽厚素体', height: 1.70, girth: 1.30 },
+  slim:     { url: XBOT, label: '纤细素体', height: 1.78, girth: 0.80 },
+};
 const PROP_LABEL = { box: '方块', cylinder: '圆柱', sphere: '球体', mannequin: '人体素模' };
 // 取景比例候选（§3.e）。'auto' 等价自由（导演视角不显示取景框）。
 export const RATIO_OPTIONS = [
   ['auto', 'Auto（默认）'], ['21:9', '21:9'], ['16:9', '16:9'],
   ['4:3', '4:3'], ['1:1', '1:1'], ['3:4', '3:4'], ['9:16', '9:16'],
 ];
+
+// 全景图限制（一期）：仅接受等距柱状（equirectangular）全景，宽:高 = 2:1。
+// 非 2:1（局部/柱面全景、普通照片）贴到全景球会上下拉伸且盖不住天地，故拒绝并提示。
+export const PANO_RATIO = 2;
+export const PANO_RATIO_TOL = 0.05; // 相对容差 ±5% → 宽高比落在 [1.9, 2.1] 视为合法
+// 按宽高判定是否 2:1 全景。拿不到尺寸时放行（极少见，避免误杀）。
+// 供历史记录弹层（已知 w/h）与上传校验（图片元素）共用，单一事实来源。
+export function isPanoRatio(w, h) {
+  if (!w || !h) return true;
+  return Math.abs(w / h - PANO_RATIO) <= PANO_RATIO * PANO_RATIO_TOL;
+}
+export function isEquirectImage(img) {
+  return isPanoRatio(img?.naturalWidth || img?.width || 0, img?.naturalHeight || img?.height || 0);
+}
 
 // 应用状态机：entities[]、selectedId，统筹增删选改（§4 / §7）
 export class App {
@@ -51,7 +75,7 @@ export class App {
     // 场景级状态（供 ScenePanel 读取/回写）
     this.sceneState = {
       scale: 1, pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0 },
-      sky: 0x060608, labels: true, snap: false,
+      sky: 0x060608, labels: true,
       panoRot: 0, panoRadius: 60,
       ground: { visible: true, opacity: 0.4, height: 0 },
     };
@@ -63,7 +87,17 @@ export class App {
 
   attachUI(ui) { this.ui = ui; }
 
-  get selected() { return this.entities.find((e) => e.id === this.selectedId) || null; }
+  /** 按 id 查实体：先查顶层 entities，再查各群众组的成员。 */
+  _findEntity(id) {
+    const top = this.entities.find((e) => e.id === id);
+    if (top) return top;
+    for (const e of this.entities) {
+      if (e.type === 'crowd') { const m = e.members.find((x) => x.id === id); if (m) return m; }
+    }
+    return null;
+  }
+
+  get selected() { return this._findEntity(this.selectedId); }
 
   _placeNew(root) {
     const n = this.entities.length;
@@ -74,10 +108,10 @@ export class App {
   }
 
   // ---- CRUD ----
-  async _addCharacter(name, url) {
+  async _addCharacter(name, url, opts = {}) {
     toast('加载中：' + name + ' …');
     let c;
-    try { c = await Character.load(name, url); }
+    try { c = await Character.load(name, url, opts); }
     catch (err) { console.error(err); toast('角色加载失败：' + (err?.message || err)); return null; }
     this._placeNew(c.root);
     this.stage.add(c.root);
@@ -89,10 +123,10 @@ export class App {
     return c;
   }
 
-  addCharacter(modelKey) {
-    const url = MODEL_URLS[modelKey];
-    if (!url) { toast('未知模型：' + modelKey); return; }
-    return this._addCharacter('角色' + String.fromCharCode(65 + this._charLetter++), url);
+  addCharacter(key) {
+    const b = BODY_TYPES[key];
+    if (!b) { toast('未知素体：' + key); return; }
+    return this._addCharacter('角色' + String.fromCharCode(65 + this._charLetter++), b.url, { height: b.height, girth: b.girth });
   }
 
   addCharacterFromFile(file) {
@@ -111,6 +145,64 @@ export class App {
     this.ui?.outliner?.refresh();
     toast('已添加：' + prop.name);
     return prop;
+  }
+
+  // ---- 群众阵列（组）----
+  /** 行×列网格生成 N 个标准素体，挂在一个轴心组下，整组可一起变换。 */
+  async addCrowd(rows = 3, cols = 3, spacing = 1.2) {
+    rows = Math.max(1, Math.min(6, Math.round(rows)));
+    cols = Math.max(1, Math.min(6, Math.round(cols)));
+    spacing = Math.max(0.5, Math.min(5, spacing));
+    const b = BODY_TYPES.standard;
+    const PALETTE = [0x4f8ef7, 0xff9f43, 0xee5253, 0x10ac84, 0xfeca57, 0xa55eea, 0x00d2d3, 0xff6b9d, 0x9b59b6];
+    const group = new THREE.Group();
+    const members = [];
+    const w = (cols - 1) * spacing, d = (rows - 1) * spacing;
+    toast(`加载群众阵列 ${rows}×${cols} …`);
+    let i = 0;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++, i++) {
+        let ch;
+        try { ch = await Character.load('角色' + String.fromCharCode(65 + this._charLetter++), b.url, { height: b.height, girth: b.girth }); }
+        catch (err) { console.error(err); continue; }
+        ch.setColor(PALETTE[i % PALETTE.length]);
+        ch.root.position.set(c * spacing - w / 2, 0, r * spacing - d / 2);
+        group.add(ch.root);
+        members.push(ch);
+      }
+    }
+    if (!members.length) { toast('群众加载失败'); return null; }
+    const crowd = new Crowd(`群众 (${rows}x${cols})`, group, members, { rows, cols, spacing });
+    for (const m of members) m.root.userData.entityId = crowd.id; // 视口点击成员 → 选中整组
+    this._placeNew(group);
+    this.stage.add(group);
+    for (const m of members) this._makeLabel(m);
+    this.entities.push(crowd);
+    this.select(crowd.id);
+    this.ui?.outliner?.refresh();
+    toast(`已添加群众阵列（共 ${members.length} 人）`);
+    return crowd;
+  }
+
+  /** 解组：把群众拆为独立角色（保留各自世界位姿），轴心组移除。 */
+  ungroupCrowd(id) {
+    const crowd = this.entities.find((e) => e.id === id);
+    if (!crowd || crowd.type !== 'crowd') return;
+    crowd.root.updateMatrixWorld(true); // 同步轴心与各成员的本地矩阵
+    const members = crowd.members.slice();
+    for (const m of members) {
+      // 成员相对 world 的本地矩阵 = 轴心本地矩阵 ∘ 成员本地矩阵（二者同处 world 组下）
+      const mat = new THREE.Matrix4().multiplyMatrices(crowd.root.matrix, m.root.matrix);
+      this.stage.add(m.root); // 从轴心移到 world（Object3D.add 自动脱离原父级）
+      mat.decompose(m.root.position, m.root.quaternion, m.root.scale);
+      m.root.userData.entityId = m.id; // 恢复独立选择（之前被指到组）
+      this.entities.push(m);
+    }
+    this.stage.remove(crowd.root);
+    this.entities.splice(this.entities.indexOf(crowd), 1);
+    this.select(null);
+    this.ui?.outliner?.refresh();
+    toast(`已解组：${members.length} 个角色已独立`);
   }
 
   // ---- 机位（§4.3）----
@@ -229,8 +321,9 @@ export class App {
     const idx = this.entities.findIndex((e) => e.id === id);
     if (idx < 0) return;
     const ent = this.entities[idx];
-    const wasSel = ent.id === this.selectedId;
+    const wasSel = ent.id === this.selectedId || (ent.type === 'crowd' && ent.members.some((m) => m.id === this.selectedId));
     this.stage.remove(ent.root);
+    if (ent.type === 'crowd') ent.members.forEach((m) => { if (m.labelEl) m.labelEl.remove(); });
     if (ent.labelEl) ent.labelEl.remove();
     ent.dispose();
     this.entities.splice(idx, 1);
@@ -346,26 +439,37 @@ export class App {
   setSceneRot(axis, deg) { this.sceneState.rot[axis] = deg; const r = this.sceneState.rot; const k = Math.PI / 180; this.stage.setWorldRot(r.x * k, r.y * k, r.z * k); }
   setSkyColor(hex) { this.sceneState.sky = new THREE.Color(hex).getHex(); this.stage.setSkyColor(hex); }
   setLabelsVisible(v) { this.sceneState.labels = v; this.labelLayer.style.display = v ? 'block' : 'none'; }
-  setSnap(v) { this.sceneState.snap = v; this.gizmo.setSnap(v); }
   setGroundVisible(v) { this.sceneState.ground.visible = v; this.stage.setGroundVisible(v); }
   setGroundOpacity(v) { this.sceneState.ground.opacity = v; this.stage.setGroundOpacity(v); }
   setGroundHeight(v) { this.sceneState.ground.height = v; this.stage.setGroundHeight(v); }
 
   // ---- 全景背景（§3.c）----
+  // 统一入口：校验 2:1 后再应用。非 2:1 直接拒绝并提示，返回 false（由调用方决定成功 toast）。
   _applyPanoramaTexture(tex, info, objURL) {
+    if (!isEquirectImage(tex.image)) {
+      const w = tex.image?.naturalWidth || tex.image?.width || 0;
+      const h = tex.image?.naturalHeight || tex.image?.height || 0;
+      tex.dispose?.();
+      if (objURL) URL.revokeObjectURL(objURL);
+      toast(`仅支持 2:1 全景图（如 2048×1024）${w && h ? `，当前为 ${w}×${h}` : ''}`);
+      return false;
+    }
     tex.colorSpace = THREE.SRGBColorSpace;
     if (this._panoObjURL && this._panoObjURL !== objURL) URL.revokeObjectURL(this._panoObjURL);
     this._panoObjURL = objURL || null;
     this.stage.setPanorama(tex);
     this.panoActive = true;
     this.panoramaInfo = info;
+    // 设背景后自动对准主体，避免主体被宏大背景比成小不点（导演视角下才动相机）
+    if (!this.cameraView) this.frameSubjects();
     this.ui?.scenePanel?.render?.();
+    return true;
   }
   setPanoramaFromFile(file) {
     const objURL = URL.createObjectURL(file);
     new THREE.TextureLoader().load(
       objURL,
-      (tex) => { this._applyPanoramaTexture(tex, { thumb: objURL, title: file.name || '本地全景图' }, objURL); toast('已设置全景背景'); },
+      (tex) => { if (this._applyPanoramaTexture(tex, { thumb: objURL, title: file.name || '本地全景图' }, objURL)) toast('已设置全景背景'); },
       undefined,
       () => { URL.revokeObjectURL(objURL); toast('全景图加载失败'); },
     );
@@ -373,7 +477,7 @@ export class App {
   setPanoramaFromAsset(asset) {
     new THREE.TextureLoader().load(
       asset.url,
-      (tex) => { this._applyPanoramaTexture(tex, { thumb: asset.thumb || asset.url, title: asset.title || '全景图' }, null); toast('已设置全景背景：' + (asset.title || '')); },
+      (tex) => { if (this._applyPanoramaTexture(tex, { thumb: asset.thumb || asset.url, title: asset.title || '全景图' }, null)) toast('已设置全景背景：' + (asset.title || '')); },
       undefined,
       () => toast('全景图加载失败'),
     );
@@ -476,6 +580,9 @@ export class App {
     this.ui?.inspector?.onShotsChanged?.();
   }
 
+  /** 自动对准主体：相机贴合所有角色/道具取景，主体占满画面（默认加载时调用）。 */
+  frameSubjects() { this.rig.frameAll(this.entities); }
+
   resetView() { this.rig.resetView(); toast('已重置视角'); }
   focusSelected() { const e = this.selected; if (!e) { toast('先选一个对象'); return; } this.rig.focus(e); toast('已聚焦：' + e.name); }
 
@@ -491,21 +598,24 @@ export class App {
     const cam = this.getRenderCamera(); // POV 下用 active 相机投影，名牌跟随出画相机
     const ws = this.stage.world.scale.y;
     const W = this.stage.viewport.clientWidth, H = this.stage.viewport.clientHeight;
-    for (const ent of this.entities) {
-      if (!ent.labelEl) continue;
-      if (ent.type !== 'character' && ent.type !== 'camera') continue;
-      if (!ent.visible) { ent.labelEl.style.display = 'none'; continue; }
+    const place = (ent) => {
+      if (!ent.labelEl) return;
+      if (!ent.visible) { ent.labelEl.style.display = 'none'; return; }
       // 相机视角下隐藏相机名牌（与相机可视化一起隐藏）
-      if (ent.type === 'camera' && this.cameraView) { ent.labelEl.style.display = 'none'; continue; }
-      // root.getWorldPosition 已含 world 组变换；头顶偏移按 world 缩放换算
+      if (ent.type === 'camera' && this.cameraView) { ent.labelEl.style.display = 'none'; return; }
+      // root.getWorldPosition 已含 world / 组轴心变换；头顶偏移按 world 缩放换算
       ent.root.getWorldPosition(this._labelTmp);
-      const off = ent.type === 'character' ? (ent.height + 0.16) : 0.2;
+      const off = ent.type === 'camera' ? 0.2 : (ent.height + 0.16);
       this._labelTmp.y += off * ws;
       this._labelTmp.project(cam);
       const inFront = this._labelTmp.z < 1;
       ent.labelEl.style.display = inFront ? 'block' : 'none';
       ent.labelEl.style.left = (this._labelTmp.x * 0.5 + 0.5) * W + 'px';
       ent.labelEl.style.top = (-this._labelTmp.y * 0.5 + 0.5) * H + 'px';
+    };
+    for (const ent of this.entities) {
+      if (ent.type === 'crowd') { ent.members.forEach(place); continue; }
+      if (ent.type === 'character' || ent.type === 'camera') place(ent);
     }
   }
 
@@ -514,6 +624,7 @@ export class App {
     for (const ent of this.entities) {
       if (ent.type === 'character') ent.update(dt);
       else if (ent.type === 'camera') ent.update(); // CameraHelper 随相机世界矩阵刷新
+      else if (ent.type === 'crowd') ent.members.forEach((m) => m.update(dt));
     }
     this.rig.update();
     this.selection.update();

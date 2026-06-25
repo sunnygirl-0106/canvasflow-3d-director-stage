@@ -4,9 +4,10 @@ import { JOINTS, groupJoints } from '../entities/jointConfig.js';
 // 从 jointConfig 按 group/side 分组渲染滑条（§4 / §5.6）。
 // input → 写 character.values[key] → character.enterManual() + applyPose()。
 export class PoseSliders {
-  constructor(container, character) {
+  constructor(container, character, onChange) {
     this.container = container;
     this.character = character;
+    this.onChange = onChange; // 可选：每次摆姿后回调（群众组用于广播到全部成员）
     this.sliderEls = {}; // key → {input, valSpan}
     this.render();
   }
@@ -30,8 +31,10 @@ export class PoseSliders {
               const v = parseFloat(e.target.value);
               ch.values[j.key] = v;
               valSpan.textContent = Math.round(v) + '°';
+              ch.currentPreset = null; // 手动微调取消预设高亮
               ch.enterManual();
               ch.applyPose();
+              this.onChange && this.onChange();
             },
           });
           const row = el('div', { class: 'sld' }, [

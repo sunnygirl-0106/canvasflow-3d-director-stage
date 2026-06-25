@@ -71,10 +71,11 @@ stage.startLoop((dt) => { app.tick(dt); navGizmo.update(); });
 // ---- seed：两个角色，默认未选中（右侧显示 3D场景面板，贴合截图）----
 (async () => {
   try {
-    await app.addCharacter('Xbot');
-    await app.addCharacter('Soldier');
+    await app.addCharacter('standard');
+    await app.addCharacter('standard');
     app.entities[0]?.root.position.set(-1.1, 0, 0.2);
     app.entities[1]?.root.position.set(1.1, 0, 0.2);
+    app.frameSubjects(); // 自动对准主体，主体占满画面（不被背景比下去）
     app.select(null);
   } catch (e) { console.error('seed failed', e); }
 })();

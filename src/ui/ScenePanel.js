@@ -60,17 +60,13 @@ export class ScenePanel {
     sec3.appendChild(el('div', { class: 'sec-title', text: '全景球' }));
     const pano = app.panoActive;
     sec3.appendChild(sliderRow({ label: '水平旋转', min: 0, max: 360, value: s.panoRot, disabled: !pano, format: (v) => Math.round(v) + '°', onInput: (v) => app.setPanoramaRotation(v) }).el);
-    sec3.appendChild(sliderRow({ label: '球形半径', min: 10, max: 200, value: s.panoRadius, disabled: !pano, format: (v) => Math.round(v), onInput: (v) => app.setPanoramaRadius(v) }).el);
+    sec3.appendChild(sliderRow({ label: '球形半径', min: 3, max: 200, value: s.panoRadius, disabled: !pano, format: (v) => Math.round(v), onInput: (v) => app.setPanoramaRadius(v) }).el);
     root.appendChild(sec3);
 
-    // ---- 角色标签 / 网格吸附 ----
+    // ---- 角色标签 ----
     const sec4 = el('div', { class: 'sec' });
     sec4.appendChild(toggleRow({ label: '角色标签', checked: s.labels, onChange: (v) => app.setLabelsVisible(v) }).el);
     root.appendChild(sec4);
-
-    const sec5 = el('div', { class: 'sec' });
-    sec5.appendChild(toggleRow({ label: '网格吸附', checked: s.snap, onChange: (v) => app.setSnap(v) }).el);
-    root.appendChild(sec5);
 
     // ---- 地面 ----
     const sec6 = el('div', { class: 'sec' });

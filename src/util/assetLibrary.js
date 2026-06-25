@@ -43,22 +43,45 @@ const THEMES = [
 
 let _cache = null;
 
+// 真实「画布」历史里图片尺寸五花八门：既有 2:1 全景，也有 16:9 / 竖图 / 方图，还有视频。
+// 这里刻意混入非 2:1 素材，让历史记录弹层能演示「仅 2:1 可选、其余置灰」的拦截效果。
+// 每项带 w/h/ratioLabel，由消费方（Dock）用 isPanoRatio(w,h) 判定可选性。
+const SPECS = [
+  // theme 索引, 宽, 高, 比例标签, 类型
+  [0, 2048, 1024, '2:1', 'image'],
+  [1, 2048, 1024, '2:1', 'image'],
+  [2, 2048, 1024, '2:1', 'image'],
+  [3, 1920, 1080, '16:9', 'image'],
+  [4, 1024, 1024, '1:1', 'image'],
+  [5, 1080, 1920, '9:16', 'image'],
+  [0, 2520, 1080, '21:9', 'image'],
+  [2, 1280, 720, '16:9', 'video'],
+  [3, 1080, 1920, '9:16', 'video'],
+];
+
 /**
- * 列出「画布」历史全景资产。
- * @returns {Promise<Array<{id,type:'image',url,thumb,title,createdAt}>>}
+ * 列出「画布」历史资产（图片 + 视频）。
+ * @returns {Promise<Array<{id,type:'image'|'video',w,h,ratioLabel,url,thumb,title,createdAt}>>}
  */
 export async function listCanvasAssets() {
   if (_cache) return _cache;
-  const base = Date.UTC(2026, 0, 1);
-  _cache = THEMES.map((t, i) => {
-    const url = makePanorama(1024, 512, t);
+  // 同一天内、按分钟错开，使历史记录弹层把资产聚成一组网格显示。
+  const base = Date.UTC(2026, 5, 15, 10, 0, 0);
+  // 图片按 1024 宽生成（贴到全景球够清晰），视频用小图占位；高度按标称比例换算，保证
+  // 生成图比例与 w/h 一致 —— 这样上传校验（读纹理尺寸）与弹层判定（读 w/h）结论一致。
+  _cache = SPECS.map(([ti, w, h, ratioLabel, type], i) => {
+    const t = THEMES[ti];
+    const gw = type === 'video' ? 480 : 1024;
+    const gh = Math.round((gw * h) / w);
+    const url = makePanorama(gw, gh, t);
     return {
-      id: 'pano' + (i + 1),
-      type: 'image',
+      id: (type === 'video' ? 'vid' : 'img') + (i + 1),
+      type,
+      w, h, ratioLabel,
       url,
       thumb: url, // 同图，CSS 缩放显示
-      title: t.title,
-      createdAt: base + i * 86400000,
+      title: `${t.title} · ${ratioLabel}${type === 'video' ? ' 视频' : ''}`,
+      createdAt: base - i * 60000,
     };
   });
   return _cache;

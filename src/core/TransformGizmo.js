@@ -52,13 +52,6 @@ export class TransformGizmo {
     this.control.setMode(mode); // 'translate' | 'rotate' | 'scale'
   }
 
-  /** 网格吸附：on 时平移按 0.5 单位、旋转按 15° 吸附。 */
-  setSnap(on) {
-    this.control.setTranslationSnap(on ? 0.5 : null);
-    this.control.setRotationSnap(on ? THREE.MathUtils.degToRad(15) : null);
-    this.control.setScaleSnap(on ? 0.1 : null);
-  }
-
   attach(root) {
     this.attached = root;
     this.control.attach(root);

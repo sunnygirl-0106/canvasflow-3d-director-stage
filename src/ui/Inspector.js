@@ -1,6 +1,7 @@
 import { el, toast } from '../util/dom.js';
 import { tripleRow, sliderRow, colorRow, dropdownRow, infoTip, shotCard, toHex } from './widgets.js';
 import { PoseSliders } from './PoseSliders.js';
+import { POSE_PRESETS } from '../entities/posePresets.js';
 import { renderCameraThumbnail } from '../util/cameraPreview.js';
 import { downloadDataURL } from '../util/capture.js';
 
@@ -33,10 +34,26 @@ export class Inspector {
 
     if (!entity) { this.container.innerHTML = ''; return; }
 
-    const title = entity.type === 'character' ? '角色' : entity.type === 'camera' ? '摄像机' : '道具';
+    const title = entity.type === 'character' ? '角色'
+      : entity.type === 'camera' ? '摄像机'
+      : entity.type === 'crowd' ? `${entity.name} (${entity.members.length})`
+      : '道具';
     root.appendChild(el('h2', { text: title }));
 
-    if (entity.type === 'character') {
+    if (entity.type === 'crowd') {
+      const tabs = el('div', { class: 'ptabs' });
+      const a = el('button', { text: '属性', class: this.tab === 'attr' ? 'on' : '', onclick: () => { this.tab = 'attr'; this.show(entity); } });
+      const p = el('button', { text: '姿势', class: this.tab === 'pose' ? 'on' : '', onclick: () => { this.tab = 'pose'; this.show(entity); } });
+      tabs.append(a, p);
+      root.appendChild(tabs);
+      root.appendChild(el('div', { class: 'multi-note', text: `已选中 ${entity.members.length} 个角色，修改将同步应用到全部选中对象` }));
+      root.appendChild(el('button', {
+        class: 'minibtn', text: '⊟ 解组（拆为独立角色）',
+        onclick: () => this.app.ungroupCrowd(entity.id),
+      }));
+      if (this.tab === 'attr') this._attr(root, entity);
+      else this._crowdPose(root, entity);
+    } else if (entity.type === 'character') {
       const tabs = el('div', { class: 'ptabs' });
       const a = el('button', { text: '属性', class: this.tab === 'attr' ? 'on' : '', onclick: () => { this.tab = 'attr'; this.show(entity); } });
       const p = el('button', { text: '姿势', class: this.tab === 'pose' ? 'on' : '', onclick: () => { this.tab = 'pose'; this.show(entity); } });
@@ -88,17 +105,18 @@ export class Inspector {
     const scl = tripleRow({ label: '缩放', step: 0.01, axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.scale[k], set: (v) => { o.scale[k] = Math.max(0.05, v); } })) });
     root.appendChild(scl.el);
 
+    const girth = ent._girth || 1; // 体型横向围度（胖瘦）；统一缩放时按 Y 为基准、保留 X/Z 比例
     const uni = sliderRow({
-      label: '统一缩放', min: 0.2, max: 3, step: 0.01, value: o.scale.x / ent.baseScale,
+      label: '统一缩放', min: 0.2, max: 3, step: 0.01, value: o.scale.y / ent.baseScale,
       format: (v) => v.toFixed(1),
-      onInput: (v) => { o.scale.setScalar(ent.baseScale * v); scl.syncAll(); },
+      onInput: (v) => { const s = ent.baseScale * v; o.scale.set(s * girth, s, s * girth); scl.syncAll(); },
     });
     root.appendChild(uni.el);
 
     const col = colorRow({ label: '颜色', hex: toHex(ent.color), onChange: (h) => { ent.setColor(h); this.app.ui?.outliner?.refresh(); } });
     root.appendChild(col.el);
 
-    this._syncFn = () => { pos.syncAll(); rot.syncAll(); scl.syncAll(); uni.set(o.scale.x / ent.baseScale); };
+    this._syncFn = () => { pos.syncAll(); rot.syncAll(); scl.syncAll(); uni.set(o.scale.y / ent.baseScale); };
   }
 
   // ---- 摄像机：属性 tab（§B.3）----
@@ -166,7 +184,7 @@ export class Inspector {
     const myShots = app.shotsForCamera(ent.id);
     if (myShots.length) {
       root.appendChild(el('div', { class: 'sec-title', text: '相机截图', style: { marginTop: '6px' } }));
-      root.appendChild(this._shotGrid(myShots));
+      root.appendChild(this._shotGrid(myShots, true));
     }
 
     this._syncFn = () => { pos.syncAll(); lookRow.syncAll(); this.schedulePreview(); };
@@ -197,12 +215,13 @@ export class Inspector {
     root.appendChild(bar);
   }
 
-  _shotGrid(shots) {
+  _shotGrid(shots, compact = false) {
     const app = this.app;
     const grid = el('div', { class: 'shot-grid' });
     for (const shot of shots) {
       grid.appendChild(shotCard({
         shot,
+        compact,
         selected: app.selectedShotIds.has(shot.id),
         onToggle: () => app.toggleShotSelected(shot.id),
         onDelete: () => app.removeShot(shot.id),
@@ -282,28 +301,71 @@ export class Inspector {
 
   // ---- 姿势页（角色）----
   _pose(root, ent) {
-    root.appendChild(el('div', { class: 'sec-title', text: '预设动作', style: { marginTop: '4px' } }));
-    const clips = el('div', { class: 'clips' });
-    const tpose = el('button', { text: 'T-Pose', class: ent.currentClip == null && ent.poseMode === 'preset' ? 'on' : '',
-      onclick: () => { ent.resetPose(); this.poseSliders?.syncFromValues(); mark(null); } });
-    clips.appendChild(tpose);
-    const btns = { __rest__: tpose };
-    for (const name of ent.clipNames) {
-      const b = el('button', { text: name, class: ent.currentClip === name ? 'on' : '',
-        onclick: () => { ent.playClip(name); this.poseSliders?.syncFromValues(); mark(name); } });
-      btns[name] = b;
-      clips.appendChild(b);
+    // 1) 姿势预设
+    root.appendChild(el('div', { class: 'sec-title', text: '姿势预设', style: { marginTop: '4px' } }));
+    const grid = el('div', { class: 'pose-grid' });
+    const btns = {};
+    const mark = (key) => Object.entries(btns).forEach(([k, b]) => b.classList.toggle('on', k === key));
+    for (const p of POSE_PRESETS) {
+      const b = el('button', {
+        text: p.label,
+        class: ent.currentPreset === p.key ? 'on' : '',
+        onclick: () => { ent.applyPosePreset(p.key); this.poseSliders?.syncFromValues(); mark(p.key); },
+      });
+      btns[p.key] = b;
+      grid.appendChild(b);
     }
-    function mark(name) { Object.entries(btns).forEach(([k, b]) => b.classList.toggle('on', k === (name == null ? '__rest__' : name))); }
-    root.appendChild(clips);
-    if (!ent.clipNames.length) root.appendChild(el('div', { class: 'hint', text: '该模型无内置动画。' }));
+    root.appendChild(grid);
 
     root.appendChild(el('button', { class: 'minibtn', text: '⟲ 复位姿势', style: { marginTop: '12px' },
-      onclick: () => { ent.resetPose(); this.poseSliders?.syncFromValues(); mark(null); } }));
+      onclick: () => { ent.resetPose(); ent.currentPreset = null; this.poseSliders?.syncFromValues(); mark(null); } }));
 
+    // 2) 姿势调节（滑条）
+    root.appendChild(el('div', { class: 'sec-title', text: '姿势调节', style: { marginTop: '16px' } }));
     const host = el('div', {});
     root.appendChild(host);
     this.poseSliders = new PoseSliders(host, ent);
+  }
+
+  // ---- 群众组：姿势页（预设/滑条广播到全部成员）----
+  _crowdPose(root, crowd) {
+    const rep = crowd.members[0];
+    if (!rep) return;
+    root.appendChild(el('button', {
+      class: 'minibtn', text: '⟲ 复位全部姿势', style: { marginTop: '4px' },
+      onclick: () => { crowd.members.forEach((m) => { m.resetPose(); m.currentPreset = null; }); this.poseSliders?.syncFromValues(); mark(null); },
+    }));
+
+    // 姿势预设：点击广播到全部成员
+    root.appendChild(el('div', { class: 'sec-title', text: '姿势预设', style: { marginTop: '4px' } }));
+    const grid = el('div', { class: 'pose-grid' });
+    const btns = {};
+    const mark = (key) => Object.entries(btns).forEach(([k, b]) => b.classList.toggle('on', k === key));
+    for (const p of POSE_PRESETS) {
+      const b = el('button', {
+        text: p.label,
+        class: rep.currentPreset === p.key ? 'on' : '',
+        onclick: () => { crowd.members.forEach((m) => m.applyPosePreset(p.key)); this.poseSliders?.syncFromValues(); mark(p.key); },
+      });
+      btns[p.key] = b;
+      grid.appendChild(b);
+    }
+    root.appendChild(grid);
+
+    root.appendChild(el('div', { class: 'sec-title', text: '姿势调节', style: { marginTop: '16px' } }));
+    const host = el('div', {});
+    root.appendChild(host);
+    // 滑条驱动代表成员，onChange 把其 values 广播到其余成员
+    this.poseSliders = new PoseSliders(host, rep, () => {
+      mark(null); // 手动微调取消预设高亮
+      for (const m of crowd.members) {
+        if (m === rep) continue;
+        Object.assign(m.values, rep.values);
+        m.currentPreset = null;
+        m.enterManual();
+        m.applyPose();
+      }
+    });
   }
 
   /** gizmo 拖动后回写数值。 */

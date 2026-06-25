@@ -91,21 +91,27 @@ export function infoTip(text) {
   return tip;
 }
 
-// 截图缩略卡片：hover 遮罩（发送气泡 + 删除/发送/全屏）+ 多选勾选态
-export function shotCard({ shot, selected, onToggle, onDelete, onSend, onExpand }) {
-  const card = el('div', { class: 'shot-card' + (selected ? ' sel' : '') });
+// 截图缩略卡片。
+//  - 默认（摄像机截图 tab）：多选勾选态 + hover 全卡「发送到画布」气泡 + 删除/发送/全屏。
+//  - compact（属性页内联相机截图）：无多选圈、无气泡，只有 hover 出现的删除/发送/全屏小按钮，
+//    「发送到画布」由中间的 ⤴ 按钮（title 提示）触发。
+export function shotCard({ shot, selected, onToggle, onDelete, onSend, onExpand, compact = false }) {
+  const card = el('div', { class: 'shot-card' + (compact ? ' compact' : '') + (selected ? ' sel' : '') });
   const img = el('img', { src: shot.dataURL, alt: shot.name });
-  const check = el('span', { class: 'shot-check', text: selected ? '✓' : '' });
-  const ov = el('div', { class: 'shot-ov' }, [
-    el('div', { class: 'shot-send-bubble', text: '发送到画布', onclick: (e) => { e.stopPropagation(); onSend?.(); } }),
-    el('div', { class: 'shot-ops' }, [
-      el('button', { class: 'shot-op', title: '删除', text: '🗑', onclick: (e) => { e.stopPropagation(); onDelete?.(); } }),
-      el('button', { class: 'shot-op', title: '发送到画布', text: '⤴', onclick: (e) => { e.stopPropagation(); onSend?.(); } }),
-      el('button', { class: 'shot-op', title: '全屏扩大', text: '⤢', onclick: (e) => { e.stopPropagation(); onExpand?.(); } }),
-    ]),
-  ]);
-  card.append(img, check, ov, el('div', { class: 'shot-name', text: shot.name }));
-  card.addEventListener('click', () => onToggle?.());
+  const ovChildren = [];
+  if (!compact) ovChildren.push(el('div', { class: 'shot-send-bubble', text: '发送到画布', onclick: (e) => { e.stopPropagation(); onSend?.(); } }));
+  ovChildren.push(el('div', { class: 'shot-ops' }, [
+    el('button', { class: 'shot-op', title: '删除', text: '🗑', onclick: (e) => { e.stopPropagation(); onDelete?.(); } }),
+    el('button', { class: 'shot-op', title: '发送到画布', text: '⤴', onclick: (e) => { e.stopPropagation(); onSend?.(); } }),
+    el('button', { class: 'shot-op', title: '全屏扩大', text: '⤢', onclick: (e) => { e.stopPropagation(); onExpand?.(); } }),
+  ]));
+  const ov = el('div', { class: 'shot-ov' }, ovChildren);
+  const nodes = [img];
+  if (!compact) nodes.push(el('span', { class: 'shot-check', text: selected ? '✓' : '' }));
+  nodes.push(ov, el('div', { class: 'shot-name', text: shot.name }));
+  card.append(...nodes);
+  // 多选态卡片整体点击切换勾选；compact 卡片不参与多选，操作走 hover 按钮。
+  if (!compact) card.addEventListener('click', () => onToggle?.());
   return card;
 }
 

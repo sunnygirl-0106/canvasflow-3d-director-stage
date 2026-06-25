@@ -52,6 +52,29 @@ ok('多角色姿势独立', ind.delta < 0.5 && !ind.shared, `他者臂Δ=${ind.d
 const an = await page.evaluate(() => { const c = window.__app.entities.find((e) => e.clipNames?.length); if (!c) return { skip: true }; c.playClip(c.clipNames[0]); return { ok: c.currentClip === c.clipNames[0] }; });
 ok('预设动画播放/互斥', an.skip || an.ok);
 
+// 4b 静态姿势预设：点击应用 → values 与预设一致 / currentPreset 正确 / poseMode=manual；复位归零
+const posePreset = await page.evaluate(async () => {
+  const c = window.__app.entities.find((e) => e.type === 'character');
+  const { POSE_PRESET_MAP } = await import('/src/entities/posePresets.js');
+  const sameAs = (key) => {
+    const want = POSE_PRESET_MAP[key].values;
+    for (const k in want) if (Math.abs((c.values[k] || 0) - want[k]) > 1e-6) return false;
+    // 预设未列出的关节必须为 0
+    for (const k in c.values) if (!(k in want) && Math.abs(c.values[k]) > 1e-6) return false;
+    return true;
+  };
+  const res = {};
+  for (const key of ['walk', 'wave', 'cross']) {
+    c.applyPosePreset(key);
+    res[key] = sameAs(key) && c.currentPreset === key && c.poseMode === 'manual';
+  }
+  c.resetPose();
+  const allZero = Object.values(c.values).every((v) => Math.abs(v) < 1e-6);
+  res.reset = allZero && c.currentPreset === null;
+  return res;
+});
+ok('静态姿势预设：应用/高亮/复位', posePreset.walk && posePreset.wave && posePreset.cross && posePreset.reset, JSON.stringify(posePreset));
+
 // 5 道具 + 选中 + gizmo
 const pr = await page.evaluate(() => { const a = window.__app; const p = a.addProp('box'); return { sel: a.selectedId === p.id, g: a.gizmo.attached === p.root, vis: a.gizmo._helper.visible }; });
 ok('加道具+选中+gizmo 绑定', pr.sel && pr.g && pr.vis);
@@ -82,10 +105,9 @@ const sc = await page.evaluate(() => {
   a.setSkyColor('#123456'); const sky = a.stage.scene.background.getHexString() === '123456';
   a.setGroundOpacity(0.7); const op = Math.abs(a.stage.ground.material.opacity - 0.7) < 1e-6;
   a.setLabelsVisible(false); const lbl = a.labelLayer.style.display === 'none'; a.setLabelsVisible(true);
-  a.setSnap(true); const snap = a.gizmo.control.translationSnap === 0.5; a.setSnap(false);
-  return { sScale, sky, op, lbl, snap };
+  return { sScale, sky, op, lbl };
 });
-ok('场景控制：缩放/天空色/地面透明/标签/吸附', sc.sScale && sc.sky && sc.op && sc.lbl && sc.snap, JSON.stringify(sc));
+ok('场景控制：缩放/天空色/地面透明/标签', sc.sScale && sc.sky && sc.op && sc.lbl, JSON.stringify(sc));
 
 // 9 显隐/删除 + 面板切换
 const crud = await page.evaluate(() => {
@@ -198,6 +220,30 @@ const aimT = await page.evaluate(() => {
   return { hasCenter: !!center, lookSet, fov };
 });
 ok('注视一次性对准 + FOV', aimT.hasCenter && aimT.lookSet && aimT.fov, JSON.stringify(aimT));
+
+// 18 群众阵列：建组 + 成员数 = 行×列 + 整组位移成员世界坐标同步
+const crowdT = await page.evaluate(async () => {
+  const a = window.__app;
+  const rows = 2, cols = 3;
+  const n0 = a.entities.filter((e) => e.type === 'crowd').length;
+  const crowd = await a.addCrowd(rows, cols, 1.2);
+  const isCrowd = crowd?.type === 'crowd';
+  const added = a.entities.filter((e) => e.type === 'crowd').length === n0 + 1;
+  const countMatch = crowd.members.length === rows * cols && crowd.rows === rows && crowd.cols === cols;
+  // 世界坐标（避开 THREE 构造器，直接读 matrixWorld 平移分量）
+  const wp = (o) => { o.updateMatrixWorld(true); const e = o.matrixWorld.elements; return { x: e[12], y: e[13], z: e[14] }; };
+  const m = crowd.members[crowd.members.length - 1]; // 末个成员：相对轴心有偏移，能验证整组刚体平移
+  const before = wp(m.root);
+  const D = 3.5;
+  crowd.root.position.x += D; crowd.root.position.z -= D;
+  const after = wp(m.root);
+  const synced = Math.abs((after.x - before.x) - D) < 1e-6
+    && Math.abs((after.z - before.z) + D) < 1e-6
+    && Math.abs(after.y - before.y) < 1e-6;
+  crowd.root.position.x -= D; crowd.root.position.z += D; // 复位，不污染后续截图
+  return { isCrowd, added, countMatch, synced };
+});
+ok('群众阵列：建组/成员数=行×列/整组位移同步', crowdT.isCrowd && crowdT.added && crowdT.countMatch && crowdT.synced, JSON.stringify(crowdT));
 
 // 截一张页面图，便于人工对齐截图
 await page.evaluate(() => { window.__app.setCameraView(false); window.__app.select(null); });
