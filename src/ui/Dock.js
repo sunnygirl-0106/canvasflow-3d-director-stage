@@ -95,7 +95,7 @@ export class Dock {
     this.ratioBtn = frame;
 
     // 6 截图
-    const shot = this._btn('shot', '截图', () => app.captureShot());
+    const shot = this._btn('shot', '截图', () => app.shots.captureShot());
 
     // 7 全屏（发送按钮已移除，职能迁移到右侧「摄像机截图」面板）
     const full = this._btn('expand', '全屏', () => this._toggleFullscreen());
@@ -251,5 +251,9 @@ export class Dock {
   reflectMode(mode) {
     if (this.transformBtn) this.transformBtn.innerHTML = svg(this._modeIcon(mode));
   }
-  reflectCameraView(on) { /* 机位视角由 header viewtabs 体现，工具坞无独立按钮 */ }
+  reflectCameraView(on) {
+    // 机位视角由 header viewtabs 体现，工具坞无独立按钮：点亮 camera/director 标签
+    document.querySelectorAll('#viewtabs button').forEach((b) =>
+      b.classList.toggle('on', (b.dataset.v === 'camera') === on));
+  }
 }

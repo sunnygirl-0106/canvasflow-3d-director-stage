@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { worldBox } from '../util/measure.js';
 
 // OrbitControls + 聚焦选中 + 取景比例 overlay + 重置视角（§4 / §5.2）
 export class CameraRig {
@@ -60,21 +61,9 @@ export class CameraRig {
   focus(entity) {
     if (!entity) return;
     const root = entity.root;
-    root.updateMatrixWorld(true);
 
-    const box = new THREE.Box3();
-    const p = new THREE.Vector3();
-    let measured = false;
-    if (entity.type === 'character') {
-      // SkinnedMesh 静态包围盒会被放大，改用骨骼世界坐标
-      root.traverse((o) => {
-        if (o.isBone) { o.getWorldPosition(p); box.expandByPoint(p); measured = true; }
-      });
-    }
-    if (!measured) {
-      box.setFromObject(root);
-      if (box.isEmpty()) return;
-    }
+    const box = worldBox(root, { useBones: entity.type === 'character' });
+    if (box.isEmpty()) return;
 
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
@@ -99,18 +88,12 @@ export class CameraRig {
    */
   frameAll(entities, { margin = 1.06, bodyPad = 0.32 } = {}) {
     const box = new THREE.Box3();        // 垂直 + 中心（角色用骨骼盒）
-    const p = new THREE.Vector3();
     let any = false;
     let minX = Infinity, maxX = -Infinity; // 主体「中心」的水平跨度（忽略张开手臂）
     for (const e of entities) {
       if (!e || e.type === 'camera' || !e.visible) continue;
-      e.root.updateMatrixWorld(true);
-      if (e.type === 'character') {
-        e.root.traverse((o) => { if (o.isBone) { o.getWorldPosition(p); box.expandByPoint(p); any = true; } });
-      } else {
-        const b = new THREE.Box3().setFromObject(e.root);
-        if (!b.isEmpty()) { box.union(b); any = true; }
-      }
+      const b = worldBox(e.root, { useBones: e.type === 'character' });
+      if (!b.isEmpty()) { box.union(b); any = true; }
       const c = e.root.getWorldPosition(new THREE.Vector3());
       minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x);
     }

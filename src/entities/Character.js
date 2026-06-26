@@ -4,6 +4,7 @@ import { Entity } from './Entity.js';
 import { JOINTS } from './jointConfig.js';
 import { POSE_PRESET_MAP } from './posePresets.js';
 import { buildBoneMap, findBone } from '../util/boneUtil.js';
+import { worldBox } from '../util/measure.js';
 
 // 统一目标身高（单位），多角色视觉一致（§5.2）
 const TARGET_HEIGHT = 1.7;
@@ -88,13 +89,7 @@ export class Character extends Entity {
   _normalize() {
     const root = this.root;
     root.updateMatrixWorld(true);
-    const box = new THREE.Box3();
-    const p = new THREE.Vector3();
-    let hasBone = false;
-    this.model.traverse((o) => {
-      if (o.isBone) { o.getWorldPosition(p); box.expandByPoint(p); hasBone = true; }
-    });
-    if (!hasBone || box.isEmpty()) box.setFromObject(this.model);
+    const box = worldBox(this.model, { useBones: true });
 
     const size = box.getSize(new THREE.Vector3());
     const height = size.y || Math.max(size.x, size.z) || TARGET_HEIGHT;
@@ -107,12 +102,8 @@ export class Character extends Entity {
 
     // 重新量缩放后的最低点，落地对齐
     root.updateMatrixWorld(true);
-    const box2 = new THREE.Box3();
-    let has2 = false;
-    this.model.traverse((o) => {
-      if (o.isBone) { o.getWorldPosition(p); box2.expandByPoint(p); has2 = true; }
-    });
-    if (has2 && !box2.isEmpty()) {
+    const box2 = worldBox(this.model, { useBones: true });
+    if (!box2.isEmpty()) {
       root.position.y -= box2.min.y; // 把最低骨头抬到 y≈0
     }
     root.updateMatrixWorld(true);

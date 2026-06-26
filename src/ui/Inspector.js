@@ -181,7 +181,7 @@ export class Inspector {
     root.appendChild(fovField.el);
 
     // 8 相机截图区（条件显示）
-    const myShots = app.shotsForCamera(ent.id);
+    const myShots = app.shots.shotsForCamera(ent.id);
     if (myShots.length) {
       root.appendChild(el('div', { class: 'sec-title', text: '相机截图', style: { marginTop: '6px' } }));
       root.appendChild(this._shotGrid(myShots, true));
@@ -193,24 +193,24 @@ export class Inspector {
   // ---- 摄像机：摄像机截图 tab（§B.3）----
   _cameraShots(root, ent) {
     const app = this.app;
-    if (!app.shots.length) {
+    if (!app.shots.list.length) {
       root.appendChild(el('div', { class: 'hint', text: '暂无截图。在机位视角或导演视角点击底部「截屏」即可。' }));
       return;
     }
     // 按机位分组
     for (const cam of app.cameras) {
-      const group = app.shotsForCamera(cam.id);
+      const group = app.shots.shotsForCamera(cam.id);
       if (!group.length) continue;
       root.appendChild(el('div', { class: 'sec-title', text: cam.name + '截图', style: { marginTop: '8px' } }));
       root.appendChild(this._shotGrid(group));
     }
 
     // 底部固定栏：全部清空 / 发送到画布（发送已勾选）
-    const hasSel = app.selectedShotIds.size > 0;
+    const hasSel = app.shots.selectedShotIds.size > 0;
     const bar = el('div', { class: 'shot-bar' }, [
-      el('button', { class: 'shot-bar-clear', text: '全部清空', onclick: () => { if (confirm('确认清空全部截图？')) app.clearShots(); } }),
-      el('button', { class: 'shot-bar-send' + (hasSel ? '' : ' disabled'), text: hasSel ? `发送到画布(${app.selectedShotIds.size})` : '发送到画布',
-        onclick: () => { if (!hasSel) { toast('请先选择截图'); return; } app.sendShotsToCanvas(); } }),
+      el('button', { class: 'shot-bar-clear', text: '全部清空', onclick: () => { if (confirm('确认清空全部截图？')) app.shots.clearShots(); } }),
+      el('button', { class: 'shot-bar-send' + (hasSel ? '' : ' disabled'), text: hasSel ? `发送到画布(${app.shots.selectedShotIds.size})` : '发送到画布',
+        onclick: () => { if (!hasSel) { toast('请先选择截图'); return; } app.shots.sendShotsToCanvas(); } }),
     ]);
     root.appendChild(bar);
   }
@@ -222,10 +222,10 @@ export class Inspector {
       grid.appendChild(shotCard({
         shot,
         compact,
-        selected: app.selectedShotIds.has(shot.id),
-        onToggle: () => app.toggleShotSelected(shot.id),
-        onDelete: () => app.removeShot(shot.id),
-        onSend: () => app.sendShotsToCanvas([shot.id]),
+        selected: app.shots.selectedShotIds.has(shot.id),
+        onToggle: () => app.shots.toggleShotSelected(shot.id),
+        onDelete: () => app.shots.removeShot(shot.id),
+        onSend: () => app.shots.sendShotsToCanvas([shot.id]),
         onExpand: () => this._openShotModal(shot),
       }));
     }
@@ -283,7 +283,7 @@ export class Inspector {
       el('div', { class: 'modal-bar' }, [
         el('span', { class: 'modal-title', text: shot.name }),
         el('button', { class: 'minibtn modal-dl', text: '下载', onclick: () => downloadDataURL(shot.dataURL, shot.name + '.png') }),
-        el('button', { class: 'minibtn', text: '发送到画布', onclick: () => this.app.sendShotsToCanvas([shot.id]) }),
+        el('button', { class: 'minibtn', text: '发送到画布', onclick: () => this.app.shots.sendShotsToCanvas([shot.id]) }),
       ]),
     ]);
   }

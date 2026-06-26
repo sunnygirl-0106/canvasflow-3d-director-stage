@@ -4,8 +4,9 @@ import { Prop } from '../entities/Prop.js';
 import { CameraEntity } from '../entities/Camera.js';
 import { Crowd } from '../entities/Crowd.js';
 import { CAMERA_PRESETS } from '../core/cameraPresets.js';
-import { capture, downloadDataURL, sendToCanvas } from '../util/capture.js';
 import { toast, el } from '../util/dom.js';
+import { worldBox } from '../util/measure.js';
+import { ShotManager } from './ShotManager.js';
 
 // 体型素体注册表（单一事实来源）：一期全部由中性 Xbot 派生，按 height(身高) + girth(横向围度)
 // 程序化缩放出 高/矮/胖/瘦 等"简单区分"。全部为 mixamorig 骨骼 → 姿势/动画对每种都生效。
@@ -56,13 +57,9 @@ export class App {
     this.cameraView = false;
     this.activeCameraId = null;   // 机位视角 POV 渲染的相机（§B.1）
     this.ratio = 'auto';          // 取景比例（字符串，默认自由）
-    this.latestShot = null;
 
-    // 截图数据模型（§C.1）：会话内存
-    this.shots = [];              // { id, cameraId, cameraName, name, dataURL, createdAt }
-    this.selectedShotIds = new Set();
-    this._shotSeq = {};           // 每机位序号 { [cameraId]: n }
-    this._shotCount = 0;
+    // 截图小王国（§C）：数据与操作都归 ShotManager
+    this.shots = new ShotManager(this);
 
     this._charLetter = 0;
     this._propCount = {};
@@ -109,6 +106,17 @@ export class App {
     root.position.z = Math.sin(a) * r;
   }
 
+  /** 入场登记：放置→加入场景→（可选）名牌→入列→选中→刷新→提示。 */
+  _registerEntity(ent, { label = false, msg } = {}) {
+    this._placeNew(ent.root);
+    this.stage.add(ent.root);
+    if (label) this._makeLabel(ent);
+    this.entities.push(ent);
+    this.select(ent.id);
+    this.ui?.outliner?.refresh();
+    if (msg) toast(msg);
+  }
+
   // ---- CRUD ----
   async _addCharacter(name, url, opts = {}) {
     toast('加载中：' + name + ' …');
@@ -116,13 +124,7 @@ export class App {
     try { c = await Character.load(name, url, opts); }
     catch (err) { console.error(err); toast('角色加载失败：' + (err?.message || err)); return null; }
     c._srcUrl = url; c._opts = opts; // 供「创建副本」重新加载
-    this._placeNew(c.root);
-    this.stage.add(c.root);
-    this._makeLabel(c);
-    this.entities.push(c);
-    this.select(c.id);
-    this.ui?.outliner?.refresh();
-    toast('已添加：' + c.name);
+    this._registerEntity(c, { label: true, msg: '已添加：' + c.name });
     return c;
   }
 
@@ -132,21 +134,10 @@ export class App {
     return this._addCharacter('角色' + String.fromCharCode(65 + this._charLetter++), b.url, { height: b.height, girth: b.girth });
   }
 
-  addCharacterFromFile(file) {
-    const url = URL.createObjectURL(file);
-    return this._addCharacter('角色' + String.fromCharCode(65 + this._charLetter++), url)
-      .finally(() => URL.revokeObjectURL(url));
-  }
-
   addProp(kind) {
     this._propCount[kind] = (this._propCount[kind] || 0) + 1;
     const prop = new Prop(kind, PROP_LABEL[kind] + this._propCount[kind]);
-    this._placeNew(prop.root);
-    this.stage.add(prop.root);
-    this.entities.push(prop);
-    this.select(prop.id);
-    this.ui?.outliner?.refresh();
-    toast('已添加：' + prop.name);
+    this._registerEntity(prop, { msg: '已添加：' + prop.name });
     return prop;
   }
 
@@ -177,13 +168,8 @@ export class App {
     if (!members.length) { toast('群众加载失败'); return null; }
     const crowd = new Crowd(`群众 (${rows}x${cols})`, group, members, { rows, cols, spacing });
     for (const m of members) m.root.userData.entityId = crowd.id; // 视口点击成员 → 选中整组
-    this._placeNew(group);
-    this.stage.add(group);
-    for (const m of members) this._makeLabel(m);
-    this.entities.push(crowd);
-    this.select(crowd.id);
-    this.ui?.outliner?.refresh();
-    toast(`已添加群众阵列（共 ${members.length} 人）`);
+    for (const m of members) this._makeLabel(m); // 群众名牌逐成员，不能并进 _registerEntity
+    this._registerEntity(crowd, { msg: `已添加群众阵列（共 ${members.length} 人）` });
     return crowd;
   }
 
@@ -219,12 +205,7 @@ export class App {
     const center = new THREE.Vector3();
     let height = 1.7;
     if (subject) {
-      const box = new THREE.Box3();
-      const p = new THREE.Vector3();
-      let measured = false;
-      subject.root.updateMatrixWorld(true);
-      subject.root.traverse((o) => { if (o.isBone) { o.getWorldPosition(p); box.expandByPoint(p); measured = true; } });
-      if (!measured) box.setFromObject(subject.root);
+      const box = worldBox(subject.root, { useBones: true });
       if (!box.isEmpty()) { box.getCenter(center); height = box.getSize(new THREE.Vector3()).y || 1.7; }
     } else {
       center.set(0, 0.85, 0);
@@ -273,12 +254,6 @@ export class App {
   }
 
   /** 把导演视角聚焦到某机位（便于查看构图）。 */
-  focusCamera(id) {
-    const ent = this.entities.find((e) => e.id === id);
-    if (!ent || ent.type !== 'camera') return;
-    this.rig.focus(ent);
-    toast('已看向：' + ent.name);
-  }
 
   select(id) {
     this.selectedId = id;
@@ -350,7 +325,7 @@ export class App {
 
   /** 创建副本：角色重新加载并拷贝位姿/颜色/姿势；道具直接克隆；位置略偏移避免重叠。 */
   async duplicateMany(ids) {
-    const list = (ids || []).map((id) => this.entities.find((e) => e.id === id)).filter(Boolean);
+    const list = (ids || []).map((id) => this._findEntity(id)).filter(Boolean);
     let last = null;
     for (const ent of list) { const c = await this._duplicateOne(ent); if (c) last = c; }
     if (last) this.select(last.id);
@@ -401,7 +376,7 @@ export class App {
   }
 
   rename(id, name) {
-    const ent = this.entities.find((e) => e.id === id);
+    const ent = this._findEntity(id);
     if (!ent || !name) return;
     ent.name = name.trim() || ent.name;
     this.ui?.outliner?.refresh();
@@ -410,7 +385,7 @@ export class App {
   }
 
   toggleVisible(id) {
-    const ent = this.entities.find((e) => e.id === id);
+    const ent = this._findEntity(id);
     if (!ent) return;
     ent.setVisible(!ent.visible);
     if (ent.labelEl) ent.labelEl.style.display = ent.visible && this.sceneState.labels ? 'block' : 'none';
@@ -476,7 +451,7 @@ export class App {
       const target = sel || this.entities.find((e) => e.id === this.activeCameraId && e.type === 'camera') || this.cameras[0];
       if (!target) {
         toast('请先添加机位');
-        document.querySelectorAll('#viewtabs button').forEach((b) => b.classList.toggle('on', b.dataset.v === 'director'));
+        this.ui?.dock?.reflectCameraView(false); // 没机位：退回导演视角标签
         return;
       }
       this.cameraView = true;
@@ -498,15 +473,13 @@ export class App {
       this._setNavGizmoVisible(true);
       if (this.selected) { this.gizmo.setVisible(true); this.selection.highlight(this.selected); }
     }
-    document.querySelectorAll('#viewtabs button').forEach((b) => b.classList.toggle('on', (b.dataset.v === 'camera') === this.cameraView));
     this.ui?.dock?.reflectCameraView(this.cameraView);
   }
-  toggleCameraView() { this.setCameraView(!this.cameraView); }
 
   /** 一次性把某机位对准某对象中心（§B.3.5 / 澄清3）。返回对准点。 */
   aimCameraAtObject(camId, entId) {
     const cam = this.entities.find((e) => e.id === camId && e.type === 'camera');
-    const target = this.entities.find((e) => e.id === entId);
+    const target = this._findEntity(entId);
     if (!cam || !target) return null;
     const center = this._entityCenter(target);
     cam.aimAt(center);
@@ -516,15 +489,10 @@ export class App {
 
   /** 取对象世界中心（角色用骨骼包围盒，其余用包围盒）。 */
   _entityCenter(ent) {
-    const box = new THREE.Box3();
-    const p = new THREE.Vector3();
-    let measured = false;
-    ent.root.updateMatrixWorld(true);
-    if (ent.type === 'character') {
-      ent.root.traverse((o) => { if (o.isBone) { o.getWorldPosition(p); box.expandByPoint(p); measured = true; } });
-    }
-    if (!measured) box.setFromObject(ent.root);
-    return box.isEmpty() ? ent.root.getWorldPosition(new THREE.Vector3()) : box.getCenter(new THREE.Vector3());
+    const box = worldBox(ent.root, { useBones: ent.type === 'character' });
+    return box.isEmpty()
+      ? ent.root.getWorldPosition(new THREE.Vector3())
+      : box.getCenter(new THREE.Vector3());
   }
 
   setRatio(str) {
@@ -610,82 +578,10 @@ export class App {
     this.labelLayer.style.display = this._lblDisp ?? 'block';
   }
 
-  /** 确定本次截图归属的机位实体；导演视角下若无机位上下文则按当前视角自动新建（§C.2/G.1）。 */
-  _resolveShotCamera() {
-    if (this.cameraView && this.activeCameraId) {
-      const a = this.entities.find((e) => e.id === this.activeCameraId && e.type === 'camera');
-      if (a) return { ent: a, created: false };
-    }
-    if (this.selected?.type === 'camera') return { ent: this.selected, created: false };
-    // 无机位上下文：按当前视角新建机位（克隆导演相机位姿）
-    const ent = this.addCamera('current');
-    return { ent, created: true };
-  }
-
-  captureShot() {
-    const { ent: camEnt, created } = this._resolveShotCamera();
-    camEnt.cam.aspect = this._viewportAspect();
-    camEnt.cam.updateProjectionMatrix();
-
-    const url = capture({
-      renderer: this.stage.renderer, scene: this.stage.scene, camera: camEnt.cam,
-      viewport: this.stage.viewport, frameRect: this.rig.frameRect,
-      beforeRender: () => this._beginCleanRender(),
-      afterRender: () => this._endCleanRender(),
-    });
-
-    const n = (this._shotSeq[camEnt.id] = (this._shotSeq[camEnt.id] || 0) + 1);
-    const shot = {
-      id: 'shot' + (++this._shotCount),
-      cameraId: camEnt.id,
-      cameraName: camEnt.name,
-      name: `${camEnt.name}-截图${String(n).padStart(2, '0')}`,
-      dataURL: url,
-      createdAt: Date.now(),
-    };
-    this.shots.push(shot);
-    this.latestShot = url;
-    this.ui?.outliner?.refresh();
-    this.ui?.inspector?.onShotsChanged?.();
-    toast(created ? `已截图（已新建${camEnt.name}）` : '已截图：' + shot.name);
-    return shot;
-  }
-
-  shotsForCamera(cameraId) { return this.shots.filter((s) => s.cameraId === cameraId); }
-
-  sendShotsToCanvas(ids) {
-    const list = (ids && ids.length) ? ids : [...this.selectedShotIds];
-    if (!list.length) { toast('请先选择截图'); return; }
-    const sel = this.shots.filter((s) => list.includes(s.id));
-    sel.forEach((s) => sendToCanvas(s.dataURL));
-    toast(`已发送 ${sel.length} 张到画布（示意）`);
-  }
-  removeShot(id) {
-    const i = this.shots.findIndex((s) => s.id === id);
-    if (i < 0) return;
-    this.shots.splice(i, 1);
-    this.selectedShotIds.delete(id);
-    this.ui?.inspector?.onShotsChanged?.();
-    toast('已删除截图');
-  }
-  clearShots() {
-    this.shots = [];
-    this.selectedShotIds.clear();
-    this._shotSeq = {};
-    this.ui?.inspector?.onShotsChanged?.();
-    toast('已清空全部截图');
-  }
-  toggleShotSelected(id) {
-    if (this.selectedShotIds.has(id)) this.selectedShotIds.delete(id);
-    else this.selectedShotIds.add(id);
-    this.ui?.inspector?.onShotsChanged?.();
-  }
-
   /** 自动对准主体：相机贴合所有角色/道具取景，主体占满画面（默认加载时调用）。 */
   frameSubjects() { this.rig.frameAll(this.entities); }
 
   resetView() { this.rig.resetView(); toast('已重置视角'); }
-  focusSelected() { const e = this.selected; if (!e) { toast('先选一个对象'); return; } this.rig.focus(e); toast('已聚焦：' + e.name); }
 
   // ---- labels ----
   _makeLabel(ent) {

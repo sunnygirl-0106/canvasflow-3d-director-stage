@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { worldBox } from '../util/measure.js';
 
 // Raycaster 选择 + 高亮（§4 / §5）。
 // 点击画布 → 命中后向上回溯到挂 userData.entityId 的 root → onSelect(id)；点空白取消选中。
@@ -75,15 +76,8 @@ export class Selection {
   }
 
   _sizeRing(entity) {
-    const box = new THREE.Box3();
-    const p = new THREE.Vector3();
-    let measured = false;
-    if (entity.type === 'character') {
-      entity.root.traverse((o) => {
-        if (o.isBone) { o.getWorldPosition(p); box.expandByPoint(p); measured = true; }
-      });
-    }
-    if (!measured) { box.setFromObject(entity.root); if (box.isEmpty()) return; }
+    const box = worldBox(entity.root, { useBones: entity.type === 'character' });
+    if (box.isEmpty()) return;
     const size = box.getSize(new THREE.Vector3());
     const rad = Math.max(0.4, 0.5 * Math.hypot(size.x, size.z) + 0.12);
     this.ring.scale.setScalar(rad / 0.5);
