@@ -50,7 +50,8 @@ export class App {
     this.inspectorEl = inspectorEl;
 
     this.entities = [];
-    this.selectedId = null;
+    this.selectedId = null;        // 主选实体（右侧面板 / gizmo 作用对象）
+    this.selectedIds = new Set();  // 多选集合（Shift 点击；恒与 selectedId 同步）
     this.transformMode = 'translate';
     this.cameraView = false;
     this.activeCameraId = null;   // 机位视角 POV 渲染的相机（§B.1）
@@ -66,6 +67,7 @@ export class App {
     this._charLetter = 0;
     this._propCount = {};
     this._camCount = 0;
+    this._groupCount = 0;
 
     // 全景背景状态
     this.panoActive = false;
@@ -113,6 +115,7 @@ export class App {
     let c;
     try { c = await Character.load(name, url, opts); }
     catch (err) { console.error(err); toast('角色加载失败：' + (err?.message || err)); return null; }
+    c._srcUrl = url; c._opts = opts; // 供「创建副本」重新加载
     this._placeNew(c.root);
     this.stage.add(c.root);
     this._makeLabel(c);
@@ -279,6 +282,26 @@ export class App {
 
   select(id) {
     this.selectedId = id;
+    this.selectedIds = id != null ? new Set([id]) : new Set();
+    this._reflectPrimary();
+    this.ui?.outliner?.refresh();
+  }
+
+  /** Shift 多选：在多选集合中切换某实体；主选取为最后一次加入项。 */
+  toggleSelect(id) {
+    if (this.selectedIds.has(id)) {
+      this.selectedIds.delete(id);
+      if (this.selectedId === id) this.selectedId = [...this.selectedIds].pop() ?? null;
+    } else {
+      this.selectedIds.add(id);
+      this.selectedId = id;
+    }
+    this._reflectPrimary();
+    this.ui?.outliner?.refresh();
+  }
+
+  /** 把右侧面板 / gizmo / 高亮环同步到主选实体。 */
+  _reflectPrimary() {
     const ent = this.selected;
     if (ent) {
       this.gizmo.attach(ent.root);
@@ -296,7 +319,85 @@ export class App {
       this.scenePanelEl.hidden = false;
     }
     this.selection.highlight(this.cameraView ? null : ent);
+  }
+
+  // ---- 多选批量操作（Outliner 右键菜单）----
+  /** 把若干已选角色打成一个组（Crowd），保留各自世界位姿。 */
+  groupCharacters(ids) {
+    const members = (ids || [])
+      .map((id) => this.entities.find((e) => e.id === id))
+      .filter((e) => e && e.type === 'character');
+    if (members.length < 2) { toast('请至少选择 2 个角色再打组'); return null; }
+
+    // 轴心置于成员世界中心，再用 attach 保留各成员世界变换地挂入组
+    const centroid = new THREE.Vector3();
+    for (const m of members) { m.root.updateMatrixWorld(true); centroid.add(m.root.getWorldPosition(new THREE.Vector3())); }
+    centroid.divideScalar(members.length);
+    const group = new THREE.Group();
+    group.position.copy(centroid);
+    this.stage.add(group);
+    group.updateMatrixWorld(true);
+    for (const m of members) group.attach(m.root);
+
+    const crowd = new Crowd('组' + (++this._groupCount), group, members);
+    for (const m of members) m.root.userData.entityId = crowd.id; // 视口点成员 → 选整组
+    this.entities = this.entities.filter((e) => !members.includes(e));
+    this.entities.push(crowd);
+    this.select(crowd.id);
+    toast(`已打组：${members.length} 个角色 → ${crowd.name}`);
+    return crowd;
+  }
+
+  /** 创建副本：角色重新加载并拷贝位姿/颜色/姿势；道具直接克隆；位置略偏移避免重叠。 */
+  async duplicateMany(ids) {
+    const list = (ids || []).map((id) => this.entities.find((e) => e.id === id)).filter(Boolean);
+    let last = null;
+    for (const ent of list) { const c = await this._duplicateOne(ent); if (c) last = c; }
+    if (last) this.select(last.id);
     this.ui?.outliner?.refresh();
+  }
+
+  async _duplicateOne(ent) {
+    const OFF = new THREE.Vector3(0.6, 0, 0.6);
+    if (ent.type === 'character') {
+      if (!ent._srcUrl) { toast('该角色无法创建副本'); return null; }
+      let c;
+      try { c = await Character.load('角色' + String.fromCharCode(65 + this._charLetter++), ent._srcUrl, ent._opts || {}); }
+      catch (err) { console.error(err); toast('创建副本失败'); return null; }
+      c._srcUrl = ent._srcUrl; c._opts = ent._opts;
+      c.root.position.copy(ent.root.position).add(OFF);
+      c.root.quaternion.copy(ent.root.quaternion);
+      c.root.scale.copy(ent.root.scale);
+      c.setColor(ent.color);
+      Object.assign(c.values, ent.values); c.applyPose();
+      c.currentPreset = ent.currentPreset;
+      this.stage.add(c.root); this._makeLabel(c); this.entities.push(c);
+      return c;
+    }
+    if (ent.type === 'prop') {
+      const p = new Prop(ent.kind, ent.name + '副本');
+      p.root.position.copy(ent.root.position).add(OFF);
+      p.root.quaternion.copy(ent.root.quaternion);
+      p.root.scale.copy(ent.root.scale);
+      p.setColor(ent.color);
+      this.stage.add(p.root); this.entities.push(p);
+      return p;
+    }
+    toast('暂不支持创建该类型的副本');
+    return null;
+  }
+
+  /** 批量删除（多选）。 */
+  removeMany(ids) {
+    for (const id of [...new Set(ids || [])]) this.remove(id);
+  }
+
+  /** 批量显隐（多选）：有任一可见则全部隐藏，否则全部显示。 */
+  toggleVisibleMany(ids) {
+    const list = (ids || []).map((id) => this._findEntity(id)).filter(Boolean);
+    if (!list.length) return;
+    const target = !list.some((e) => e.visible);
+    for (const e of list) if (e.visible !== target) this.toggleVisible(e.id);
   }
 
   rename(id, name) {
