@@ -18,7 +18,7 @@ const labelLayer = document.getElementById('labelLayer');
 const stage = new Stage(viewport);
 const rig = new CameraRig(stage.camera, stage.renderer.domElement, viewport, frameEl);
 rig.setRatio('free'); // 默认导演视角，无取景框
-const gizmo = new TransformGizmo(stage.camera, stage.renderer.domElement, stage.scene, rig.controls);
+const gizmo = new TransformGizmo(stage.camera, stage.renderer.domElement, stage.scene, rig.controls, () => !app.cameraView);
 const navGizmo = new NavGizmo(document.getElementById('navsvg'), stage.camera, () => app.resetView());
 
 // ---- app ----

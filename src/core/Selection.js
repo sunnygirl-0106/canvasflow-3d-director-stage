@@ -59,7 +59,12 @@ export class Selection {
     this.ray.setFromCamera(this.ndc, this.camera);
 
     const roots = this.getEntities().filter((en) => en.visible).map((en) => en.root);
-    const hits = this.ray.intersectObjects(roots, true);
+    // Raycaster 不跳过 visible=false 的对象；须自行过滤，否则 POV 下被隐藏的
+    // 出画相机 body/视锥仍会被命中（且罩在视口里），把点击角色错判成选中相机。
+    const hits = this.ray.intersectObjects(roots, true).filter((h) => {
+      for (let o = h.object; o; o = o.parent) if (o.visible === false) return false;
+      return true;
+    });
     if (!hits.length) { this.onSelect(null); return; }
 
     // 向上回溯到带 entityId 的 root

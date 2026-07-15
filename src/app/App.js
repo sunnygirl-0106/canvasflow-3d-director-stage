@@ -275,6 +275,19 @@ export class App {
     this.ui?.outliner?.refresh();
   }
 
+  /** 渲染相机变化时（进/出 POV、切换出画机位）把 gizmo 与拾取同步到当前渲染相机。 */
+  _syncEditCamera() {
+    const cam = this.getRenderCamera();
+    this.gizmo.setCamera(cam);
+    if (this.selection) this.selection.camera = cam; // Selection._pick 用它做 setFromCamera
+  }
+
+  /** gizmo 是否应显示：有主选实体，且不是「POV 下选中正在透过它看的出画机位」。 */
+  _gizmoShouldShow() {
+    if (!this.selected) return false;
+    return !(this.cameraView && this.selectedId === this.activeCameraId);
+  }
+
   /** 把右侧面板 / gizmo / 高亮环同步到主选实体。 */
   _reflectPrimary() {
     const ent = this.selected;
@@ -283,8 +296,8 @@ export class App {
       // 相机不支持缩放：若当前为 scale 则退回 rotate
       const mode = ent.type === 'camera' && this.transformMode === 'scale' ? 'rotate' : this.transformMode;
       this.gizmo.setMode(mode);
-      // 机位视角（POV）下不显示 gizmo / 选中环（人在画面里）
-      this.gizmo.setVisible(!this.cameraView);
+      // POV 下角色/道具照常显示 gizmo；仅对「正在透过它看」的出画机位不显示
+      this.gizmo.setVisible(this._gizmoShouldShow());
       this.scenePanelEl.hidden = true;
       this.inspectorEl.hidden = false;
       this.ui?.inspector?.show(ent);
@@ -293,7 +306,8 @@ export class App {
       this.inspectorEl.hidden = true;
       this.scenePanelEl.hidden = false;
     }
-    this.selection.highlight(this.cameraView ? null : ent);
+    // POV 下也显示脚下选中环作为选中反馈（截图/预览由洁净钩子隐藏，不进构图）
+    this.selection.highlight(ent);
   }
 
   // ---- 多选批量操作（Outliner 右键菜单）----
@@ -390,6 +404,8 @@ export class App {
     ent.setVisible(!ent.visible);
     if (ent.labelEl) ent.labelEl.style.display = ent.visible && this.sceneState.labels ? 'block' : 'none';
     if (ent.id === this.selectedId) { this.gizmo.setVisible(ent.visible); this.selection.ring.visible = ent.visible; }
+    // 机位视角下相机 body/helper 由视角逻辑统一隐藏，toggleVisible 不得重新点亮
+    if (ent.type === 'camera' && this.cameraView) this.setCameraGizmoVisible(false);
     this.ui?.outliner?.refresh();
   }
 
@@ -435,6 +451,7 @@ export class App {
       ent.cam.aspect = this._viewportAspect();
       ent.cam.updateProjectionMatrix();
       this.stage.activeCamera = ent.cam;
+      this._syncEditCamera(); // gizmo/拾取对齐到新出画相机投影
     }
     this.select(id);
   }
@@ -463,6 +480,7 @@ export class App {
       this._applyFrame();
       this.setCameraGizmoVisible(false);
       this._setNavGizmoVisible(false);
+      this._syncEditCamera(); // gizmo/拾取切到出画相机（select 前先对齐）
       this.select(target.id); // 显示该相机面板
     } else {
       this.cameraView = false;
@@ -471,7 +489,8 @@ export class App {
       this._applyFrame();
       this.setCameraGizmoVisible(true);
       this._setNavGizmoVisible(true);
-      if (this.selected) { this.gizmo.setVisible(true); this.selection.highlight(this.selected); }
+      this._syncEditCamera(); // gizmo/拾取切回导演相机
+      if (this.selected) { this.gizmo.setVisible(this._gizmoShouldShow()); this.selection.highlight(this.selected); }
     }
     this.ui?.dock?.reflectCameraView(this.cameraView);
   }
@@ -572,8 +591,8 @@ export class App {
     this.labelLayer.style.display = 'none';
   }
   _endCleanRender() {
-    if (this.selected && !this.cameraView) this.gizmo.setVisible(true);
-    this.selection.ring.visible = !!this.selected && !this.cameraView;
+    if (this._gizmoShouldShow()) this.gizmo.setVisible(true);
+    this.selection.ring.visible = !!this.selected;
     this.setCameraGizmoVisible(!this.cameraView);
     this.labelLayer.style.display = this._lblDisp ?? 'block';
   }

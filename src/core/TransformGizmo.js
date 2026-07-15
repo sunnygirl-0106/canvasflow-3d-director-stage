@@ -8,8 +8,9 @@ export class TransformGizmo {
    * @param {HTMLElement} domElement
    * @param {THREE.Scene} scene
    * @param {OrbitControls} orbit
+   * @param {() => boolean} [orbitAllowed] 拖拽结束是否允许恢复环绕（POV 下返回 false）
    */
-  constructor(camera, domElement, scene, orbit) {
+  constructor(camera, domElement, scene, orbit, orbitAllowed = () => true) {
     this.control = new TransformControls(camera, domElement);
     this.control.setMode('translate');
     this.control.setSpace('local');
@@ -22,9 +23,9 @@ export class TransformGizmo {
     this.control.enabled = false;
     this._setHelperVisible(false);
 
-    // 与 Orbit 互斥：拖 gizmo 时禁用环绕
+    // 与 Orbit 互斥：拖 gizmo 时禁用环绕；拖拽结束是否恢复环绕服从视角状态（POV 下不得恢复）
     this.control.addEventListener('dragging-changed', (e) => {
-      orbit.enabled = !e.value;
+      orbit.enabled = !e.value && orbitAllowed();
     });
 
     this._onObjectChange = null;
@@ -50,6 +51,11 @@ export class TransformGizmo {
 
   setMode(mode) {
     this.control.setMode(mode); // 'translate' | 'rotate' | 'scale'
+  }
+
+  /** 切换手柄投影/拾取所用相机（进/出 POV、切换出画机位时同步）。 */
+  setCamera(cam) {
+    if (cam) this.control.camera = cam;
   }
 
   attach(root) {

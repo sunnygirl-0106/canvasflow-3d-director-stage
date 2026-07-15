@@ -62,10 +62,10 @@ export class Outliner {
         // Shift 点击角色/道具 → 多选切换
         if (e.shiftKey && (ent.type === 'character' || ent.type === 'prop')) { app.toggleSelect(ent.id); return; }
         if (ent.type === 'camera') {
-          // 点击机位 → 切到「机位视角」并激活该机位（已在机位视角则直接切换激活机位）
-          app.select(ent.id);
-          if (!app.cameraView) app.setCameraView(true);
-          else app.setActiveCamera(ent.id);
+          // 导演视角下点机位 → 仅选中（出属性面板 + 三色 gizmo），不切换 POV；
+          // 已在机位视角时点机位 → 切换当前 POV 相机
+          if (app.cameraView) app.setActiveCamera(ent.id);
+          else app.select(ent.id);
         } else {
           app.select(ent.id);
         }
