@@ -1,83 +1,81 @@
-# 3D 导演台 · 融合 Demo
+<div align="center">
 
-把 `导演台MVP_demo.html`（场景 / 道具 / 取景 / 截图）与 `人偶姿势体验_Xbot.html`
-（带骨骼 GLB 角色 / 全身 FK 摆姿 / 预设动画）融合成一个 **Vite + three（ES Module）** 工程。
+# 🎬 3D 导演台
 
-## 启动
+**浏览器里的轻量 3D 分镜 / 导演台** — 摆角色、布机位、透过镜头取景截图。
+
+基于 **Vite + three.js**（原生 ES Module，无框架）构建。
+
+[![Deploy](https://github.com/sunnygirl-0106/canvasflow-3d-director-stage/actions/workflows/deploy.yml/badge.svg)](https://github.com/sunnygirl-0106/canvasflow-3d-director-stage/actions/workflows/deploy.yml)
+[![three.js](https://img.shields.io/badge/three.js-r160-000000?logo=three.js)](https://threejs.org/)
+[![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+
+**[▶ 在线体验](https://sunnygirl-0106.github.io/canvasflow-3d-director-stage/)**
+
+</div>
+
+---
+
+## ✨ 功能
+
+- **多角色素体** — 一键添加 标准 / 高大 / 矮小 / 宽厚 / 纤细 五种体型，自动归一化身高并落地；支持本地上传 `.glb`。
+- **全身姿势** — 右侧「姿势」面板按关节分组的 FK 滑条实时驱动骨骼；内置行走、挥手、抱臂等姿势预设一键套用。
+- **群众阵列** — 行×列网格批量生成群众，可整组平移/旋转，也可随时解组为独立角色。
+- **几何道具** — 方块 / 圆柱 / 球体 / 人体素模，颜色与尺寸可调。
+- **机位系统** — 相机作为一等实体，支持景别预设与对准主体；**机位视角（POV）** 下透过镜头实时取景，并可直接选中、平移、旋转画面里的角色与道具。
+- **取景与截图** — 多比例取景框（21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16 / 自由），所见即所得裁剪导出 PNG（不含辅助 gizmo），截图带历史管理。
+- **全景背景** — 载入 2:1 等距柱状全景图作为环境，或自定义天空颜色。
+- **场景编排** — 左侧清单支持搜索、显隐、改名、多选，以及打组 / 副本 / 批量删除等右键操作。
+
+## 🚀 快速开始
 
 ```bash
-cd demo
 npm install
-npm run dev        # 打开终端给出的 http://localhost:5173
-# 生产构建：
-npm run build && npm run preview
+npm run dev          # 打开终端给出的 http://localhost:5173
+
+npm run build        # 生产构建 → dist/
+npm run preview      # 本地预览构建产物
 ```
 
-## 能力
+## ⌨️ 操作
 
-- **多角色 GLB**：加角色（Xbot / Soldier / Robot），自动归一化身高 + 落地。
-- **几何道具**：方块 / 圆柱 / 球 / 人体素模，颜色与尺寸可调。
-- **统一选择 / 摆站位**：点选高亮（地面环）+ 标准 `TransformControls`（移动 / 旋转 / 缩放）。
-- **全身多轴姿势**：右侧「姿势」面板按 `jointConfig` 分组的滑条，FK 实时驱动骨骼。
-- **预设动画**：模型内置动画一键播放，与手动摆姿互斥。
-- **多比例取景 + 截图**：16:9 / 9:16 / 1:1 / 自由，按取景框裁剪导出 PNG（不含 gizmo）。
-- **多角色独立**：每个角色各自持有 `bones / restQ / values / mixer`。
+| 操作 | 效果 |
+| --- | --- |
+| 空白处拖动 | 环绕视角 |
+| 滚轮 | 缩放 |
+| 拖动三色 gizmo | 按当前模式变换选中对象 |
+| `V` / `R` / `S` | 切换 移动 / 旋转 / 缩放 |
+| `Del` / `Backspace` | 删除选中对象 |
+| 底部工具坞 `＋` | 添加角色 / 几何道具 / 本地上传 |
 
-## 界面（对齐《3D导演台》设计稿）
-
-- 顶栏：`3D导演台` / 居中 `导演视角·机位视角` 切换 / `? ×`。
-- 左栏：`场景` + 搜索 + 清单（机位1 / 角色 / 道具，含图标、选中高亮、显隐·改名·删除）。
-- 视口：右上角坐标指示器 + `重置视角`；白色角色名牌；机位视角下显示取景框。
-- 底部悬浮工具坞：选择/移动 · **＋添加（角色素体 / 本地上传 / 几何模型子菜单）** · 旋转 · 机位视角 · 取景比例 · 截图 · 发送到画布 · 全屏。
-- 右栏：**未选中 → 「3D场景」面板**（场景缩放/平移/旋转、全景背景·天空颜色、全景球[占位]、角色标签·网格吸附、地面 显隐/透明度/高度）；**选中 → 「角色 / 道具」面板**（属性：名称/位置/旋转/缩放/统一缩放/颜色；角色另有「姿势」页）。
-
-## 操作
-
-- 空白处拖动 = 环绕视角；滚轮 = 缩放。
-- 选中对象后拖三色 gizmo = 按当前模式变换（拖 gizmo 时镜头不跟转）。
-- 键盘：`V`/`R`/`S` 切移动/旋转/缩放，`Del` 删除选中。
-- 底部工具坞「＋」加角色/几何模型，支持本地上传 `.glb`。
-
-## 目录结构
+## 🗂️ 项目结构
 
 ```
 src/
-  main.js              入口：实例化各模块并串联
-  app/App.js           应用状态机：entities[] / selectedId / 场景级状态 / 增删选改
-  core/
-    Stage.js           场景 / 渲染器 / 光照 / 地面 / world 组 / 渲染循环
-    CameraRig.js       OrbitControls + 聚焦 + 取景比例 overlay + 重置视角
-    Selection.js       Raycaster 选择 + 地面蓝环高亮
-    TransformGizmo.js  TransformControls 封装（模式切换 / 与 Orbit 互斥 / 网格吸附 / 回调）
-    NavGizmo.js        右上角 SVG 坐标指示器 + 重置视角
-  entities/
-    Entity.js          实体基类（baseScale）
-    Character.js       角色：GLB 加载 / 素体着色 / 骨骼表 / restQ / 全身 FK / 预设动画 / 名牌
-    Prop.js            道具：几何体 + 颜色
-    jointConfig.js     全身多轴关节表（§6）
-  ui/
-    Dock.js            底部工具坞 + 添加菜单
-    Outliner.js        左侧场景清单（机位 + 角色/道具）
-    ScenePanel.js      右侧「3D场景」级属性（未选中时）
-    Inspector.js       右侧「角色/道具」属性 + 姿势（选中时）
-    PoseSliders.js     从 jointConfig 生成分组姿势滑条
-    widgets.js         共享控件：滑条 / XYZ / 颜色 / 开关
-  util/
-    boneUtil.js        骨名归一化、骨骼表构建
-    capture.js         按比例裁剪截图、隐藏辅助物
-    dom.js             小型 DOM helper
-  styles/style.css
-public/assets/         Xbot.glb / Soldier.glb / Robot.glb
+├─ main.js              入口：实例化并串联各模块
+├─ app/
+│  ├─ App.js            应用状态机：实体清单 / 选择 / 场景状态 / 增删选改
+│  └─ ShotManager.js    截图数据与操作
+├─ core/
+│  ├─ Stage.js          场景 / 渲染器 / 光照 / 地面 / 渲染循环
+│  ├─ CameraRig.js      OrbitControls + 聚焦 + 取景框 + 重置视角
+│  ├─ Selection.js      Raycaster 拾取 + 地面选中环
+│  ├─ TransformGizmo.js TransformControls 封装（模式切换 / 与环绕互斥）
+│  ├─ NavGizmo.js       右上角坐标指示器
+│  └─ cameraPresets.js  机位景别预设
+├─ entities/            Character / Prop / Camera / Crowd / 关节表 / 姿势预设
+├─ ui/                  Dock / Outliner / Inspector / ScenePanel / 姿势滑条 / 弹层
+├─ util/                截图 / 度量 / 骨骼 / 素材库 / DOM helper
+└─ styles/style.css
+public/assets/          Xbot.glb（中性素体，所有体型由其程序化派生）
 ```
 
-## 关于关节方向校准（§5.4）
+## 🛠️ 技术栈
 
-`src/entities/jointConfig.js` 中各关节的 `axis` 与 `min/max` 取自技术规划 §6 的起始值
-（与 Xbot 源 demo 同源、已基本可用）。各骨头本地轴方向不完全一致，若发现某关节方向
-相反或耦合，按 §5.4 在浏览器里实测后翻转该项的 `min/max` 正负或更换 `axis` 即可，
-无需改模型。左右成对动作通常镜像（正负相反）。
+- [three.js](https://threejs.org/) r160 — 渲染、`GLTFLoader`、`OrbitControls`、`TransformControls`
+- [Vite](https://vitejs.dev/) 5 — 开发服务与构建
+- 原生 ES Module + Vanilla JS，无前端框架依赖
 
-## 不在本版范围（§11）
+## 📦 部署
 
-截图「发送到画布」目前为占位（仅 `console.log`）；IK 拖拽、手指逐节、表情、姿势/场景
-JSON 存取等为后续迭代。
+推送到 `main` 分支后由 GitHub Actions 自动构建并发布到 GitHub Pages（见 `.github/workflows/deploy.yml`）。
