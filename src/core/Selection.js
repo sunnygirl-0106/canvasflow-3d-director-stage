@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { worldBox } from '../util/measure.js';
 
-// Raycaster 选择 + 高亮（§4 / §5）。
+// Raycaster 选择 + 高亮。
 // 点击画布 → 命中后向上回溯到挂 userData.entityId 的 root → onSelect(id)；点空白取消选中。
 export class Selection {
   /**
@@ -21,6 +21,7 @@ export class Selection {
     this.ray = new THREE.Raycaster();
     this.ndc = new THREE.Vector2();
     this._down = new THREE.Vector2();
+    this._tmp = new THREE.Vector3();
 
     // 地面选中环（高亮指示）
     this.ring = new THREE.Mesh(
@@ -73,12 +74,15 @@ export class Selection {
     this.onSelect(o ? o.userData.entityId : null);
   }
 
-  /** 设置高亮目标（null=隐藏环）。 */
+  /** 设置高亮目标（null=隐藏环）。隐藏的实体不显示环。 */
   highlight(entity) {
     this.selectedEntity = entity;
-    this.ring.visible = !!entity;
+    this.ring.visible = !!entity && entity.visible;
     if (entity) this._sizeRing(entity);
   }
+
+  /** 临时显隐选中环（截图洁净渲染用），不改变高亮目标。 */
+  setRingVisible(v) { this.ring.visible = v && !!this.selectedEntity?.visible; }
 
   _sizeRing(entity) {
     const box = worldBox(entity.root, { useBones: entity.type === 'character' });
@@ -91,8 +95,7 @@ export class Selection {
   /** 每帧把环跟随到选中实体脚下。 */
   update() {
     if (!this.selectedEntity) return;
-    const p = new THREE.Vector3();
-    this.selectedEntity.root.getWorldPosition(p);
+    const p = this.selectedEntity.root.getWorldPosition(this._tmp);
     this.ring.position.x = p.x;
     this.ring.position.z = p.z;
   }

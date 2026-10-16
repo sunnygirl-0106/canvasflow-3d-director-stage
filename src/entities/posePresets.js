@@ -6,7 +6,7 @@
 const STAND = { lArmAbd: -80, rArmAbd: 80, lFore: -8, rFore: 8 };
 
 // 说明：左右成对关节通常镜像（外展 lArmAbd 取负、rArmAbd 取正；前举/弯曲同理）。
-// ⚠️ 下列角度为"起始值"，需按规划文档 §6 在浏览器实测校准（骨骼本地轴方向不完全一致）。
+// ⚠️ 下列角度为"起始值"，需在浏览器实测校准（骨骼本地轴方向不完全一致）。
 export const POSE_PRESETS = [
   { key: 'stand',  label: '站立', values: { ...STAND } },
   { key: 'tpose',  label: 'T型',  values: {} },                                     // 全 0 = 静止位

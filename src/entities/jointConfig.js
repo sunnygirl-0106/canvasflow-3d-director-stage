@@ -1,6 +1,6 @@
-// 全身多轴关节表（§6）—— 与《人偶姿势体验_技术改造文档.md》同源。
+// 全身多轴关节表。
 // 字段：{group, side, key, label, bone, axis, min, max}
-// 注意（§5.4）：axis 与 min/max 是起始值；各骨头本地轴方向不一致，必要时在浏览器里
+// 注意：axis 与 min/max 是起始值；各骨头本地轴方向不一致，必要时在浏览器里
 // 实测校准（翻转 min/max 正负或换 axis）。左右成对动作通常镜像（正负相反）。
 export const JOINTS = [
   // 身体（根 Hips：整体朝向）

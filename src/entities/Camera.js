@@ -34,7 +34,7 @@ function tintHelper(helper, color) {
 }
 
 /**
- * 相机实体（§4.1）：真实 PerspectiveCamera + 橙色相机体 + CameraHelper 视锥。
+ * 相机实体：真实 PerspectiveCamera + 橙色相机体 + CameraHelper 视锥。
  * - cam/body 作为 root 子节点，随 gizmo 变换；
  * - helper 必须挂到 scene（非 root），每帧 update()。
  */
@@ -61,13 +61,15 @@ export class CameraEntity extends Entity {
     tintHelper(this.helper, FRUSTUM_COLOR);
     if (this._scene) this._scene.add(this.helper);
 
-    this.labelEl = null;
-    this.height = 0.2; // 名牌锚点参考偏移
     this._roll = 0;    // 荷兰角（弧度），aimAt 时叠加
+    this._helpersOn = true; // 相机体+视锥是否允许显示（机位视角/截图时关闭）
     this.lookTarget = new THREE.Vector3(0, 0, -1); // 注视坐标（世界系约定）
   }
 
   get fov() { return this.cam.fov; }
+
+  labelTargets() { return [this]; }
+  labelOffset() { return 0.2; }
 
   /** 一次性对准某点：root 的 -Z 指向 point，并叠加 Dutch roll。 */
   aimAt(point) {
@@ -87,29 +89,25 @@ export class CameraEntity extends Entity {
     this.helper.update();
   }
 
-  setAspect(a) {
-    this.cam.aspect = a;
-    this.cam.updateProjectionMatrix();
-    this._viz.aspect = a;
-    this._viz.updateProjectionMatrix();
-    this.helper.update();
-  }
-
-  /** 每帧把视锥同步到真实相机当前世界矩阵。 */
+  /** 把视锥同步到真实相机当前世界矩阵（渲染前调用）。 */
   update() {
     this.helper.update();
   }
 
   setVisible(v) {
     super.setVisible(v);
-    this.helper.visible = v;
+    this._syncHelpers();
   }
 
-  /** 名牌锚点（相机体上方一点）的世界坐标。 */
-  getLabelAnchor(out = new THREE.Vector3()) {
-    this.body.getWorldPosition(out);
-    out.y += 0.16;
-    return out;
+  setHelpersVisible(v) {
+    this._helpersOn = v;
+    this._syncHelpers();
+  }
+
+  _syncHelpers() {
+    const show = this.visible && this._helpersOn;
+    this.body.visible = show;
+    this.helper.visible = show;
   }
 
   dispose() {

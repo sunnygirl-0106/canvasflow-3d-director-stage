@@ -1,8 +1,8 @@
 import { el, clear } from '../util/dom.js';
 import { JOINTS, groupJoints } from '../entities/jointConfig.js';
 
-// 从 jointConfig 按 group/side 分组渲染滑条（§4 / §5.6）。
-// input → 写 character.values[key] → character.enterManual() + applyPose()。
+// 从 jointConfig 按 group/side 分组渲染滑条。
+// input → 写 character.values[key] → applyPose()。
 export class PoseSliders {
   constructor(container, character, onChange) {
     this.container = container;
@@ -32,7 +32,6 @@ export class PoseSliders {
               ch.values[j.key] = v;
               valSpan.textContent = Math.round(v) + '°';
               ch.currentPreset = null; // 手动微调取消预设高亮
-              ch.enterManual();
               ch.applyPose();
               this.onChange && this.onChange();
             },
@@ -49,7 +48,7 @@ export class PoseSliders {
     this.container.appendChild(wrap);
   }
 
-  /** 外部（如播放预设/复位）改了 values 后，刷新滑条 UI 到当前值。 */
+  /** 外部（如套用预设/复位）改了 values 后，刷新滑条 UI 到当前值。 */
   syncFromValues() {
     const ch = this.character;
     for (const j of JOINTS) {

@@ -21,7 +21,7 @@ export function sliderRow({ label, min, max, step = 1, value = 0, disabled = fal
   return { el: row, set(v) { input.value = v; setFill(v); valbox.textContent = format(v); } };
 }
 
-// 轴标签 hover 左右拖动改值（scrubber，§C.3）。
+// 轴标签 hover 左右拖动改值（scrubber）。
 function attachScrub(elm, { get, set, step, after }) {
   let startX = 0, startV = 0, dragging = false;
   elm.classList.add('scrub');
@@ -97,7 +97,7 @@ export function infoTip(text) {
 //    「发送到画布」由中间的 ⤴ 按钮（title 提示）触发。
 export function shotCard({ shot, selected, onToggle, onDelete, onSend, onExpand, compact = false }) {
   const card = el('div', { class: 'shot-card' + (compact ? ' compact' : '') + (selected ? ' sel' : '') });
-  const img = el('img', { src: shot.dataURL, alt: shot.name });
+  const img = el('img', { src: shot.url, alt: shot.name });
   const ovChildren = [];
   if (!compact) ovChildren.push(el('div', { class: 'shot-send-bubble', text: '发送到画布', onclick: (e) => { e.stopPropagation(); onSend?.(); } }));
   ovChildren.push(el('div', { class: 'shot-ops' }, [

@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 
-// 机位预设（§4.2）：给定主体（选中角色，否则场景中心）与导演相机，
+// 机位预设：给定主体（选中角色，否则场景中心）与导演相机，
 // 算出机位的位姿与 fov 的纯函数表。约定主体正面朝 +Z。
 //
-// ctx = { subjectCenter:Vector3, subjectHeight:number, directorCamera, directorTarget:Vector3, sceneCenter:Vector3 }
-// build(ctx) -> { position:Vector3, target:Vector3, roll?:number(弧度) }
+// ctx = { subjectCenter:Vector3, subjectHeight:number, directorCamera, directorTarget:Vector3 }
+// build(ctx) -> { position:Vector3, target:Vector3, fov?:number, roll?:number(弧度) }
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const DEG = Math.PI / 180;

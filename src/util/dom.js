@@ -29,10 +29,6 @@ export function clear(node) {
   return node;
 }
 
-export function qs(sel, root = document) {
-  return root.querySelector(sel);
-}
-
 let toastEl = null;
 let toastTimer = null;
 export function toast(msg) {

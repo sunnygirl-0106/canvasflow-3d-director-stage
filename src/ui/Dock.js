@@ -3,36 +3,16 @@ import { DockMenu } from './dockMenu.js';
 import { HistoryModal } from './HistoryModal.js';
 import { groupedPresets } from '../core/cameraPresets.js';
 import { listCanvasAssets } from '../util/assetLibrary.js';
-import { RATIO_OPTIONS, isPanoRatio, BODY_TYPES } from '../app/App.js';
+import { RATIO_OPTIONS, isPanoRatio, BODY_TYPES, PROP_KINDS } from '../config.js';
+import { icon } from './icons.js';
 
-// 内联图标
-const IC = {
-  pointer: '<path d="M5 3l15 8-6 1.6L11 19z"/>',
-  move: '<path d="M12 3v18M3 12h18"/><path d="M12 3l-2.4 2.6M12 3l2.4 2.6M12 21l-2.4-2.6M12 21l2.4 2.6M3 12l2.6-2.4M3 12l2.6 2.4M21 12l-2.6-2.4M21 12l-2.6 2.4"/>',
-  rotate: '<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/>',
-  scale: '<path d="M21 3h-6M21 3v6M21 3l-7 7"/><path d="M3 21h6M3 21v-6M3 21l7-7"/>',
-  transform: '<path d="M12 3v18M3 12h18"/><path d="M12 3l-2.4 2.6M12 3l2.4 2.6M12 21l-2.4-2.6M12 21l2.4 2.6M3 12l2.6-2.4M3 12l2.6 2.4M21 12l-2.6-2.4M21 12l-2.6 2.4"/>',
-  person: '<circle cx="12" cy="5.5" r="2.4"/><path d="M12 8.4c-2.4 0-4 1.6-4 4v3M12 8.4c2.4 0 4 1.6 4 4v3M9 21v-5M15 21v-5"/>',
-  image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-5-4 4-2-2-7 7"/>',
-  video: '<rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3"/>',
-  frame: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/>',
-  shot: '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.2"/>',
-  send: '<rect x="3" y="4" width="14" height="14" rx="2"/><path d="M7 14l3-3 3 3M21 8v9a2 2 0 0 1-2 2h-9"/>',
-  expand: '<path d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6"/>',
-  upload: '<path d="M12 16V5M8 9l4-4 4 4M5 19h14"/>',
-  cube: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 3v18M4 7.5l8 4.5 8-4.5"/>',
-  group: '<circle cx="7" cy="7" r="2.1"/><circle cx="17" cy="7" r="2.1"/><circle cx="7" cy="17" r="2.1"/><circle cx="17" cy="17" r="2.1"/>',
-  history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4M12 7v5l3 2"/>',
-  chevron: '<path d="M9 6l6 6-6 6"/>',
-};
-const svg = (name, w = 21) => `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${IC[name]}</svg>`;
+const svg = (name, w = 21) => icon(name, w);
 
-// 素体清单从体型注册表生成（单一事实来源，见 App.BODY_TYPES）
+// 素体清单从体型注册表生成（单一事实来源，见 config.js）
 const CHARACTERS = Object.entries(BODY_TYPES).map(([key, v]) => [key, v.label]);
-const GEO = [['box', '方块'], ['cylinder', '圆柱'], ['sphere', '球体'], ['mannequin', '人体素模']];
 const TF_MODES = [['translate', 'move', '移动'], ['rotate', 'rotate', '旋转'], ['scale', 'scale', '缩放']];
 
-// 底部悬浮工具坞（八按钮，§3）：变换 / 添加 / 全景图 / 机位 / 比例 / 截图 / 发送 / 全屏
+// 底部悬浮工具坞：变换 / 添加 / 全景图 / 机位 / 比例 / 截图 / 全屏
 export class Dock {
   constructor(container, app) {
     this.app = app;
@@ -42,16 +22,17 @@ export class Dock {
     listCanvasAssets().then((a) => { this._assets = a; });
     this._history = new HistoryModal({
       getAssets: () => this._assets,
-      onPick: (a) => app.setPanoramaFromAsset(a),
+      onPick: (a) => app.panorama.setFromAsset(a),
       // 仅 2:1 图片可作全景；其余（非 2:1、视频）在弹层中置灰禁用
       isEligible: (a) => a.type === 'image' && isPanoRatio(a.w, a.h),
       ineligibleReason: (a) => (a.type !== 'image' ? '视频不可作全景' : '需 2:1 全景图'),
     });
     this.render();
+    app.on('mode', (mode) => this.reflectMode(mode));
   }
 
-  _btn(icon, title, onClick, key) {
-    const b = el('button', { class: 'dockbtn', title, html: svg(icon), onclick: onClick });
+  _btn(iconName, title, onClick, key) {
+    const b = el('button', { class: 'dockbtn', title, html: svg(iconName), onclick: onClick });
     if (key) this.modeBtns[key] = b;
     return b;
   }
@@ -59,9 +40,9 @@ export class Dock {
   _sep() { return el('div', { class: 'dock-sep' }); }
 
   // 通用菜单项（可选打勾）
-  _item(icon, label, onClick, checked = false, iconSize = 17) {
+  _item(iconName, label, onClick, checked = false, iconSize = 17) {
     return el('div', { class: 'menu-item', onclick: onClick }, [
-      el('span', { class: 'mi-ic', html: icon ? svg(icon, iconSize) : '' }),
+      el('span', { class: 'mi-ic', html: iconName ? svg(iconName, iconSize) : '' }),
       el('span', { class: 'mi-label', text: label }),
       checked ? el('span', { class: 'mi-check', text: '✓' }) : null,
     ]);
@@ -129,7 +110,7 @@ export class Dock {
     }
   }
 
-  // ---- 添加角色/模型菜单（§3.b，迁移到 helper）----
+  // ---- 添加角色/模型菜单 ----
   _buildAddItems() {
     const app = this.app;
     const items = [];
@@ -140,7 +121,7 @@ export class Dock {
     items.push(this._buildCrowdItem());
     items.push(el('div', { class: 'menu-sep' }));
 
-    const sub = el('div', { class: 'submenu' }, GEO.map(([kind, label]) =>
+    const sub = el('div', { class: 'submenu' }, PROP_KINDS.map(([kind, label]) =>
       this._item('cube', label, () => { app.addProp(kind); this.menu.close(); }, false, 16)));
     items.push(el('div', { class: 'menu-item has-sub' }, [
       el('span', { class: 'mi-ic', html: svg('cube', 17) }),
@@ -188,7 +169,7 @@ export class Dock {
     ]);
   }
 
-  // ---- 全景图菜单（§3.c）----
+  // ---- 全景图菜单 ----
   _buildPanoItems() {
     const app = this.app;
     const items = [];
@@ -196,7 +177,7 @@ export class Dock {
     const fileInput = el('input', { type: 'file', accept: 'image/*' });
     fileInput.addEventListener('change', (e) => {
       const f = e.target.files && e.target.files[0];
-      if (f) app.setPanoramaFromFile(f);
+      if (f) app.panorama.setFromFile(f);
       e.target.value = '';
       this.menu.close();
     });
@@ -215,9 +196,9 @@ export class Dock {
       el('span', { class: 'mi-arrow', html: svg('chevron', 14) }),
     ]));
 
-    if (app.panoActive) {
+    if (app.panorama.active) {
       items.push(el('div', { class: 'menu-sep' }));
-      items.push(this._item(null, '移除全景', () => { app.clearPanorama(); this.menu.close(); }));
+      items.push(this._item(null, '移除全景', () => { app.panorama.clear(); this.menu.close(); }));
     }
     return items;
   }
@@ -227,7 +208,7 @@ export class Dock {
     this._history.open();
   }
 
-  // ---- 添加机位菜单（§3.d）----
+  // ---- 添加机位菜单 ----
   _buildCamItems() {
     const app = this.app;
     const items = [];
@@ -250,10 +231,5 @@ export class Dock {
 
   reflectMode(mode) {
     if (this.transformBtn) this.transformBtn.innerHTML = svg(this._modeIcon(mode));
-  }
-  reflectCameraView(on) {
-    // 机位视角由 header viewtabs 体现，工具坞无独立按钮：点亮 camera/director 标签
-    document.querySelectorAll('#viewtabs button').forEach((b) =>
-      b.classList.toggle('on', (b.dataset.v === 'camera') === on));
   }
 }

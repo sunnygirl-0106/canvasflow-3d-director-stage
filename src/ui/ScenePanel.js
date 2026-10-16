@@ -1,19 +1,19 @@
 import { el } from '../util/dom.js';
 import { sliderRow, tripleRow, colorRow, toggleRow, toHex } from './widgets.js';
 
-const D2R = Math.PI / 180;
-
 // 右侧「3D场景」级属性面板（未选中对象时显示）。
 export class ScenePanel {
   constructor(container, app) {
     this.app = app;
     this.container = container;
+    app.on('scene', () => this.render());
     this.render();
   }
 
   render() {
     const app = this.app;
     const s = app.sceneState;
+    const pano = app.panorama;
     const root = el('div', { class: 'rp rp-pad' });
 
     root.appendChild(el('h2', { text: '3D场景' }));
@@ -38,15 +38,15 @@ export class ScenePanel {
     const sec2 = el('div', { class: 'sec' });
     sec2.appendChild(el('div', { class: 'sec-title', text: '全景背景' }));
     const panoField = el('div', { class: 'field' }, [el('label', { text: '已连接全景图' })]);
-    if (app.panoActive && app.panoramaInfo) {
+    if (pano.active && pano.info) {
       const thumb = el('div', { class: 'pano-connected' }, [
         el('div', { class: 'pano-preview' }),
         el('div', { class: 'pano-meta' }, [
-          el('div', { class: 'pano-title', text: app.panoramaInfo.title || '全景图' }),
-          el('button', { class: 'pano-remove', text: '移除', onclick: () => app.clearPanorama() }),
+          el('div', { class: 'pano-title', text: pano.info.title || '全景图' }),
+          el('button', { class: 'pano-remove', text: '移除', onclick: () => pano.clear() }),
         ]),
       ]);
-      thumb.querySelector('.pano-preview').style.backgroundImage = `url(${app.panoramaInfo.thumb})`;
+      thumb.querySelector('.pano-preview').style.backgroundImage = `url(${pano.info.thumb})`;
       panoField.appendChild(thumb);
     } else {
       panoField.appendChild(el('div', { class: 'placeholder-box', html: '<span>⃝</span><span>底部「全景图」按钮：本地上传或选历史记录</span>' }));
@@ -55,12 +55,11 @@ export class ScenePanel {
     sec2.appendChild(colorRow({ label: '天空颜色', hex: toHex(s.sky), onChange: (h) => app.setSkyColor(h) }).el);
     root.appendChild(sec2);
 
-    // ---- 全景球（有全景图时可用，§3.c）----
+    // ---- 全景球（有全景图时可用）----
     const sec3 = el('div', { class: 'sec' });
     sec3.appendChild(el('div', { class: 'sec-title', text: '全景球' }));
-    const pano = app.panoActive;
-    sec3.appendChild(sliderRow({ label: '水平旋转', min: 0, max: 360, value: s.panoRot, disabled: !pano, format: (v) => Math.round(v) + '°', onInput: (v) => app.setPanoramaRotation(v) }).el);
-    sec3.appendChild(sliderRow({ label: '球形半径', min: 3, max: 200, value: s.panoRadius, disabled: !pano, format: (v) => Math.round(v), onInput: (v) => app.setPanoramaRadius(v) }).el);
+    sec3.appendChild(sliderRow({ label: '水平旋转', min: 0, max: 360, value: pano.rotation, disabled: !pano.active, format: (v) => Math.round(v) + '°', onInput: (v) => pano.setRotation(v) }).el);
+    sec3.appendChild(sliderRow({ label: '球形半径', min: 3, max: 200, value: pano.radius, disabled: !pano.active, format: (v) => Math.round(v), onInput: (v) => pano.setRadius(v) }).el);
     root.appendChild(sec3);
 
     // ---- 角色标签 ----
@@ -81,7 +80,6 @@ export class ScenePanel {
     }).el);
     root.appendChild(sec6);
 
-    this.container.innerHTML = '';
-    this.container.appendChild(root);
+    this.container.replaceChildren(root);
   }
 }

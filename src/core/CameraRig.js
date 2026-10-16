@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { worldBox } from '../util/measure.js';
 
-// OrbitControls + 聚焦选中 + 取景比例 overlay + 重置视角（§4 / §5.2）
+// OrbitControls + 自动取景 + 取景比例 overlay + 重置视角
 export class CameraRig {
   constructor(camera, domElement, viewportEl, frameEl) {
     this.camera = camera;
@@ -24,10 +24,10 @@ export class CameraRig {
       target: this.controls.target.clone(),
     };
 
-    this.ratio = 16 / 9;          // 当前取景比例（null=自由）
+    this.ratio = null;            // 当前取景比例（null=自由）
     this.frameRect = null;        // 当前取景框 CSS 像素矩形（自由模式为 null=全幅）
-    this._buildFrameExtras();     // 三分构图网格 overlay + 开关（§A）
-    this.setRatio('16:9');
+    this._buildFrameExtras();     // 三分构图网格 overlay + 开关
+    this.setRatio('free');
   }
 
   // 取景框内：三分构图网格（默认关）+ 右上角「⌗」开关
@@ -53,31 +53,9 @@ export class CameraRig {
     this.gridBtn.classList.toggle('on', this.gridOn);
   }
 
+  /** 推进阻尼；返回相机是否仍在移动。 */
   update() {
-    this.controls.update();
-  }
-
-  /** 用实体包围盒设 target 与相机距离（角色用骨骼世界坐标量真实尺寸，§5.2）。 */
-  focus(entity) {
-    if (!entity) return;
-    const root = entity.root;
-
-    const box = worldBox(root, { useBones: entity.type === 'character' });
-    if (box.isEmpty()) return;
-
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const h = Math.max(size.x, size.y, size.z) || 1.7;
-
-    this.controls.target.copy(center);
-    const fitDist = (h * 0.5) / Math.tan(THREE.MathUtils.degToRad(this.camera.fov * 0.5));
-    const dist = fitDist * 1.8;
-
-    // 保持当前观察方向，仅调整距离与朝向中心
-    const dir = new THREE.Vector3().subVectors(this.camera.position, this.controls.target).normalize();
-    if (dir.lengthSq() < 1e-6) dir.set(0.3, 0.2, 1).normalize();
-    this.camera.position.copy(center).addScaledVector(dir, dist);
-    this.controls.update();
+    return this.controls.update();
   }
 
   /**

@@ -121,7 +121,8 @@ main { flex: 1; display: flex; min-height: 0; }
 #viewport canvas { display: block; }
 #labelLayer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .label3d {
-  position: absolute; transform: translate(-50%, -135%);
+  /* 屏幕坐标由 JS 写 translate 属性（不触发布局）；transform 负责锚点偏移 */
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -135%);
   background: #fff; color: #000; font-size: 19px; font-weight: 700;
   padding: 3px 14px; border-radius: 8px; pointer-events: none; white-space: nowrap;
   box-shadow: 0 2px 10px rgba(0,0,0,.5);
@@ -241,20 +242,6 @@ main { flex: 1; display: flex; min-height: 0; }
 /* 机位预设菜单：分组多、可滚动 */
 .dockmenu.cammenu { max-height: 60vh; overflow-y: auto; min-width: 184px; }
 
-/* 全景历史九宫格（宽子菜单） */
-.submenu.submenu-wide { min-width: 0; padding: 8px; }
-.panogrid { display: grid; grid-template-columns: repeat(3, 78px); gap: 7px; }
-.pano-cell {
-  position: relative; height: 56px; border-radius: 8px; cursor: pointer;
-  background-size: cover; background-position: center; border: 1px solid var(--line2); overflow: hidden;
-}
-.pano-cell:hover { border-color: var(--accent); }
-.pano-cell .pano-cap {
-  position: absolute; left: 0; right: 0; bottom: 0; font-size: 10px; color: #fff;
-  padding: 2px 5px; background: linear-gradient(transparent, rgba(0,0,0,.75)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.pano-empty { color: var(--dim2); font-size: 12px; padding: 10px 6px; width: 180px; text-align: center; }
-
 /* 已连接全景图：缩略图 + 移除 */
 .pano-connected { display: flex; gap: 10px; align-items: center; }
 .pano-connected .pano-preview { width: 96px; height: 48px; border-radius: 8px; background-size: cover; background-position: center; border: 1px solid var(--line2); flex: 0 0 auto; }
@@ -335,7 +322,7 @@ select.dropdown:focus { border-color: var(--line2); }
   position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
   background: #000; border: 1px solid var(--line2);
 }
-.cam-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cam-preview canvas { display: block; width: 100%; height: 100%; object-fit: cover; }
 .cam-fov-badge {
   position: absolute; top: 7px; left: 7px; background: rgba(0,0,0,.6); color: #fff;
   font-size: 11px; padding: 3px 8px; border-radius: 6px; font-variant-numeric: tabular-nums;
@@ -490,14 +477,12 @@ select.dropdown:focus { border-color: var(--line2); }
 .sld input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; }
 .sld input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; border: none; }
 
-/* clip buttons + small action buttons */
-.clips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 4px; }
-.clips button, .minibtn {
+/* small action buttons */
+.minibtn {
   background: var(--panel2); border: 1px solid transparent; color: var(--dim);
   border-radius: 8px; padding: 7px 12px; font-size: 12.5px; cursor: pointer;
 }
-.clips button.on { border-color: var(--accent); color: #fff; background: #1f2937; }
-.clips button:hover:not(.on), .minibtn:hover { color: #fff; border-color: var(--line2); }
+.minibtn:hover { color: #fff; border-color: var(--line2); }
 .minibtn { display: block; width: 100%; text-align: center; margin-bottom: 12px; }
 .hint { font-size: 11.5px; color: var(--dim2); line-height: 1.6; margin: 8px 0; }
 

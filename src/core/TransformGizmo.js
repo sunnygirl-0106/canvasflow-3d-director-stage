@@ -1,7 +1,6 @@
-import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
-// TransformControls 封装（§4 / §5.5）：模式切换、与 Orbit 互斥、变更回调。
+// TransformControls 封装：模式切换、与 Orbit 互斥、变更回调。
 export class TransformGizmo {
   /**
    * @param {THREE.Camera} camera
@@ -16,7 +15,7 @@ export class TransformGizmo {
     this.control.setSpace('local');
     this.control.setSize(0.85);
 
-    // §5.5 不同 three 版本加入场景方式不同：新版需 control.getHelper()
+    // 不同 three 版本加入场景方式不同：新版需 control.getHelper()
     const helper = typeof this.control.getHelper === 'function' ? this.control.getHelper() : this.control;
     this._helper = helper;
     scene.add(helper);
@@ -29,9 +28,9 @@ export class TransformGizmo {
     });
 
     this._onObjectChange = null;
-    this.control.addEventListener('objectChange', () => {
-      this._onObjectChange && this._onObjectChange();
-    });
+    this.control.addEventListener('objectChange', () => this._onObjectChange?.());
+    this._onChange = null; // 手柄任何视觉变化（悬停高亮/拖动），用于触发重绘
+    this.control.addEventListener('change', () => this._onChange?.());
 
     this.attached = null;
   }
@@ -40,8 +39,11 @@ export class TransformGizmo {
     if (this._helper) this._helper.visible = v;
   }
 
-  /** 拖动结束/过程中把新 transform 写回（Inspector.syncFromObject）。 */
+  /** 拖动过程中对象变换改变（写回面板数值）。 */
   onObjectChange(fn) { this._onObjectChange = fn; }
+
+  /** 手柄外观变化（需要重绘）。 */
+  onChange(fn) { this._onChange = fn; }
 
   /** gizmo 是否正在被拖动（供 Selection 跳过点选）。 */
   get dragging() { return !!this.control.dragging; }

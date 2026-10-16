@@ -1,18 +1,11 @@
 import { el } from '../util/dom.js';
+import { icon } from './icons.js';
 
 // 全屏「历史记录」弹层（对齐画布历史记录设计稿）：
 // 左侧分类（图片 / 视频 / 音频）+ 右侧按日期分组的资产网格 + 缩放 / 排序 / 分页。
 // 当前仅「图片历史」接入真实数据（预设全景资产）；视频 / 音频为占位空态。
 
-const IC = {
-  image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-5-4 4-2-2-7 7"/>',
-  video: '<rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3"/>',
-  audio: '<path d="M5 10v4M9 6v12M13 8v8M17 5v14M21 10v4"/>',
-  grid: '<rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><rect x="14" y="14" width="7" height="7" rx="1.4"/>',
-  sort: '<path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/>',
-  close: '<path d="M6 6l12 12M18 6L6 18"/>',
-};
-const svg = (name, w = 18) => `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${IC[name]}</svg>`;
+const svg = (name, w = 18) => icon(name, w);
 
 const TABS = [
   ['image', '图片历史'],

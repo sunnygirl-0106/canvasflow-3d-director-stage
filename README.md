@@ -18,7 +18,7 @@
 
 ## ✨ 功能
 
-- **多角色素体** — 一键添加 标准 / 高大 / 矮小 / 宽厚 / 纤细 五种体型，自动归一化身高并落地；支持本地上传 `.glb`。
+- **多角色素体** — 一键添加 标准 / 高大 / 矮小 / 宽厚 / 纤细 五种体型，自动归一化身高并落地；同一模型只下载一次，角色间共享几何体。
 - **全身姿势** — 右侧「姿势」面板按关节分组的 FK 滑条实时驱动骨骼；内置行走、挥手、抱臂等姿势预设一键套用。
 - **群众阵列** — 行×列网格批量生成群众，可整组平移/旋转，也可随时解组为独立角色。
 - **几何道具** — 方块 / 圆柱 / 球体 / 人体素模，颜色与尺寸可调。
@@ -35,6 +35,10 @@ npm run dev          # 打开终端给出的 http://localhost:5173
 
 npm run build        # 生产构建 → dist/
 npm run preview      # 本地预览构建产物
+
+npm run lint         # ESLint
+npm run test:e2e     # 端到端自测（headless Chrome，自动起 dev server）
+                     # 非 macOS 需设 CHROME_PATH 指向 Chrome 可执行文件
 ```
 
 ## ⌨️ 操作
@@ -52,22 +56,26 @@ npm run preview      # 本地预览构建产物
 
 ```
 src/
-├─ main.js              入口：实例化并串联各模块
+├─ main.js              入口：实例化并串联各模块（UI 订阅 app 事件）
+├─ config.js            体型 / 道具 / 取景比例 / 全景规则（单一事实来源）
 ├─ app/
-│  ├─ App.js            应用状态机：实体清单 / 选择 / 场景状态 / 增删选改
-│  └─ ShotManager.js    截图数据与操作
+│  ├─ App.js            应用状态：实体清单 / 选择 / 视角切换 / 场景参数；变化以事件广播
+│  ├─ ShotManager.js    截图（Blob + ObjectURL）与发送
+│  ├─ Panorama.js       全景背景载入 / 校验 / 回收
+│  └─ Labels.js         3D 名牌层
 ├─ core/
-│  ├─ Stage.js          场景 / 渲染器 / 光照 / 地面 / 渲染循环
-│  ├─ CameraRig.js      OrbitControls + 聚焦 + 取景框 + 重置视角
+│  ├─ Stage.js          场景 / 渲染器 / 光照 / 地面 / 按需渲染循环 / 离屏快照
+│  ├─ CameraRig.js      OrbitControls + 自动取景 + 取景框 + 重置视角
 │  ├─ Selection.js      Raycaster 拾取 + 地面选中环
 │  ├─ TransformGizmo.js TransformControls 封装（模式切换 / 与环绕互斥）
 │  ├─ NavGizmo.js       右上角坐标指示器
 │  └─ cameraPresets.js  机位景别预设
-├─ entities/            Character / Prop / Camera / Crowd / 关节表 / 姿势预设
-├─ ui/                  Dock / Outliner / Inspector / ScenePanel / 姿势滑条 / 弹层
-├─ util/                截图 / 度量 / 骨骼 / 素材库 / DOM helper
+├─ entities/            Entity 基类 + Character / Prop / Camera / Crowd / 关节表 / 姿势预设
+├─ ui/                  Dock / Outliner / Inspector / ScenePanel / 姿势滑条 / 弹层 / 图标
+├─ util/                事件总线 / 度量 / 骨骼 / 素材库 / DOM helper
 └─ styles/style.css
-public/assets/          Xbot.glb（中性素体，所有体型由其程序化派生）
+public/assets/          Xbot.glb（中性素体，meshopt 压缩，所有体型由其程序化派生）
+docs/                   技术规划文档
 ```
 
 ## 🛠️ 技术栈

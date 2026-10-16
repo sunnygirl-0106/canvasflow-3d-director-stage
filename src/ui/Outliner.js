@@ -1,19 +1,19 @@
 import { el, clear } from '../util/dom.js';
+import { icon } from './icons.js';
 
 const ICON = {
-  camera: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3"/></svg>',
-  person: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="6" r="2.5"/><path d="M12 8.5c-2.2 0-3.6 1.5-3.6 3.6V15M12 8.5c2.2 0 3.6 1.5 3.6 3.6V15M9.2 21v-5M14.8 21v-5"/></svg>',
-  cube: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12v9M4 7.5l8 4.5 8-4.5"/></svg>',
-  group: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="2.1"/><circle cx="17" cy="7" r="2.1"/><circle cx="7" cy="17" r="2.1"/><circle cx="17" cy="17" r="2.1"/></svg>',
-  caret: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
-  eye: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
-  eyeOff: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 5.2A9.6 9.6 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.8M6.1 6.1C3.5 7.7 2 12 2 12s3.5 7 10 7a9.5 9.5 0 0 0 4-0.9M3 3l18 18"/></svg>',
-  trash: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg>',
-  // 右键菜单图标（描边风格，对齐参考组件）
-  ctxGroup: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="9" y="9" width="6" height="6" rx="1.2"/></svg>',
-  ctxEye: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
-  ctxCopy: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="8.5" width="11" height="12" rx="2"/><path d="M8.5 8.5V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2.5"/><path d="M19.2 13.6l.55 1.45 1.45.55-1.45.55-.55 1.45-.55-1.45-1.45-.55 1.45-.55z"/></svg>',
-  ctxTrash: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg>',
+  camera: icon('video', 16, 1.8),
+  person: icon('person', 16, 1.8),
+  cube: icon('cube', 16, 1.8),
+  group: icon('group', 16, 1.8),
+  caret: icon('chevron', 12, 2.2),
+  eye: icon('eye', 15, 1.8),
+  eyeOff: icon('eyeOff', 15, 1.8),
+  trash: icon('trash', 15, 1.8),
+  ctxGroup: icon('groupFrame', 16, 1.6),
+  ctxEye: icon('eye', 16, 1.6),
+  ctxCopy: icon('copy', 16, 1.6),
+  ctxTrash: icon('trash', 16, 1.6),
 };
 
 // 左侧场景清单：机位 + 角色/道具 + 群众组（可折叠）。选择 / 改名 / 显隐 / 删除。
@@ -26,7 +26,16 @@ export class Outliner {
     if (searchInput) {
       searchInput.addEventListener('input', (e) => { this.query = (e.target.value || '').trim(); this.refresh(); });
     }
+    app.on('entities', () => this.scheduleRefresh());
+    app.on('selection', () => this.scheduleRefresh());
     this.refresh();
+  }
+
+  /** 同一轮同步操作里的多次变化合并为一次重建。 */
+  scheduleRefresh() {
+    if (this._pending) return;
+    this._pending = true;
+    queueMicrotask(() => { this._pending = false; this.refresh(); });
   }
 
   _matches(name) { return !this.query || name.includes(this.query); }
@@ -95,11 +104,11 @@ export class Outliner {
     const charCount = ids.map((id) => app.entities.find((e) => e.id === id)).filter((e) => e && e.type === 'character').length;
     const canGroup = charCount >= 2;
 
-    const mk = (icon, label, onClick, disabled = false) => el('div', {
+    const mk = (iconKey, label, onClick, disabled = false) => el('div', {
       class: 'ctx-item' + (disabled ? ' disabled' : ''),
       onclick: (e) => { e.stopPropagation(); if (disabled) return; this._closeContextMenu(); onClick(); },
     }, [
-      el('span', { class: 'ctx-ic', html: ICON[icon] }),
+      el('span', { class: 'ctx-ic', html: ICON[iconKey] }),
       el('span', { class: 'ctx-label', text: label }),
     ]);
     const menu = el('div', { class: 'ctxmenu' }, [

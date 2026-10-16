@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 
-// 场景 / 渲染器 / 光照 / 地面 / 网格 / 渲染循环 / resize
+// 用户交互事件：任何一次都可能改变画面，标记需要重绘。
+const INVALIDATING_EVENTS = ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'input', 'change'];
+
+// 场景 / 渲染器 / 光照 / 地面 / 网格 / 按需渲染循环 / resize
 export class Stage {
   constructor(viewportEl) {
     this.viewport = viewportEl;
@@ -9,7 +12,7 @@ export class Stage {
     this.scene.background = new THREE.Color(0x060608);
     this.scene.fog = new THREE.Fog(0x060608, 18, 46);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }) // 截图在渲染后同步读取，无需 preserveDrawingBuffer;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = true;
@@ -21,7 +24,7 @@ export class Stage {
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.05, 1000);
     this.camera.position.set(0, 1.6, 6.2);
 
-    // 机位视角 POV：非 null 时主视口透过该相机出画面（§B.1）
+    // 机位视角 POV：非 null 时主视口透过该相机出画面
     this.activeCamera = null;
 
     // world：承载所有实体，供「场景缩放/平移/旋转」整体控制
@@ -32,12 +35,21 @@ export class Stage {
     this._buildGround();
 
     this.clock = new THREE.Clock();
-    this._tick = null;
+    this._dirty = true;
+    const invalidate = () => this.invalidate();
+    for (const t of INVALIDATING_EVENTS) window.addEventListener(t, invalidate, { passive: true, capture: true });
 
-    this.onResize = this.onResize.bind(this);
-    window.addEventListener('resize', this.onResize);
+    // 视口尺寸变化（窗口缩放、全屏、侧栏变化）统一由 ResizeObserver 感知
+    this._resizeHandlers = [];
+    new ResizeObserver(() => this.onResize()).observe(viewportEl);
     this.onResize();
   }
+
+  /** 标记下一帧需要重绘。 */
+  invalidate() { this._dirty = true; }
+
+  /** 视口尺寸变化时的额外回调（取景框重排等）。 */
+  onViewportResize(fn) { this._resizeHandlers.push(fn); }
 
   _buildLights() {
     const s = this.scene;
@@ -88,7 +100,7 @@ export class Stage {
     this.groundGroup.add(new THREE.Line(zg, axisMat(0x3a4a8a)));
   }
 
-  // ---- 全景背景（§3.c）：BackSide 大球承载等距柱状贴图，支持旋转/半径 ----
+  // ---- 全景背景：BackSide 大球承载等距柱状贴图，支持旋转/半径 ----
   setPanorama(texture) {
     texture.mapping = THREE.EquirectangularReflectionMapping;
     if (this._panoTex && this._panoTex !== texture) this._panoTex.dispose();
@@ -105,6 +117,7 @@ export class Stage {
     this.panoSphere.material.map = texture;
     this.panoSphere.material.needsUpdate = true;
     this.panoSphere.visible = true;
+    this.invalidate();
     // 弱化雾，避免全景被雾染色（记录原值，clearPanorama 时恢复）
     if (this.scene.fog && this._fogSaved === undefined) {
       this._fogSaved = { near: this.scene.fog.near, far: this.scene.fog.far };
@@ -118,23 +131,23 @@ export class Stage {
       this.scene.fog.near = this._fogSaved.near; this.scene.fog.far = this._fogSaved.far; this._fogSaved = undefined;
     }
     if (skyHex != null) this.setSkyColor(skyHex);
+    this.invalidate();
   }
-  hasPanorama() { return !!(this.panoSphere && this.panoSphere.visible); }
-  setPanoramaRotation(deg) { this._panoRotDeg = deg; if (this.panoSphere) this.panoSphere.rotation.y = THREE.MathUtils.degToRad(deg); }
-  setPanoramaRadius(r) { this._panoRadius = r; if (this.panoSphere) this.panoSphere.scale.setScalar(r); }
+  setPanoramaRotation(deg) { this._panoRotDeg = deg; if (this.panoSphere) this.panoSphere.rotation.y = THREE.MathUtils.degToRad(deg); this.invalidate(); }
+  setPanoramaRadius(r) { this._panoRadius = r; if (this.panoSphere) this.panoSphere.scale.setScalar(r); this.invalidate(); }
 
   // ---- scene-level controls ----
-  setSkyColor(hex) { this.scene.background = new THREE.Color(hex); if (this.scene.fog) this.scene.fog.color = new THREE.Color(hex); }
-  setGroundVisible(v) { this.groundGroup.visible = v; }
-  setGroundOpacity(v) { this.ground.material.opacity = v; }
-  setGroundHeight(y) { this.groundGroup.position.y = y; }
+  setSkyColor(hex) { this.scene.background = new THREE.Color(hex); if (this.scene.fog) this.scene.fog.color = new THREE.Color(hex); this.invalidate(); }
+  setGroundVisible(v) { this.groundGroup.visible = v; this.invalidate(); }
+  setGroundOpacity(v) { this.ground.material.opacity = v; this.invalidate(); }
+  setGroundHeight(y) { this.groundGroup.position.y = y; this.invalidate(); }
 
-  setWorldScale(s) { this.world.scale.setScalar(s); }
-  setWorldPos(x, y, z) { this.world.position.set(x, y, z); }
-  setWorldRot(x, y, z) { this.world.rotation.set(x, y, z); }
+  setWorldScale(s) { this.world.scale.setScalar(s); this.invalidate(); }
+  setWorldPos(x, y, z) { this.world.position.set(x, y, z); this.invalidate(); }
+  setWorldRot(x, y, z) { this.world.rotation.set(x, y, z); this.invalidate(); }
 
-  add(obj) { this.world.add(obj); }
-  remove(obj) { this.world.remove(obj); }
+  add(obj) { this.world.add(obj); this.invalidate(); }
+  remove(obj) { this.world.remove(obj); this.invalidate(); }
 
   onResize() {
     const W = this.viewport.clientWidth;
@@ -144,18 +157,77 @@ export class Stage {
     this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
     if (this.activeCamera) { this.activeCamera.aspect = aspect; this.activeCamera.updateProjectionMatrix(); }
+    this._resizeHandlers.forEach((fn) => fn());
+    this.invalidate();
+    this.render(); // 立即重绘，避免缩放时闪出空白画布
   }
 
   render() { this.renderer.render(this.scene, this.activeCamera || this.camera); }
 
-  startLoop(tick) {
-    this._tick = tick;
+  /**
+   * 按需渲染循环：每帧推进 tick（返回 true 表示画面在动，如环绕阻尼），
+   * 只有被标记脏或 tick 报告变化时才真正渲染；渲染前调用 beforeRender 同步名牌等覆盖层。
+   */
+  startLoop({ tick, beforeRender } = {}) {
     const loop = () => {
       requestAnimationFrame(loop);
       const dt = this.clock.getDelta();
-      try { this._tick && this._tick(dt); } catch (e) { console.error(e); }
+      let moving = false;
+      try { moving = !!tick?.(dt); } catch (e) { console.error(e); }
+      if (!this._dirty && !moving) return;
+      this._dirty = false;
+      try { beforeRender?.(); } catch (e) { console.error(e); }
       this.render();
     };
     loop();
+  }
+
+  /**
+   * 用主渲染器离屏出一帧，返回 2D canvas（不新建 WebGL 上下文，避免资源重复上传）。
+   * - 传 width/height：缩略图，在主画布左下角用 viewport+scissor 渲一块（超出画布则等比缩小）；
+   * - 否则按当前视口全幅渲染，可用 crop（CSS 像素矩形）裁剪。
+   * 调用后主画布内容是这一帧，调用方须随即 render() 恢复（见 App.withCleanRender）。
+   */
+  snapshot(camera, { width, height, crop } = {}) {
+    const r = this.renderer;
+    const cv = r.domElement;
+    const out = document.createElement('canvas');
+
+    if (width && height) {
+      const pr = r.getPixelRatio();
+      const s = Math.min(1, cv.width / width, cv.height / height);
+      const w = Math.max(1, Math.floor(width * s));
+      const h = Math.max(1, Math.floor(height * s));
+      const prevAspect = camera.aspect;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      const size = r.getSize(new THREE.Vector2());
+      r.setViewport(0, 0, w / pr, h / pr);
+      r.setScissor(0, 0, w / pr, h / pr);
+      r.setScissorTest(true);
+      try {
+        r.render(this.scene, camera);
+      } finally {
+        r.setScissorTest(false);
+        r.setViewport(0, 0, size.x, size.y);
+        camera.aspect = prevAspect;
+        camera.updateProjectionMatrix();
+      }
+      out.width = w; out.height = h;
+      out.getContext('2d').drawImage(cv, 0, cv.height - h, w, h, 0, 0, w, h);
+      return out;
+    }
+
+    r.render(this.scene, camera);
+    let sx = 0, sy = 0, sw = cv.width, sh = cv.height;
+    if (crop && crop.w > 0 && crop.h > 0) {
+      const px = cv.width / this.viewport.clientWidth;
+      const py = cv.height / this.viewport.clientHeight;
+      sx = Math.round(crop.x * px); sy = Math.round(crop.y * py);
+      sw = Math.max(1, Math.round(crop.w * px)); sh = Math.max(1, Math.round(crop.h * py));
+    }
+    out.width = sw; out.height = sh;
+    out.getContext('2d').drawImage(cv, sx, sy, sw, sh, 0, 0, sw, sh);
+    return out;
   }
 }

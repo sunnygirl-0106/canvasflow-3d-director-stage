@@ -1,4 +1,4 @@
-// 骨名归一化与骨骼表构建（§5.1）
+// 骨名归一化与骨骼表构建
 // 新版 GLTFLoader 对 `mixamorig:Head` 的处理不确定：可能保留冒号，也可能被清洗成
 // `mixamorigHead`。不要硬匹配字符串——统一用 norm() 归一化后再查表，jointConfig 里
 // 写带冒号的 `mixamorig:LeftArm`，无论被怎么清洗都能命中。
