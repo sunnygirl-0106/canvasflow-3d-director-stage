@@ -6,6 +6,7 @@ import { Crowd } from '../entities/Crowd.js';
 import { CAMERA_PRESETS } from '../core/cameraPresets.js';
 import { TransformGizmo } from '../core/TransformGizmo.js';
 import { Selection } from '../core/Selection.js';
+import { PathOverlay } from '../core/PathOverlay.js';
 import { BODY_TYPES, bodySpec, PROP_LABEL, CROWD_PALETTE, RATIO_OPTIONS } from '../config.js';
 import { Emitter } from '../util/Emitter.js';
 import { toast } from '../util/dom.js';
@@ -86,6 +87,7 @@ export class App extends Emitter {
     this.selection = new Selection(stage.renderer, stage.camera, stage.scene, () => this.entities, (id) => this.select(id));
     this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis);
     rig.controls.addEventListener('change', () => stage.invalidate());
+    this.pathOverlay = new PathOverlay(this); // 视口路径可视化（阶段 E）
 
     this.labels = new Labels(labelLayer);
     this.shots = new ShotManager(this);
@@ -641,19 +643,21 @@ export class App extends Emitter {
 
   // ---- 洁净渲染（截图 / 机位预览）----
   /**
-   * 在隐藏 gizmo / 选中环 / 相机可视化的状态下执行 fn（通常是 stage.snapshot），
+   * 在隐藏 gizmo / 选中环 / 相机可视化 / 路径 overlay 的状态下执行 fn（通常是 stage.snapshot），
    * 结束后恢复并立即重绘主视图，屏幕上不会闪出离屏帧。
    */
   withCleanRender(fn) {
     this.gizmo.setVisible(false);
     this.selection.setRingVisible(false);
     this.setCameraHelpersVisible(false);
+    this.pathOverlay.setHidden(true);
     try {
       return fn();
     } finally {
       this.gizmo.setVisible(this._gizmoShouldShow());
       this.selection.setRingVisible(true);
       this.setCameraHelpersVisible(!this.cameraView);
+      this.pathOverlay.setHidden(false);
       this.stage.render();
     }
   }
