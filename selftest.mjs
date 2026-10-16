@@ -16,6 +16,9 @@
 //   node selftest.mjs doc
 //     场景文档验收：搭场景 → 截图 A → toDocument → 清空 → loadDocument → 截图 B → toDocument，
 //     断言两份文档深度相等、两图像素差 < 0.5%；5 种坏文档被定位并拒绝；撤销/重做画面一致。产物在 test-output/doc/。
+//   node selftest.mjs anim
+//     动画内核验收（阶段 C）：纯函数 / 跳转一致 / 手动值保持 / 导出不污染 / 往返 / 撤销 / 步态 / 约束 / 坏文档。
+//     产物在 test-output/anim/。
 import fs from 'node:fs';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
@@ -126,6 +129,16 @@ if (CMD === 'poses') {
   await browser.close();
   await server?.close();
   process.exit(errs.length ? 1 : 0);
+}
+
+if (CMD === 'anim') {
+  await animTest();
+  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
+  await browser.close();
+  await server?.close();
+  const failed = results.filter((r) => !r.pass).length;
+  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
+  process.exit(failed ? 1 : 0);
 }
 
 if (CMD === 'doc') {
@@ -289,6 +302,83 @@ async function docTest() {
     seq.push([`重做→状态${i}`, pixelDiff(states[i], f, `${OUT}/_diff_redo${i}.png`)]);
   }
   for (const [name, r] of seq) ok(`撤销重做：${name} 画面一致`, r < MAX, pct(r));
+  console.log(`📁 产物：${OUT}/`);
+}
+
+/** 动画验收场景：2 角色、1 道具、2 机位（从空场景搭起）。返回各实体 id。 */
+async function buildAnimScene() {
+  return page.evaluate(async () => {
+    const { createEmptyDocument } = await import('/src/doc/schema.js');
+    const a = window.__app;
+    a.playback?.stop();
+    await a.loadDocument(createEmptyDocument());
+    const m = await a.addCharacter('male');
+    m.root.position.x = -1.2; m.root.rotation.y = 0.4;
+    const f = await a.addCharacter('female');
+    f.root.position.set(1.0, f.root.position.y, 0.6);
+    f.applyPosePreset('think');
+    const p = a.addProp('box'); p.root.position.set(0.2, 0, -1.4);
+    a.select(m.id);
+    const c1 = a.addCamera('front_mid');
+    a.select(f.id);
+    const c2 = a.addCamera('front_closeup');
+    a.select(null);
+    a.rig.controls.target.set(0, 0.9, -0.5); a.stage.camera.position.set(3.5, 3.2, 8.5); a.rig.controls.update();
+    a.history.reset();
+    return { m: m.id, f: f.id, p: p.id, c1: c1.id, c2: c2.id };
+  });
+}
+
+async function animTest() {
+  const OUT = 'test-output/anim';
+  fs.rmSync(OUT, { recursive: true, force: true });
+  fs.mkdirSync(OUT, { recursive: true });
+  await page.waitForFunction(() => window.__app.history.enabled, { timeout: 30000 });
+  await page.addStyleTag({ content: '#toast{visibility:hidden!important}' });
+  const ids = await buildAnimScene();
+
+  // ---- 坏文档：5 种被定位拒绝，场景不变 ----
+  const bad = await page.evaluate(async (ids) => {
+    const { validate } = await import('/src/doc/schema.js');
+    const a = window.__app;
+    const good = a.toDocument();
+    good.timeline.tracks = [
+      { id: 'trk00001', target: ids.m, property: 'rot', keys: [{ t: 0, value: [0, 0, 0], ease: 'linear' }, { t: 2.5, value: [0, 90, 0], ease: 'smooth' }, { t: 4, value: [0, 180, 0], ease: 'linear' }] },
+      { id: 'trk00002', target: ids.c1, property: 'fov', keys: [{ t: 0, value: 40, ease: 'linear' }, { t: 3, value: 25, ease: 'linear' }] },
+    ];
+    good.paths = [{ id: 'pth00001', target: ids.f, points: [[1, 0, 0.6], [2, 0, -1], [0, 0, -2]], closed: false, start: 0, duration: 4, speed: 'smooth', orient: 'tangent' }];
+    good.constraints = [{ id: 'cns00001', type: 'lookAt', target: ids.c2, subject: ids.f, offset: [0, 0, 0], start: null, end: null }];
+    const v0 = validate(good);
+    const cases = [
+      ['未知 target', (d) => { d.timeline.tracks[0].target = 'ghost000'; }, 'timeline.tracks[0].target 引用的实体不存在'],
+      ['keys 乱序', (d) => { d.timeline.tracks[0].keys[2].t = 2.5; }, 'timeline.tracks[0].keys[2].t 应大于前一键 2.5，实际为 2.5'],
+      ['character 打 fov', (d) => { d.timeline.tracks[1].target = ids.m; }, 'timeline.tracks[1].target 应引用 camera'],
+      ['id 重复', (d) => { d.paths[0].id = ids.p; }, 'paths[0].id 重复'],
+      ['points 只有 1 个', (d) => { d.paths[0].points = [[0, 0, 0]]; }, 'paths[0].points 应为至少 2 个点'],
+    ];
+    const before = JSON.stringify({ ...a.toDocument(), meta: null });
+    const out = [];
+    for (const [name, mut, expect] of cases) {
+      const d = structuredClone(good);
+      mut(d);
+      const v = validate(d);
+      let rejected = false;
+      try { await a.loadDocument(d); } catch (e) { rejected = e.name === 'DocumentError'; }
+      const unchanged = JSON.stringify({ ...a.toDocument(), meta: null }) === before;
+      out.push({ name, ok: !v.ok, located: v.errors.some((e) => e.startsWith(expect)), rejected, unchanged, first: v.errors[0] });
+    }
+    // 合法文档能加载；删除被引用的实体后，引用它的路径 / 约束一并删除，导出仍合法
+    await a.loadDocument(good);
+    const loaded = JSON.stringify(a.timeline.toJSON()) === JSON.stringify({ timeline: good.timeline, paths: good.paths, constraints: good.constraints });
+    a.remove(ids.f);
+    const after = a.toDocument();
+    const pruned = { paths: after.paths.length, constraints: after.constraints.length, tracks: after.timeline.tracks.length, valid: validate(after).ok };
+    return { good: v0, out, loaded, pruned };
+  }, ids);
+  ok('文档：含动画的文档可加载，timeline.toJSON 与文档一致', bad.loaded);
+  ok('文档：删除实体连带删除引用它的路径 / 约束', bad.pruned.paths === 0 && bad.pruned.constraints === 0 && bad.pruned.tracks === 2 && bad.pruned.valid, JSON.stringify(bad.pruned));
+  ok('坏文档：基准文档（含 timeline / paths / constraints）合法', bad.good.ok, bad.good.errors.slice(0, 3).join(' | '));
+  for (const b of bad.out) ok(`坏文档：${b.name}`, b.ok && b.located && b.rejected && b.unchanged, b.first);
   console.log(`📁 产物：${OUT}/`);
 }
 

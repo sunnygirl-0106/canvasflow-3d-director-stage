@@ -13,8 +13,9 @@ import { worldBox } from '../util/measure.js';
 import { ShotManager } from './ShotManager.js';
 import { Panorama } from './Panorama.js';
 import { Labels } from './Labels.js';
-import { toDocument, loadDocument, emptyReserved } from '../doc/serialize.js';
+import { toDocument, loadDocument } from '../doc/serialize.js';
 import { History } from './History.js';
+import { Timeline } from '../anim/Timeline.js';
 
 /**
  * 应用状态：实体清单 / 选择 / 视角（导演 ↔ 机位 POV）/ 场景参数，统筹增删选改。
@@ -55,9 +56,9 @@ export class App extends Emitter {
       ground: { visible: true, opacity: 0.4, height: 0 },
     };
 
-    // 场景文档：元信息与后续阶段的预留字段（paths / constraints / timeline）——导入时替换，导出时原样带出
+    // 场景文档：元信息；动画三字段（timeline / paths / constraints）由 Timeline 持有
     this.docMeta = { name: '未命名场景', createdAt: new Date().toISOString() };
-    this.docReserved = emptyReserved();
+    this.timeline = new Timeline(this);
     this._docChain = Promise.resolve(); // 文档加载串行化（连续撤销不会交错重建）
     this.loadingDocument = false;       // 加载期间为 true：history / 自动保存据此屏蔽
     this.history = new History(this);
@@ -215,6 +216,7 @@ export class App extends Emitter {
     for (const m of members) group.attach(m.root);
 
     const crowd = new Crowd('组' + (++this._groupCount), group, members);
+    this.timeline.dropTransformAnimation(members.map((m) => m.id)); // 成员改为相对组轴心的坐标系
     this.entities = this.entities.filter((e) => !members.includes(e));
     this._registerEntity(crowd, { place: false });
     toast(`已打组：${members.length} 个角色 → ${crowd.name}`);
@@ -231,6 +233,8 @@ export class App extends Emitter {
     }
     this.stage.remove(crowd.root);
     this.entities.splice(this.entities.indexOf(crowd), 1);
+    this.timeline.pruneEntities([crowd.id]);
+    this.timeline.dropTransformAnimation(crowd.members.map((m) => m.id)); // 成员改回场景坐标系
     this.emit('entities');
     this.select(null);
     toast(`已解组：${crowd.members.length} 个角色已独立`);
@@ -409,6 +413,7 @@ export class App extends Emitter {
     }
     this.labels.detach(ent);
     ent.dispose();
+    this.timeline.pruneEntities([ent.id, ...ent.children.map((c) => c.id)]); // 引用它的轨道 / 路径 / 约束一并删除
 
     if (ent.type === 'camera') {
       this.shots.removeForCamera(ent.id);
@@ -577,7 +582,7 @@ export class App extends Emitter {
     if (applyView) this._applyEditorView(doc.meta.editorView);
 
     this.docMeta = { name: doc.meta.name, createdAt: doc.meta.createdAt };
-    this.docReserved = JSON.parse(JSON.stringify({ paths: doc.paths, constraints: doc.constraints, timeline: doc.timeline }));
+    this.timeline.fromJSON(doc);
     if (pruneShots) this.shots.pruneOrphans();
     this._bumpNameCounters();
 

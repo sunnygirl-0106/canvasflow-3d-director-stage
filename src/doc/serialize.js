@@ -1,6 +1,6 @@
 // 场景 ↔ 文档。toDocument 读当前场景出一份文档；loadDocument 按文档重建场景。
 // 实体各自实现 toJSON / static fromJSON(json, ctx)；这里只编排场景级字段与实体顺序。
-import { SCHEMA_VERSION, APP_ID, DEFAULT_TIMELINE, validate, DocumentError } from './schema.js';
+import { SCHEMA_VERSION, APP_ID, validate, DocumentError } from './schema.js';
 import { migrate } from './migrate.js';
 import { Character } from '../entities/Character.js';
 import { Prop } from '../entities/Prop.js';
@@ -13,13 +13,6 @@ export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSIO
 
 /** 文档 type → 实体类（文档词汇 group ↔ 代码类 Crowd）。 */
 const ENTITY_CLASSES = { character: Character, prop: Prop, camera: CameraEntity, group: Crowd };
-
-const clone = (v) => JSON.parse(JSON.stringify(v));
-
-/** 预留字段（paths / constraints / timeline）的初始值；导入时整体替换为文档里的值并原样带出。 */
-export function emptyReserved() {
-  return { paths: [], constraints: [], timeline: clone(DEFAULT_TIMELINE) };
-}
 
 /** 导演相机视角（仅导入 / 恢复存档时应用，撤销忽略）。 */
 function editorView(app) {
@@ -47,9 +40,7 @@ export function toDocument(app, { view = true } = {}) {
   }
 
   const s = app.sceneState;
-  const reserved = clone(app.docReserved);
-  // 预留字段里的机位引用可能随机位删除而悬空：置 null 保证导出的文档始终合法
-  if (reserved.timeline.mainCameraId && !app.findCamera(reserved.timeline.mainCameraId)) reserved.timeline.mainCameraId = null;
+  const anim = app.timeline.toJSON(); // 删除实体时 Timeline 已同步清掉对它的引用，导出的文档始终合法
 
   return {
     schema: SCHEMA_VERSION,
@@ -73,9 +64,9 @@ export function toDocument(app, { view = true } = {}) {
     },
     assets,
     entities,
-    paths: reserved.paths,
-    constraints: reserved.constraints,
-    timeline: reserved.timeline,
+    paths: anim.paths,
+    constraints: anim.constraints,
+    timeline: anim.timeline,
   };
 }
 

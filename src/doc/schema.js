@@ -15,7 +15,7 @@
 //     { type:'camera',    id, name, visible, transform, fov, roll(度), lookAt:[3] },
 //     { type:'group',     id, name, visible, transform, members:[ids] },
 //   ],
-//   paths: [], constraints: [], timeline: { duration, fps, mainCameraId, tracks: [] },   // 后续阶段预留
+//   paths: [ Path ], constraints: [ Constraint ], timeline: { duration, fps, mainCameraId, tracks: [ Track ] },
 // }
 // transform = { pos:[3], rot:[3](度, XYZ 欧拉), scale:[3] }。
 //   - character 的 scale 是"相对素体自然尺寸的倍数"（站立素体 = [1,1,1]），与模型文件单位无关；
@@ -23,6 +23,37 @@
 //   - camera 的 rot 已包含荷兰角；roll 单独存一份，供"改注视坐标后重新瞄准"时叠加。
 // camera.lookAt 与 transform 同时存在时以 transform + roll 为准，lookAt 只回写面板显示（不触发瞄准），
 // 校验器不检查二者一致（阶段 F 升级为注视约束时再统一）。
+//
+// 动画（阶段 C）—— 时间单位一律为秒；坐标与 entities[].transform 同一口径（场景根节点下的局部坐标）：
+// timeline: {
+//   duration: 10,            // 秒，> 0
+//   fps: 30,                 // 只影响吸附与导出
+//   mainCameraId: null,      // 阶段 F 使用，本阶段只存
+//   tracks: [ Track ],
+// }
+// Track = {
+//   id,                      // 8 位 base36，与实体 / 路径 / 约束同一命名空间内唯一
+//   target: entityId,        // character / prop / group / camera
+//   property: 'pos' | 'rot' | 'scale' | 'fov',   // fov 只允许 camera；camera 不允许 scale
+//   keys: [ { t, value, ease } ],                // t 秒，严格递增；value: vec3（口径同 transform，rot 为欧拉角度数 XYZ）或 number（fov）
+// }                                              // ease ∈ 'linear' | 'smooth' | 'step'，作用于"从该键出发"的那一段；最后一键的 ease 忽略
+// Path = {
+//   id, target: entityId,    // character / prop / camera / group（群众成员不能单独有路径）；每个实体最多一条
+//   points: [[x,y,z], ...],  // ≥ 2 个；角色 / 组的路径 y 即地面高度（= transform.pos.y）
+//   closed: false,
+//   start: 0, duration: 4,   // 秒；start ≥ 0，duration > 0
+//   speed: 'linear' | 'smooth',      // 弧长随时间的曲线：匀速 / 缓入缓出
+//   orient: 'tangent' | 'keep',      // 朝向跟随切线（只改 yaw）/ 保持手动朝向
+// }
+// Constraint = {
+//   id, type: 'lookAt' | 'follow',
+//   target: cameraId,                 // 被约束的机位（本阶段只约束机位）
+//   subject: entityId | [x,y,z],      // 看向 / 跟随谁（不能是 target 自己）
+//   offset: [x,y,z],                  // follow 用：在 subject 的 yaw 坐标系下的偏移；lookAt 忽略
+//   start: null, end: null,           // 生效区间（秒），null = 全程
+// }
+// 规则：同一实体同一 property 最多一条轨道；有路径的实体不允许再有 pos 轨道（路径优先，直接拒绝）。
+// 机位同时有 follow 与 pos 轨道 / 路径时仍合法，follow 覆盖之（evaluate 顺序：关键帧 → 路径 → 约束）。
 import { BODY_TYPES, PROP_KINDS, RATIO_OPTIONS } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
 import { JOINT_SCHEMA } from '../rig/jointSchema.js';
@@ -32,6 +63,21 @@ export const APP_ID = 'director-stage-demo';
 
 export const ENTITY_TYPES = ['character', 'prop', 'camera', 'group'];
 export const FOV_RANGE = [10, 120];
+
+// 动画词汇表（面向 AI，定了就不改）
+export const TRACK_PROPERTIES = ['pos', 'rot', 'scale', 'fov'];
+export const EASES = ['linear', 'smooth', 'step'];
+export const PATH_SPEEDS = ['linear', 'smooth'];
+export const PATH_ORIENTS = ['tangent', 'keep'];
+export const CONSTRAINT_TYPES = ['lookAt', 'follow'];
+/** 各 property 允许的目标实体类型。 */
+export const TRACK_TARGETS = {
+  pos: ['character', 'prop', 'group', 'camera'],
+  rot: ['character', 'prop', 'group', 'camera'],
+  scale: ['character', 'prop', 'group'],
+  fov: ['camera'],
+};
+export const PATH_TARGETS = ['character', 'prop', 'camera', 'group'];
 
 const JOINT_MAP = Object.fromEntries(JOINT_SCHEMA.map((j) => [j.key, j]));
 const PROP_KIND_SET = new Set(PROP_KINDS.map(([k]) => k));
@@ -75,6 +121,10 @@ const ENTITY_KEYS = {
   group: ['type', 'id', 'name', 'visible', 'transform', 'members'],
 };
 const TIMELINE_KEYS = ['duration', 'fps', 'mainCameraId', 'tracks'];
+const TRACK_KEYS = ['id', 'target', 'property', 'keys'];
+const KEY_KEYS = ['t', 'value', 'ease'];
+const PATH_KEYS = ['id', 'target', 'points', 'closed', 'start', 'duration', 'speed', 'orient'];
+const CONSTRAINT_KEYS = ['id', 'type', 'target', 'subject', 'offset', 'start', 'end'];
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -264,16 +314,113 @@ export function validate(doc) {
     }
   }
 
-  // ---- 预留字段：只校验形状 ----
-  arr(doc.paths, 'paths');
-  arr(doc.constraints, 'constraints');
+  // ---- 动画：timeline / paths / constraints ----
+  // id 与实体同一命名空间：先登记实体 id，再依次登记轨道 / 路径 / 约束
+  const idOwner = new Map([...byId].map(([id, { i }]) => [id, `entities[${i}]`]));
+  const claimId = (id, path) => {
+    nonEmpty(id, `${path}.id`);
+    if (!isStr(id) || !id) return;
+    if (idOwner.has(id)) err(`${path}.id`, `重复：${fmt(id)} 已被 ${idOwner.get(id)} 使用`);
+    else idOwner.set(id, path);
+  };
+  /** 动画目标：必须存在且类型在 types 内。返回命中项或 null。 */
+  const animRef = (id, path, types) => {
+    if (id === undefined) return null;
+    if (!isStr(id) || !id) { err(path, `应为实体 id，实际为 ${fmt(id)}`); return null; }
+    const hit = byId.get(id);
+    if (!hit) { err(path, `引用的实体不存在：${fmt(id)}`); return null; }
+    if (!types.includes(hit.type)) { err(path, `应引用 ${types.join(' / ')}，实际 ${fmt(id)} 是 ${hit.type}`); return null; }
+    return hit;
+  };
+  const oneOf = (v, path, list, what) => {
+    if (v !== undefined && !list.includes(v)) err(path, `未知${what} ${fmt(v)}（可选 ${list.join(' / ')}）`);
+  };
+  const time = (v, path) => num(v, path, { min: 0 });
+  const nullableTime = (v, path) => { if (v !== null) time(v, path); };
+
+  const posTracks = new Map(); // targetId → 轨道路径（pos 轨道，与路径互斥）
   if (checkKeys(doc.timeline, 'timeline', TIMELINE_KEYS)) {
     const t = doc.timeline;
     num(t.duration, 'timeline.duration', { gt: 0 });
     if (t.fps !== undefined && !(Number.isInteger(t.fps) && t.fps > 0)) err('timeline.fps', `应为正整数，实际为 ${fmt(t.fps)}`);
     if (t.mainCameraId != null) ref(t.mainCameraId, 'timeline.mainCameraId', 'camera');
     arr(t.tracks, 'timeline.tracks');
+    const seen = new Map(); // `${target}|${property}` → 轨道路径
+    (Array.isArray(t.tracks) ? t.tracks : []).forEach((tr, i) => {
+      const p = `timeline.tracks[${i}]`;
+      if (!checkKeys(tr, p, TRACK_KEYS)) return;
+      claimId(tr.id, p);
+      oneOf(tr.property, `${p}.property`, TRACK_PROPERTIES, '轨道属性');
+      const okProp = TRACK_PROPERTIES.includes(tr.property);
+      const hit = okProp ? animRef(tr.target, `${p}.target`, TRACK_TARGETS[tr.property]) : null;
+      if (hit) {
+        const k = `${tr.target}|${tr.property}`;
+        if (seen.has(k)) err(p, `与 ${seen.get(k)} 重复：同一实体 ${fmt(tr.target)} 的 ${tr.property} 只能有一条轨道`);
+        else seen.set(k, p);
+        if (tr.property === 'pos') posTracks.set(tr.target, p);
+      }
+      if (tr.keys === undefined) return;
+      if (!Array.isArray(tr.keys) || !tr.keys.length) { err(`${p}.keys`, `应为非空数组，实际为 ${fmt(tr.keys)}`); return; }
+      let prevT = null;
+      tr.keys.forEach((key, j) => {
+        const kp = `${p}.keys[${j}]`;
+        if (!checkKeys(key, kp, KEY_KEYS)) { prevT = null; return; }
+        time(key.t, `${kp}.t`);
+        if (isNum(key.t) && prevT !== null && !(key.t > prevT)) err(`${kp}.t`, `应大于前一键 ${prevT}，实际为 ${key.t}`);
+        prevT = isNum(key.t) ? key.t : null;
+        oneOf(key.ease, `${kp}.ease`, EASES, '缓动');
+        if (!okProp || key.value === undefined) return;
+        if (tr.property === 'fov') num(key.value, `${kp}.value`, { min: FOV_RANGE[0], max: FOV_RANGE[1] });
+        else {
+          vec3(key.value, `${kp}.value`);
+          if (tr.property === 'scale' && Array.isArray(key.value)) {
+            key.value.forEach((x, n) => { if (isNum(x) && !(x > 0)) err(`${kp}.value[${n}]`, `缩放应大于 0，实际为 ${x}`); });
+          }
+        }
+      });
+    });
   }
+
+  arr(doc.paths, 'paths');
+  const pathOf = new Map(); // targetId → 路径路径
+  (Array.isArray(doc.paths) ? doc.paths : []).forEach((pa, i) => {
+    const p = `paths[${i}]`;
+    if (!checkKeys(pa, p, PATH_KEYS)) return;
+    claimId(pa.id, p);
+    const hit = animRef(pa.target, `${p}.target`, PATH_TARGETS);
+    if (hit) {
+      if (hit.type === 'character' && hit.e.parent != null) err(`${p}.target`, `${fmt(pa.target)} 是群众成员，不能单独有路径（请给所在组 ${fmt(hit.e.parent)} 加路径）`);
+      else if (pathOf.has(pa.target)) err(`${p}.target`, `${fmt(pa.target)} 已有路径 ${pathOf.get(pa.target)}，每个实体最多一条`);
+      else pathOf.set(pa.target, p);
+      if (posTracks.has(pa.target)) err(`${p}.target`, `${fmt(pa.target)} 已有 pos 轨道 ${posTracks.get(pa.target)}，路径与 pos 轨道不能共存`);
+    }
+    if (pa.points !== undefined) {
+      if (!Array.isArray(pa.points) || pa.points.length < 2) err(`${p}.points`, `应为至少 2 个点的数组，实际为 ${Array.isArray(pa.points) ? `${pa.points.length} 个点` : fmt(pa.points)}`);
+      else pa.points.forEach((pt, j) => vec3(pt, `${p}.points[${j}]`));
+    }
+    bool(pa.closed, `${p}.closed`);
+    time(pa.start, `${p}.start`);
+    num(pa.duration, `${p}.duration`, { gt: 0 });
+    oneOf(pa.speed, `${p}.speed`, PATH_SPEEDS, '速度曲线');
+    oneOf(pa.orient, `${p}.orient`, PATH_ORIENTS, '朝向方式');
+  });
+
+  arr(doc.constraints, 'constraints');
+  (Array.isArray(doc.constraints) ? doc.constraints : []).forEach((c, i) => {
+    const p = `constraints[${i}]`;
+    if (!checkKeys(c, p, CONSTRAINT_KEYS)) return;
+    claimId(c.id, p);
+    oneOf(c.type, `${p}.type`, CONSTRAINT_TYPES, '约束类型');
+    animRef(c.target, `${p}.target`, ['camera']);
+    if (Array.isArray(c.subject)) vec3(c.subject, `${p}.subject`);
+    else if (c.subject !== undefined) {
+      if (animRef(c.subject, `${p}.subject`, ENTITY_TYPES) && c.subject === c.target) err(`${p}.subject`, `不能是被约束的机位自己 ${fmt(c.target)}`);
+    }
+    vec3(c.offset, `${p}.offset`);
+    if (c.start !== undefined) nullableTime(c.start, `${p}.start`);
+    if (c.end !== undefined) nullableTime(c.end, `${p}.end`);
+    if (isNum(c.start) && isNum(c.end) && !(c.end > c.start)) err(`${p}.end`, `应大于 start ${c.start}，实际为 ${c.end}`);
+  });
 
   return { ok: errors.length === 0, errors };
 }
