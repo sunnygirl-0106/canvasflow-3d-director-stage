@@ -8,6 +8,7 @@ import { TransformGizmo } from '../core/TransformGizmo.js';
 import { Selection } from '../core/Selection.js';
 import { PathOverlay } from '../core/PathOverlay.js';
 import { PathTool } from './PathTool.js';
+import { PathEditor } from './PathEditor.js';
 import { BODY_TYPES, bodySpec, PROP_LABEL, CROWD_PALETTE, RATIO_OPTIONS } from '../config.js';
 import { Emitter } from '../util/Emitter.js';
 import { toast } from '../util/dom.js';
@@ -89,8 +90,9 @@ export class App extends Emitter {
     rig.controls.addEventListener('change', () => stage.invalidate());
     this.pathOverlay = new PathOverlay(this); // 视口路径可视化（阶段 E）
     this.pathTool = new PathTool(this);       // 路径绘制
+    this.pathEditor = new PathEditor(this);   // 顶点编辑
     this.pathMeta = {};                       // 会话态：pathId → 生成器参数（环绕三参数），不进文档
-    this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis || this.pathTool.busy);
+    this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis || this.pathTool.busy || this.pathEditor.busy);
 
     this.labels = new Labels(labelLayer);
     this.shots = new ShotManager(this);

@@ -149,14 +149,16 @@ export class PathTool extends Emitter {
   }
 
   /** 光标处的地面点（文档口径：world 局部坐标里 y = 地面高度的平面）；看不到地面时 null。 */
-  groundPoint(e) {
+  groundPoint(e) { return this.planePoint(e, this.groundY); }
+
+  /** 光标射线与 world 局部坐标里水平面 y 的交点（[x, y, z]，相机背后 / 平行时 null）。 */
+  planePoint(e, y) {
     this._setRay(e);
     const world = this.app.stage.world;
     world.updateMatrixWorld(true);
     const inv = world.matrixWorld.clone().invert();
     const o = this._ray.ray.origin.clone().applyMatrix4(inv);
     const d = this._ray.ray.direction.clone().transformDirection(inv);
-    const y = this.groundY;
     if (Math.abs(d.y) < 1e-9) return null;
     const t = (y - o.y) / d.y;
     if (!(t > 0)) return null;
