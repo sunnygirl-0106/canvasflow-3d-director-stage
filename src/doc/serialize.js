@@ -24,10 +24,12 @@ function editorView(app) {
  * @param {{view?:boolean}} opts view=false 时 editorView 置 null（撤销快照用：视角不是场景内容）
  */
 export function toDocument(app, { view = true } = {}) {
+  // 时间轴 active 期间，被驱动的实体导出 base（手动值），不导出动画瞬时值
+  const base = (e) => app.timeline.baseOf(e);
   const entities = [];
   for (const e of app.entities) {
-    entities.push(e.toJSON());
-    for (const m of e.children) entities.push(m.toJSON({ parent: e.id })); // 成员紧跟其组，顺序 = members 顺序
+    entities.push(e.toJSON({ base: base(e) }));
+    for (const m of e.children) entities.push(m.toJSON({ parent: e.id, base: base(m) })); // 成员紧跟其组，顺序 = members 顺序
   }
 
   // 只导出被引用的资源（目前只有全景）

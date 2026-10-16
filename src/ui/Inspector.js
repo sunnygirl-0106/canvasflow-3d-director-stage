@@ -95,7 +95,7 @@ export class Inspector {
   // ---- 属性页（角色 / 道具 / 群众组通用）----
   _attr(root, ent) {
     const o = ent.root;
-    const invalidate = () => this.app.stage.invalidate();
+    const invalidate = () => { this.app.edited(ent); this.app.stage.invalidate(); };
     root.appendChild(this._nameField(ent));
 
     const pos = tripleRow({ label: '位置', step: 0.01, axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.position[k], set: (v) => { o.position[k] = v; invalidate(); } })) });
@@ -118,7 +118,7 @@ export class Inspector {
   _cameraAttr(root, ent) {
     const app = this.app;
     const o = ent.root;
-    const changed = () => { ent.update(); app.stage.invalidate(); this.schedulePreview(); };
+    const changed = () => { app.edited(ent); ent.update(); app.stage.invalidate(); this.schedulePreview(); };
 
     root.appendChild(this._buildPreview(ent));
     root.appendChild(this._nameField(ent));
@@ -276,7 +276,7 @@ export class Inspector {
   _pose(root, members) {
     const rep = members[0];
     if (!rep) return;
-    const invalidate = () => this.app.stage.invalidate();
+    const invalidate = () => { members.forEach((m) => this.app.edited(m)); this.app.stage.invalidate(); };
 
     const grid = el('div', { class: 'pose-grid' });
     const btns = new Map();

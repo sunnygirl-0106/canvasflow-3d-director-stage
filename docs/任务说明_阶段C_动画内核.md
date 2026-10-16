@@ -58,7 +58,7 @@ constraints: [ {
 校验器新增规则（错误要定位到字段，如 `timeline.tracks[1].keys[3].t 应大于前一键 2.5，实际为 2.5`）：
 - id 全局唯一（实体 + 轨道 + 路径 + 约束同一命名空间）；`target / subject / mainCameraId` 必须指向存在且类型匹配的实体。
 - 同一实体同一 property 最多一条轨道；有路径的实体不允许再有 `pos` 轨道（路径优先，直接拒绝而不是静默覆盖）。
-- keys 严格递增、至少 1 个、t 为有限数 ≥ 0；fov 值在 FOV_RANGE 内；scale 各分量 > 0。
+- keys 可以为空（`addTrack` 刚创建、或 UI 删光了键）；非空时 t 严格递增、为有限数 ≥ 0。空轨道在 evaluate 里是 no-op，但仍占"同实体同属性一条"和"路径与 pos 互斥"的名额；fov 值在 FOV_RANGE 内；scale 各分量 > 0。
 - points ≥ 2；`follow` 的 subject 不能是 target 自己；一个机位同时有 follow 时其 pos 轨道/路径仍然合法但会被 follow 覆盖（交接文档 4.3 的既定行为，校验器不管）。
 
 ### 3.2 代码模块 `src/anim/`

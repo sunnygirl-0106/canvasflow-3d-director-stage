@@ -70,10 +70,10 @@ export class Prop extends Entity {
     this.mesh = mesh;
   }
 
-  toJSON() {
+  toJSON({ base = null } = {}) {
     return {
       type: 'prop', id: this.id, name: this.name, kind: this.kind,
-      color: hexColor(this.color), visible: this.root.visible, transform: this._transformJSON(),
+      color: hexColor(this.color), visible: this.root.visible, transform: this._transformJSON(base || this.root),
     };
   }
 

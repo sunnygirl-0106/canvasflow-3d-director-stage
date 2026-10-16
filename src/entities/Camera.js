@@ -79,10 +79,10 @@ export class CameraEntity extends Entity {
 
   // ---- 场景文档 ----
   // transform 为准（rot 已含荷兰角）；lookAt 只回写面板显示，不触发重新瞄准；roll 供之后改注视坐标时叠加。
-  toJSON() {
+  toJSON({ base = null } = {}) {
     return {
       type: 'camera', id: this.id, name: this.name, visible: this.root.visible,
-      transform: this._transformJSON(), fov: round6(this.cam.fov),
+      transform: this._transformJSON(base || this.root), fov: round6(base ? base.fov : this.cam.fov),
       roll: round6(this._roll * 180 / Math.PI), lookAt: xyz(this.lookTarget),
     };
   }

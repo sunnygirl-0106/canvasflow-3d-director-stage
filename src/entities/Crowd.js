@@ -24,10 +24,10 @@ export class Crowd extends Entity {
   get children() { return this.members; }
 
   // ---- 场景文档（type='group'）：成员按 id 引用，顺序 = members 顺序；成员 transform 相对轴心 ----
-  toJSON() {
+  toJSON({ base = null } = {}) {
     return {
       type: 'group', id: this.id, name: this.name, visible: this.root.visible,
-      transform: this._transformJSON(), members: this.members.map((m) => m.id),
+      transform: this._transformJSON(base || this.root), members: this.members.map((m) => m.id),
     };
   }
 

@@ -140,14 +140,15 @@ export class Character extends Entity {
     return { posOffset: [0, this._rootY0, 0], scaleDiv: [b * g, b, b * g] };
   }
 
-  /** @param {{parent?:string|null}} opts parent = 所属组 id（群众成员） */
-  toJSON({ parent = null } = {}) {
+  /** @param {{parent?:string|null, base?:object|null}} opts parent = 所属组 id（群众成员）；base 见 Entity */
+  toJSON({ parent = null, base = null } = {}) {
     const values = {};
-    for (const [k, v] of Object.entries(this.pose.toJSON().values)) values[k] = round6(v);
+    const pose = base?.values ? new Pose(base.values) : this.pose;
+    for (const [k, v] of Object.entries(pose.toJSON().values)) values[k] = round6(v);
     return {
       type: 'character', id: this.id, name: this.name, body: this.body,
       color: hexColor(this.color), visible: this.root.visible,
-      transform: this._transformJSON(this._docTransformOpts()),
+      transform: this._transformJSON(base || this.root),
       pose: { preset: this.currentPreset, values },
       parent,
     };
@@ -155,7 +156,7 @@ export class Character extends Entity {
 
   static async fromJSON(json) {
     const c = await Character.load(json.name, bodySpec(json.body), json.id);
-    c._applyTransform(json.transform, c._docTransformOpts());
+    c._applyTransform(json.transform);
     c.setColor(json.color);
     Object.assign(c.values, Pose.fromJSON(json.pose).values); // values 是 pose.values 的别名，原地写入
     c.currentPreset = json.pose.preset;

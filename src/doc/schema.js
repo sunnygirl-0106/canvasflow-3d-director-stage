@@ -35,7 +35,7 @@
 //   id,                      // 8 位 base36，与实体 / 路径 / 约束同一命名空间内唯一
 //   target: entityId,        // character / prop / group / camera
 //   property: 'pos' | 'rot' | 'scale' | 'fov',   // fov 只允许 camera；camera 不允许 scale
-//   keys: [ { t, value, ease } ],                // t 秒，严格递增；value: vec3（口径同 transform，rot 为欧拉角度数 XYZ）或 number（fov）
+//   keys: [ { t, value, ease } ],                // 可为空（空轨道不驱动任何属性，但仍占名额）；非空时 t 严格递增；value: vec3（口径同 transform，rot 为欧拉角度数 XYZ）或 number（fov）
 // }                                              // ease ∈ 'linear' | 'smooth' | 'step'，作用于"从该键出发"的那一段；最后一键的 ease 忽略
 // Path = {
 //   id, target: entityId,    // character / prop / camera / group（群众成员不能单独有路径）；每个实体最多一条
@@ -52,7 +52,7 @@
 //   offset: [x,y,z],                  // follow 用：在 subject 的 yaw 坐标系下的偏移；lookAt 忽略
 //   start: null, end: null,           // 生效区间（秒），null = 全程
 // }
-// 规则：同一实体同一 property 最多一条轨道；有路径的实体不允许再有 pos 轨道（路径优先，直接拒绝）。
+// 规则：同一实体同一 property 最多一条轨道（空轨道也算）；有路径的实体不允许再有 pos 轨道（路径优先，直接拒绝）。
 // 机位同时有 follow 与 pos 轨道 / 路径时仍合法，follow 覆盖之（evaluate 顺序：关键帧 → 路径 → 约束）。
 import { BODY_TYPES, PROP_KINDS, RATIO_OPTIONS } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
@@ -360,7 +360,8 @@ export function validate(doc) {
         if (tr.property === 'pos') posTracks.set(tr.target, p);
       }
       if (tr.keys === undefined) return;
-      if (!Array.isArray(tr.keys) || !tr.keys.length) { err(`${p}.keys`, `应为非空数组，实际为 ${fmt(tr.keys)}`); return; }
+      // keys 可为空（先加轨道、再打键的中间状态；evaluate 里是 no-op），非空时严格递增
+      if (!Array.isArray(tr.keys)) { err(`${p}.keys`, `应为数组，实际为 ${fmt(tr.keys)}`); return; }
       let prevT = null;
       tr.keys.forEach((key, j) => {
         const kp = `${p}.keys[${j}]`;

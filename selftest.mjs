@@ -376,6 +376,52 @@ async function animTest() {
     return { good: v0, out, loaded, pruned };
   }, ids);
   ok('文档：含动画的文档可加载，timeline.toJSON 与文档一致', bad.loaded);
+  // ---- 关键帧：pos / rot / fov 轨道 + 播放 / 停止 / 导出不污染 ----
+  await buildAnimScene().then((v) => Object.assign(ids, v));
+  const kf = await page.evaluate(async (ids) => {
+    const a = window.__app, tl = a.timeline, pb = a.playback;
+    const strip = (d) => JSON.stringify({ ...d, meta: null });
+    const manualDoc = strip(a.toDocument());
+    const m = a.findEntity(ids.m), c1 = a.findEntity(ids.c1);
+    const before = { pos: m.root.position.toArray(), rot: m.root.rotation.toArray().slice(0, 3), fov: c1.cam.fov };
+    const tp = tl.addTrack({ target: ids.m, property: 'pos' });
+    tl.setKey(tp.id, 0, [-1.2, 0, 0]);
+    tl.setKey(tp.id, 4, [1.8, 0, 0], 'smooth');
+    const tr = tl.addTrack({ target: ids.m, property: 'rot' });
+    tl.setKey(tr.id, 0, [0, 0, 0]);
+    tl.setKey(tr.id, 4, [0, 180, 0]);
+    const tf = tl.addTrack({ target: ids.c1, property: 'fov' });
+    tl.setKey(tf.id, 0, 40);
+    tl.setKey(tf.id, 2, 20, 'step');
+    tl.setKey(tf.id, 3, 60);
+    const idleUntouched = m.root.position.x === before.pos[0]; // 打键不进入 active
+    pb.seek(2);
+    const at2 = { x: m.root.position.x, yaw: m.root.rotation.y * 180 / Math.PI, fov: c1.cam.fov, state: pb.state };
+    pb.seek(2.5);
+    const fov25 = c1.cam.fov; // step：2..3 段保持 20
+    const docWhileActive = strip(a.toDocument());
+    pb.play();
+    await new Promise((r) => setTimeout(r, 300));
+    pb.pause();
+    const playedTo = pb.time;
+    const docWhilePlaying = strip(a.toDocument());
+    pb.stop();
+    const after = { pos: m.root.position.toArray(), rot: m.root.rotation.toArray().slice(0, 3), fov: c1.cam.fov };
+    // 文档：去掉三条轨道后应与打键前的手动文档一致
+    const noAnim = (d) => { const o = JSON.parse(d); o.timeline.tracks = []; return JSON.stringify(o); };
+    return {
+      idleUntouched, at2, fov25, playedTo, state: pb.state,
+      restored: JSON.stringify(before) === JSON.stringify(after),
+      exportBase: noAnim(docWhileActive) === manualDoc && noAnim(docWhilePlaying) === manualDoc,
+    };
+  }, ids);
+  // smooth 段 t=2：u=0.5 → x = -1.2 + 3×0.5 = 0.3；rot linear 0→180 在 t=2 为 90°；fov 0→2 linear 40→20，t=2 恰好 20
+  ok('关键帧：打键时不进入 active（场景仍为手动值）', kf.idleUntouched);
+  ok('关键帧：seek(2) 位置 / 旋转 / FOV 插值正确', Math.abs(kf.at2.x - 0.3) < 1e-9 && Math.abs(kf.at2.yaw - 90) < 1e-4 && Math.abs(kf.at2.fov - 20) < 1e-9 && kf.at2.state === 'paused', JSON.stringify(kf.at2));
+  ok('关键帧：step 缓动保持到下一键', kf.fov25 === 20, `fov@2.5=${kf.fov25}`);
+  ok('关键帧：play / pause 推进时间', kf.playedTo > 0.2 && kf.playedTo < 3, `time=${kf.playedTo.toFixed(3)}`);
+  ok('关键帧：stop() 后回到手动值、状态 idle', kf.restored && kf.state === 'idle');
+  ok('关键帧：active / 播放中 toDocument() 导出 base', kf.exportBase);
   ok('文档：删除实体连带删除引用它的路径 / 约束', bad.pruned.paths === 0 && bad.pruned.constraints === 0 && bad.pruned.tracks === 2 && bad.pruned.valid, JSON.stringify(bad.pruned));
   ok('坏文档：基准文档（含 timeline / paths / constraints）合法', bad.good.ok, bad.good.errors.slice(0, 3).join(' | '));
   for (const b of bad.out) ok(`坏文档：${b.name}`, b.ok && b.located && b.rejected && b.unchanged, b.first);

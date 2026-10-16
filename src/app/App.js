@@ -16,6 +16,7 @@ import { Labels } from './Labels.js';
 import { toDocument, loadDocument } from '../doc/serialize.js';
 import { History } from './History.js';
 import { Timeline } from '../anim/Timeline.js';
+import { Playback } from '../anim/Playback.js';
 
 /**
  * 应用状态：实体清单 / 选择 / 视角（导演 ↔ 机位 POV）/ 场景参数，统筹增删选改。
@@ -59,13 +60,14 @@ export class App extends Emitter {
     // 场景文档：元信息；动画三字段（timeline / paths / constraints）由 Timeline 持有
     this.docMeta = { name: '未命名场景', createdAt: new Date().toISOString() };
     this.timeline = new Timeline(this);
+    this.playback = new Playback(this.timeline, { invalidate: () => stage.invalidate() });
     this._docChain = Promise.resolve(); // 文档加载串行化（连续撤销不会交错重建）
     this.loadingDocument = false;       // 加载期间为 true：history / 自动保存据此屏蔽
     this.history = new History(this);
 
     const dom = stage.renderer.domElement;
     this.gizmo = new TransformGizmo(stage.camera, dom, stage.scene, rig.controls, () => !this.cameraView);
-    this.gizmo.onObjectChange(() => this.emit('transform'));
+    this.gizmo.onObjectChange(() => { this.edited(this.selected); this.emit('transform'); });
     this.gizmo.onChange(() => stage.invalidate());
     this.selection = new Selection(stage.renderer, stage.camera, stage.scene, () => this.entities, (id) => this.select(id));
     this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis);
@@ -204,6 +206,7 @@ export class App extends Emitter {
       .filter((e) => e && e.type === 'character');
     if (members.length < 2) { toast('请至少选择 2 个角色再打组'); return null; }
 
+    this.timeline.release(members.map((m) => m.id)); // 先写回手动值，再改父节点
     // 轴心置于成员世界中心，再用 attach 保留各成员世界变换地挂入组
     const centroid = new THREE.Vector3();
     for (const m of members) centroid.add(m.root.getWorldPosition(new THREE.Vector3()));
@@ -227,6 +230,7 @@ export class App extends Emitter {
   ungroupCrowd(id) {
     const crowd = this.entities.find((e) => e.id === id && e.type === 'crowd');
     if (!crowd) return;
+    this.timeline.release([crowd.id, ...crowd.members.map((m) => m.id)]); // 先写回手动值，再改父节点
     for (const m of crowd.release()) {
       this.stage.world.attach(m.root); // attach 保留世界变换
       this.entities.push(m);
@@ -285,6 +289,7 @@ export class App extends Emitter {
     const box = worldBox(target.root, { useBones: target.type === 'character' });
     const center = box.isEmpty() ? target.root.getWorldPosition(new THREE.Vector3()) : box.getCenter(new THREE.Vector3());
     cam.aimAt(center);
+    this.edited(cam);
     this.stage.invalidate();
     return center;
   }
@@ -644,9 +649,21 @@ export class App extends Emitter {
 
   resetView() { this.rig.resetView(); toast('已重置视角'); }
 
+  /**
+   * 实体被 gizmo / 面板修改后调用：时间轴 active 时把修改记进 base（视为改手动值，见 Timeline.refreshBase）。
+   * 群众组连同成员一起（组面板的姿势 / 颜色广播到全部成员）。
+   */
+  edited(ent) {
+    if (!ent || !this.timeline.active) return;
+    for (const e of [ent, ...ent.children]) this.timeline.refreshBase(e);
+  }
+
   // ---- 每帧 ----
-  /** 推进相机阻尼；返回画面是否仍在动。 */
-  tick() { return this.rig.update(); }
+  /** 推进播放与相机阻尼；返回画面是否仍在动。 */
+  tick() {
+    const playing = this.playback.update();
+    return this.rig.update() || playing;
+  }
 
   /** 渲染前同步：视锥、选中环、名牌。 */
   beforeRender() {
