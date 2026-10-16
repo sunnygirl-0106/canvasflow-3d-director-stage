@@ -5,6 +5,7 @@ import { groupedPresets } from '../core/cameraPresets.js';
 import { listCanvasAssets } from '../util/assetLibrary.js';
 import { RATIO_OPTIONS, isPanoRatio, BODY_TYPES, PROP_KINDS } from '../config.js';
 import { icon } from './icons.js';
+import { exportScene, pickAndImportScene } from '../app/SceneFile.js';
 
 const svg = (name, w = 21) => icon(name, w);
 
@@ -236,6 +237,9 @@ export class Dock {
     return [
       this._item('undo', '撤销', () => { this.menu.close(); h.undo(); }, false, 17, { key: KEY_UNDO, disabled: !h.canUndo }),
       this._item('redo', '重做', () => { this.menu.close(); h.redo(); }, false, 17, { key: KEY_REDO, disabled: !h.canRedo }),
+      el('div', { class: 'menu-sep' }),
+      this._item('download', '导出场景', () => { this.menu.close(); exportScene(this.app); }),
+      this._item('upload', '导入场景', () => { this.menu.close(); pickAndImportScene(this.app); }),
     ];
   }
 

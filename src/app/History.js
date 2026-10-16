@@ -6,7 +6,7 @@ import { Emitter } from '../util/Emitter.js';
  *   （天然过滤"点了但没改"，也让拖动只在松手时记一步）。
  * - assets（可能是几 MB 的 dataURL）按 id 单独缓存，快照里只留引用。
  * - 撤销 = app.loadDocument(上一份)。导演视角、视图模式、选中都是会话态，不随撤销变化。
- * 事件：'change' —— 栈变化（入栈 / 撤销 / 重做 / 重置），自动保存据此触发。
+ * 事件：'change'(reason) —— 栈变化，reason ∈ 'reset' | 'capture' | 'undo' | 'redo'；自动保存据此触发。
  */
 export class History extends Emitter {
   constructor(app, { limit = 100 } = {}) {
@@ -37,7 +37,7 @@ export class History extends Emitter {
     this._assets.clear();
     this.entries = [this._snapshot()];
     this.index = 0;
-    this.emit('change');
+    this.emit('change', 'reset');
   }
 
   /** 记录一步（当前状态与栈顶相同则忽略）。加载文档期间不记录。返回是否入栈。 */
@@ -50,7 +50,7 @@ export class History extends Emitter {
     if (this.entries.length > this.limit) this.entries.splice(0, this.entries.length - this.limit);
     this.index = this.entries.length - 1;
     this._gcAssets();
-    this.emit('change');
+    this.emit('change', 'capture');
     return true;
   }
 
@@ -70,7 +70,7 @@ export class History extends Emitter {
     const target = this.index + step;
     if (target < 0 || target >= this.entries.length) return false;
     this.index = target; // 同步推进：连按多次撤销按顺序排队加载
-    this.emit('change');
+    this.emit('change', step < 0 ? 'undo' : 'redo');
     const doc = JSON.parse(this.entries[target]);
     doc.meta.updatedAt = new Date().toISOString();
     const pano = doc.scene.panorama;

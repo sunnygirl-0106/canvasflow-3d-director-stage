@@ -514,3 +514,10 @@ select.dropdown:focus { border-color: var(--line2); }
   padding: 9px 16px; border-radius: 10px; font-size: 13px; opacity: 0; transition: .2s; pointer-events: none; z-index: 60;
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast { white-space: pre-line; max-width: min(640px, calc(100vw - 32px)); }
+#toast.has-action { pointer-events: auto; display: flex; align-items: center; gap: 12px; }
+#toast:not(.show) { pointer-events: none; }
+#toast .toast-action {
+  flex: none; background: var(--accent); color: #fff; border: 0; border-radius: 7px;
+  padding: 5px 12px; font-size: 12px; cursor: pointer;
+}

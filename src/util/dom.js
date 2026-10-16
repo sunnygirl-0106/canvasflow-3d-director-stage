@@ -31,11 +31,23 @@ export function clear(node) {
 
 let toastEl = null;
 let toastTimer = null;
-export function toast(msg) {
+/**
+ * 轻提示。msg 中的换行会保留（多条错误逐行显示）。
+ * @param {string} msg
+ * @param {{duration?:number, action?:{label:string, onClick:()=>void}}} [opts] action：带一个按钮（点了即关闭）
+ */
+export function toast(msg, { duration, action } = {}) {
   if (!toastEl) toastEl = document.getElementById('toast');
   if (!toastEl) return;
   toastEl.textContent = msg;
+  toastEl.classList.toggle('has-action', !!action);
+  if (action) {
+    toastEl.appendChild(el('button', {
+      class: 'toast-action', text: action.label,
+      onclick: () => { toastEl.classList.remove('show'); action.onClick(); },
+    }));
+  }
   toastEl.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1700);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), duration ?? (action ? 10000 : 1700));
 }

@@ -7,6 +7,7 @@ import { Outliner } from './ui/Outliner.js';
 import { Inspector } from './ui/Inspector.js';
 import { ScenePanel } from './ui/ScenePanel.js';
 import { toast } from './util/dom.js';
+import { AutoSave } from './app/SceneFile.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -51,6 +52,7 @@ const history = app.history;
 for (const t of ['pointerup', 'click', 'change', 'keyup']) window.addEventListener(t, () => history.schedule());
 app.on('entities', () => history.schedule());
 app.on('scene', () => history.schedule());
+new AutoSave(app); // 撤销栈变化后防抖 1s 写 localStorage
 
 // 键盘：输入控件内不拦截（文本框里的 ⌘Z 留给浏览器做文字撤销）
 window.addEventListener('keydown', (e) => {
@@ -91,4 +93,5 @@ stage.startLoop({
     app.select(null);
   } catch (e) { console.error('seed failed', e); }
   history.reset(); // 种子场景作为撤销起点（之前的添加不进撤销栈）
+  AutoSave.offerRestore(app); // 有上次存档：提示可恢复（不自动恢复）
 })();
