@@ -226,7 +226,9 @@ export function validate(doc) {
           if (!hit) return;
           if (memberOf.has(mid)) err(mp, `${fmt(mid)} 同时属于多个组（${memberOf.get(mid)} / ${e.id}）`);
           else memberOf.set(mid, e.id);
-          if (hit.e.parent !== e.id) err(`entities[${hit.i}].parent`, `应为 ${fmt(e.id)}（该角色列在组 ${fmt(e.id)} 的 members 里），实际为 ${fmt(hit.e.parent)}`);
+          // parent 悬空时只报"引用不存在"（在该角色条目上），不再重复报不一致
+          const parentDangling = isStr(hit.e.parent) && !byId.has(hit.e.parent);
+          if (hit.e.parent !== e.id && !parentDangling) err(`entities[${hit.i}].parent`, `应为 ${fmt(e.id)}（该角色列在组 ${fmt(e.id)} 的 members 里），实际为 ${fmt(hit.e.parent)}`);
         });
       }
     }

@@ -44,6 +44,8 @@ npm run test:e2e     # 端到端自测（headless Chrome，自动起 dev server�
 node selftest.mjs poses <outDir> [bodyKey]   # 单角色逐个套姿势预设截图（默认 xbot）
 node selftest.mjs posediff <dirA> <dirB>     # 两组姿势截图逐像素对比（pixelmatch）
 node selftest.mjs calib [profileId ...]      # 校准页整页截图 → test-output/calib_<id>.png
+node selftest.mjs collide [preset,...]       # 姿势预设穿模检测（改预设后必跑）
+node selftest.mjs doc                        # 场景文档验收：往返一致 / 坏文档拒绝 / 撤销重做 → test-output/doc/
 ```
 
 开发时校准页：`npm run dev` 后打开 `/calib.html?profile=bodykun_male`。
@@ -57,6 +59,9 @@ node selftest.mjs calib [profileId ...]      # 校准页整页截图 → test-ou
 | 拖动三色 gizmo | 按当前模式变换选中对象 |
 | `V` / `R` / `S` | 切换 移动 / 旋转 / 缩放 |
 | `Del` / `Backspace` | 删除选中对象 |
+| `⌘Z` / `Ctrl+Z` | 撤销 |
+| `⇧⌘Z` / `Ctrl+Shift+Z` / `Ctrl+Y` | 重做 |
+| 底部工具坞「场景」 | 撤销 / 重做 / 导出场景（.json）/ 导入场景 |
 | 底部工具坞 `＋` | 添加角色 / 几何道具 / 本地上传 |
 
 ## 🗂️ 项目结构
@@ -67,8 +72,10 @@ src/
 ├─ config.js            体型 / 道具 / 取景比例 / 全景规则（单一事实来源）
 ├─ app/
 │  ├─ App.js            应用状态：实体清单 / 选择 / 视角切换 / 场景参数；变化以事件广播
+│  ├─ History.js        撤销 / 重做（场景文档快照栈）
+│  ├─ SceneFile.js      导出 / 导入 .json + localStorage 自动保存与恢复
 │  ├─ ShotManager.js    截图（Blob + ObjectURL）与发送
-│  ├─ Panorama.js       全景背景载入 / 校验 / 回收
+│  ├─ Panorama.js       全景背景载入 / 校验（资源 assetId + url|dataURL）
 │  └─ Labels.js         3D 名牌层
 ├─ core/
 │  ├─ Stage.js          场景 / 渲染器 / 光照 / 地面 / 按需渲染循环 / 离屏快照
@@ -77,6 +84,10 @@ src/
 │  ├─ TransformGizmo.js TransformControls 封装（模式切换 / 与环绕互斥）
 │  ├─ NavGizmo.js       右上角坐标指示器
 │  └─ cameraPresets.js  机位景别预设
+├─ doc/                 场景文档：导演台全部场景状态 ↔ 一份可校验的 JSON
+│  ├─ schema.js         版本号 / 文档形状说明 / 默认值 / validate（错误定位到字段路径）
+│  ├─ serialize.js      toDocument / loadDocument（先建好再一次性替换，失败不留半个场景）
+│  └─ migrate.js        按版本逐级升级
 ├─ rig/                 姿势与模型解耦层
 │  ├─ jointSchema.js    语义关节表（与模型无关；min/max 相对站立）
 │  ├─ profiles/         骨骼档案：每个模型一份（骨头 / 轴向 / 正负 / 站立偏移）
