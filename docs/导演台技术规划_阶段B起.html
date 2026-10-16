@@ -1,0 +1,595 @@
+<title>导演台技术规划</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a reading column (≈68ch) with a sticky stage-list on the left at desktop width;
+   demos break out slightly wider than text. Colors come from the demo itself: 素体绿、路径蓝、机位紫. */
+:root{
+  --bg:#f4f6f8; --surface:#ffffff; --fg:#17212b; --muted:#5b6977; --line:#d6dde4;
+  --accent:#2f9e55; --accent-soft:#e3f4e8;
+  --path:#2f7fe0; --cam:#8a5cf6; --warn:#d9822b; --bad:#d64545;
+  --code-bg:#eef2f5;
+  --display:"Noto Serif SC","Songti SC",serif;
+  --body:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1418; --surface:#161d23; --fg:#e6ebef; --muted:#97a4b0; --line:#2a343d;
+  --accent:#4ade80; --accent-soft:#14301f; --path:#5ea2ff; --cam:#b092ff; --warn:#f0a553; --bad:#f06a6a;
+  --code-bg:#0b1014; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0f1418; --surface:#161d23; --fg:#e6ebef; --muted:#97a4b0; --line:#2a343d;
+  --accent:#4ade80; --accent-soft:#14301f; --path:#5ea2ff; --cam:#b092ff; --warn:#f0a553; --bad:#f06a6a;
+  --code-bg:#0b1014; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);line-height:1.7;font-size:15.5px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 64px}
+a{color:var(--accent)}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;line-height:1.25;margin:0}
+h1{font-size:2rem;font-weight:700}
+h2{font-size:1.45rem;margin-top:.2em}
+h3{font-size:1.1rem;font-family:var(--body);font-weight:700}
+p{margin:.6em 0}
+code,pre{font-family:var(--mono);font-size:.86em}
+code{background:var(--code-bg);padding:.1em .4em;border-radius:4px}
+pre{background:var(--code-bg);padding:12px 14px;border-radius:8px;overflow-x:auto;line-height:1.55;margin:.8em 0}
+pre code{background:none;padding:0}
+.wrap{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:200px minmax(0,1fr);gap:40px}
+@media (max-width:860px){.wrap{grid-template-columns:minmax(0,1fr);gap:0}}
+nav.toc{position:sticky;top:env(safe-area-inset-top,0px);align-self:start;padding-top:40px;font-size:.88rem}
+nav.toc .eyebrow{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+nav.toc a{display:block;color:var(--fg);text-decoration:none;padding:4px 0 4px 10px;border-left:2px solid var(--line)}
+nav.toc a:hover{border-color:var(--accent)}
+nav.toc a .k{font-family:var(--mono);color:var(--muted);margin-right:6px}
+@media (max-width:860px){nav.toc{position:static;padding-top:24px;display:flex;flex-wrap:wrap;gap:4px 12px}nav.toc a{border:0;padding:2px 0}nav.toc .eyebrow{width:100%}}
+main{padding-top:40px;min-width:0}
+header.hero{margin-bottom:32px}
+header.hero .eyebrow{font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:10px}
+header.hero p.lead{font-size:1.05rem;max-width:68ch;color:var(--muted)}
+.text{max-width:68ch}
+section.stage{padding:36px 0 8px;border-top:1px solid var(--line);margin-top:28px}
+section.stage .label{font-family:var(--mono);color:var(--accent);font-size:.8rem;letter-spacing:.08em;margin-bottom:6px}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:18px 0 8px}
+.rule{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.rule b{display:block;font-size:1rem;margin-bottom:4px}
+.rule span{color:var(--muted);font-size:.92rem}
+table.plan{width:100%;border-collapse:collapse;font-size:.92rem;margin:14px 0}
+.tablewrap{overflow-x:auto;margin:0 -4px;padding:0 4px}
+table.plan th,table.plan td{text-align:left;vertical-align:top;padding:10px 10px;border-bottom:1px solid var(--line)}
+table.plan th{font-size:.76rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+table.plan td.k{font-family:var(--mono);color:var(--accent);font-weight:600;white-space:nowrap}
+table.plan td.d{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted)}
+.deps{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:14px 0;overflow-x:auto}
+.deps svg{display:block;width:100%;max-width:640px;height:auto}
+.demo{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin:18px 0}
+.demo .title{font-weight:700;font-size:.95rem;margin-bottom:4px}
+.demo .hint{color:var(--muted);font-size:.86rem;margin-bottom:10px}
+.demo canvas{width:100%;height:auto;display:block;border-radius:8px;background:var(--bg);border:1px solid var(--line);max-width:100%}
+.ctrl{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-top:10px;font-size:.88rem}
+.ctrl label{display:inline-flex;align-items:center;gap:6px}
+.ctrl input[type=range]{width:160px;accent-color:var(--accent)}
+.ctrl select,.ctrl button,.ctrl input[type=number]{font:inherit;font-size:.86rem;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.ctrl button{cursor:pointer}
+.ctrl button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ctrl button:focus-visible,.ctrl input:focus-visible,textarea:focus-visible,.ctrl select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ro{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);font-size:.84rem}
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+@media (max-width:700px){.split{grid-template-columns:minmax(0,1fr)}}
+textarea.json{width:100%;min-height:300px;font-family:var(--mono);font-size:.8rem;line-height:1.5;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--code-bg);color:var(--fg);resize:vertical}
+.status{font-size:.86rem;margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--accent-soft);color:var(--fg)}
+.status.bad{background:color-mix(in srgb,var(--bad) 14%,var(--surface));}
+.steps{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.step{padding:6px 10px;border-radius:999px;border:1px solid var(--line);font-size:.84rem;color:var(--muted)}
+.step.on{border-color:var(--accent);color:var(--fg);background:var(--accent-soft)}
+.step.bad{border-color:var(--bad);color:var(--bad)}
+.why{border-left:3px solid var(--accent);padding:4px 14px;margin:14px 0;background:var(--accent-soft);border-radius:0 8px 8px 0}
+.why b{display:block;font-size:.8rem;letter-spacing:.08em;color:var(--accent);margin-bottom:2px}
+ul{padding-left:1.3em}li{margin:.25em 0}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.82rem;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle}
+footer{margin-top:48px;color:var(--muted);font-size:.84rem;border-top:1px solid var(--line);padding-top:16px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="目录">
+  <div class="eyebrow">阶段</div>
+  <a href="#overview"><span class="k">—</span>总览</a>
+  <a href="#b"><span class="k">B</span>场景文档</a>
+  <a href="#c"><span class="k">C</span>动画内核</a>
+  <a href="#d"><span class="k">D</span>时间轴面板</a>
+  <a href="#e"><span class="k">E</span>角色路径</a>
+  <a href="#f"><span class="k">F</span>机位</a>
+  <a href="#g"><span class="k">G</span>导出视频</a>
+  <a href="#h"><span class="k">H</span>AI 生成</a>
+  <a href="#i"><span class="k">I</span>内容补齐</a>
+</nav>
+
+<main>
+<header class="hero" id="overview">
+  <div class="eyebrow">3D 导演台 · 阶段 B 起</div>
+  <h1>导演台技术规划</h1>
+  <p class="lead">阶段 A（换人偶、骨骼档案、默认站立）已经在做。这一页记录从阶段 B 开始的路线：先立规矩，再长功能；每一节先讲"做什么"，再讲"为什么"，关键概念配一个能动手玩的小演示。</p>
+</header>
+
+<h2>三条铁律</h2>
+<div class="rules">
+  <div class="rule"><b>① 场景即数据</b><span>界面上能看到的每一个状态，场景文档里都有对应字段；反过来也成立。人改它，AI 写它。</span></div>
+  <div class="rule"><b>② 状态 = f(t)</b><span>任意时刻的画面由 <code>evaluate(t)</code> 算出来，不靠上一帧累加。播放头随便拖，导出随便跳帧。</span></div>
+  <div class="rule"><b>③ 预设都有稳定英文名</b><span><code>stand / walk / run / half_orbit / circle</code>——这是 AI 的词汇表，起了就不改。</span></div>
+</div>
+
+<h2>阶段总表</h2>
+<div class="tablewrap">
+<table class="plan">
+  <thead><tr><th>阶段</th><th>内容</th><th>交付物（你能看到的）</th><th>估时</th></tr></thead>
+  <tbody>
+    <tr><td class="k">B</td><td>场景文档 + 校验器：整个导演台状态 ↔ JSON</td><td>导出 JSON、清空、再导入，画面一模一样</td><td class="d">1–2 天</td></tr>
+    <tr><td class="k">C</td><td>动画内核（无 UI）：轨道、路径、约束、<code>evaluate(t)</code>、播放时钟、程序化步行</td><td>一组自动化测试："给定 t，场景状态正确"</td><td class="d">2 天</td></tr>
+    <tr><td class="k">D</td><td>时间轴面板 + 属性面板联动</td><td>底部时间轴能打关键帧、拖播放头、属性旁实心/空心菱形</td><td class="d">2–3 天</td></tr>
+    <tr><td class="k">E</td><td>角色运动轨迹：五种绘制、可拖顶点、沿路径朝向</td><td>画条线，角色沿线走过去</td><td class="d">2–3 天</td></tr>
+    <tr><td class="k">F</td><td>机位：7 种运镜预设、注视、FOV、跟随、主机位播放模式</td><td>播放时切到机位画面，辅助线隐藏</td><td class="d">2–3 天</td></tr>
+    <tr><td class="k">G</td><td>导出 MP4：名牌改 3D 精灵、WebCodecs 逐帧离线渲染</td><td>一个 MP4 文件</td><td class="d">1–2 天</td></tr>
+    <tr><td class="k">H</td><td>AI 生成：文本 → 场景文档；对话式修改 = 打补丁；识图只写位置</td><td>输入"三个人玩老鹰捉小鸡"，出一个带路径和运镜的场景</td><td class="d">2–3 天</td></tr>
+    <tr><td class="k">I</td><td>姿势预设补到 24 个、儿童等体型</td><td>穿插做，不占独立周期</td><td class="d">—</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="deps">
+<svg viewBox="0 0 640 150" role="img" aria-label="阶段依赖关系：A 和 B 并行，汇入 C，C 之后依次 D、E、F、G；H 只依赖 B 和 C">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>
+  <g font-family="JetBrains Mono,monospace" font-size="14" text-anchor="middle">
+    <rect x="20" y="20" width="54" height="34" rx="8" fill="var(--bg)" stroke="var(--line)"/><text x="47" y="42" fill="var(--muted)">A</text>
+    <rect x="20" y="96" width="54" height="34" rx="8" fill="var(--bg)" stroke="var(--accent)"/><text x="47" y="118" fill="var(--accent)">B</text>
+    <rect x="150" y="58" width="54" height="34" rx="8" fill="var(--bg)" stroke="var(--accent)"/><text x="177" y="80" fill="var(--accent)">C</text>
+    <rect x="260" y="20" width="54" height="34" rx="8" fill="var(--bg)" stroke="var(--line)"/><text x="287" y="42" fill="var(--fg)">D</text>
+    <rect x="350" y="20" width="54" height="34" rx="8" fill="var(--bg)" stroke="var(--line)"/><text x="377" y="42" fill="var(--fg)">E</text>
+    <rect x="440" y="20" width="54" height="34" rx="8" fill="var(--bg)" stroke="var(--line)"/><text x="467" y="42" fill="var(--fg)">F</text>
+    <rect x="530" y="20" width="54" height="34" rx="8" fill="var(--bg)" stroke="var(--line)"/><text x="557" y="42" fill="var(--fg)">G</text>
+    <rect x="350" y="96" width="54" height="34" rx="8" fill="var(--bg)" stroke="var(--accent)"/><text x="377" y="118" fill="var(--accent)">H</text>
+  </g>
+  <g fill="none" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ar)">
+    <path d="M74 37 C110 37 110 75 148 75"/><path d="M74 113 C110 113 110 75 148 75"/>
+    <path d="M204 75 C230 75 230 37 258 37"/><path d="M314 37H348"/><path d="M404 37H438"/><path d="M494 37H528"/>
+    <path d="M204 75 C260 75 290 113 348 113"/>
+  </g>
+  <text x="620" y="140" font-size="11" fill="var(--muted)" text-anchor="end" font-family="Noto Sans SC,sans-serif">A、B 并行 · C 之前必须有 B · H 只依赖 B 和 C</text>
+</svg>
+</div>
+
+<!-- ================= B ================= -->
+<section class="stage" id="b">
+  <div class="label">阶段 B · 1–2 天</div>
+  <h2>场景文档：把导演台变成一份 JSON</h2>
+  <div class="text">
+    <p><b>做什么。</b>定义一份 schema：角色（体型、颜色、名字、位置旋转缩放、姿势预设名）、编组、道具、机位（变换、FOV、注视目标、跟随目标）、路径（类型、顶点、时长、是否沿路径朝向）、时间轴（时长、帧率、各轨道关键帧）、场景（天空、地面、全景）。配一个校验器，不合法的文档拒绝加载并说明哪里错。现有的撤销重做接到这份文档上。</p>
+    <div class="why"><b>为什么排在最前面</b>因为后面每一个阶段的输出端都是它：手动操作是人改文档，AI 生成是模型写文档，识图导入是视觉模型写文档里"位置"那部分，保存、撤销、导出都是它的序列化。竞品"一句话生成场景"之所以能做，前提就是整个场景能被一份文本完整描述。没有 B，H 做不了；B 做歪了，后面全歪。</div>
+    <p>校验器为什么重要：竞品生成时失败过两次才成功，大概率就是模型写出来的文档没过校验。宁可拒绝，也不要加载半个场景。</p>
+  </div>
+  <div class="demo">
+    <div class="title">演示 · 文档就是场景</div>
+    <div class="hint">左边是场景文档，右边是它渲染出来的俯视图。改左边的数字，右边立刻变；写一个词汇表里没有的姿势名，校验器会拦下来。</div>
+    <div class="split">
+      <div><textarea class="json" id="docText" spellcheck="false" aria-label="场景文档 JSON"></textarea>
+        <div class="status" id="docStatus">已加载</div></div>
+      <div><canvas id="docCanvas" width="520" height="400"></canvas>
+        <div class="legend"><span><i style="background:var(--accent)"></i>角色（箭头=朝向）</span><span><i style="background:var(--cam)"></i>机位（扇形=视野）</span><span><i style="background:var(--path)"></i>路径</span></div></div>
+    </div>
+    <div class="ctrl">
+      <button id="docReset">恢复示例</button>
+      <button id="docBreak">故意写坏一个姿势名</button>
+      <span class="ro">词汇表：stand · walk · run · wave · bow · akimbo · think · tpose</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= C ================= -->
+<section class="stage" id="c">
+  <div class="label">阶段 C · 2 天</div>
+  <h2>动画内核：没有界面，只有"给我时间 t，还你场景状态"</h2>
+  <div class="text">
+    <p><b>做什么。</b>五个小模块：<code>Channel</code>（哪些属性能动画：角色的位置/旋转/缩放，机位的位置/旋转/FOV）、<code>Track</code>（一条属性上的关键帧 + 插值）、<code>PathTrack</code>（路径型轨道）、<code>Constraint</code>（跟随、注视、沿路径朝向）、<code>Timeline.evaluate(t)</code> 把它们按固定顺序算一遍。再加一个播放时钟和程序化步行 <code>Locomotion</code>。这一阶段不做任何界面，用脚本验证。</p>
+    <div class="why"><b>为什么先做内核、后做面板</b>面板只是内核的遥控器。先做面板，逻辑会散落在各个按钮的点击事件里，后面"拖播放头和手动改值打架"、"路径改了关键帧不跟着变"这类 bug 很难修。先把内核做成一个纯函数，面板怎么做都不会错。</div>
+  </div>
+
+  <h3>概念 1 · 关键帧与补间</h3>
+  <p class="text">你亲手定的几个时刻的值叫<b>关键帧</b>；两帧之间引擎自动算出来的每一帧叫<b>补间</b>（Tweening）；算的方法叫<b>插值</b>，最简单是匀速（线性），也可以先慢后快（缓动）。Rive、After Effects、Blender 的时间轴都是这同一个模型。</p>
+  <div class="demo">
+    <div class="title">演示 · 拖播放头，看补间</div>
+    <div class="hint">三个菱形是关键帧，小球的位置由 evaluate(t) 算出来。换插值方式，关键帧不变，中间的路变了。</div>
+    <canvas id="twCanvas" width="700" height="170"></canvas>
+    <div class="ctrl">
+      <label>t <input type="range" id="twT" min="0" max="10" step="0.01" value="2.5"></label>
+      <span class="ro" id="twRo"></span>
+      <label>插值 <select id="twEase"><option value="linear">线性（匀速）</option><option value="inout">缓入缓出</option><option value="step">阶梯（不补间）</option></select></label>
+      <button id="twPlay">播放</button>
+    </div>
+  </div>
+
+  <h3>概念 2 · 旋转不能直接线性插值</h3>
+  <p class="text">从 350° 转到 10°，按数字线性插值会绕一大圈转 340°；人眼看它只需要转 20°。3D 里用<b>四元数</b>做旋转插值，天然走最短路。你不用懂它的数学，记住一条：位置用线性，旋转用四元数，three.js 都自带。</p>
+  <div class="demo">
+    <div class="title">演示 · 两种旋转插值</div>
+    <canvas id="rotCanvas" width="700" height="190"></canvas>
+    <div class="ctrl"><label>进度 <input type="range" id="rotU" min="0" max="1" step="0.01" value="0.4"></label><span class="ro" id="rotRo"></span></div>
+  </div>
+
+  <h3>概念 3 · evaluate(t) 的固定顺序：关键帧 → 路径 → 约束</h3>
+  <p class="text">顺序定死，就不会"运镜和跟随打架"：跟随是约束，永远在最后一步覆盖机位位置，所以开了跟随，机位自己的关键帧自然失效。另一条规则：<b>没打关键帧的属性保持手动值</b>，这就是"手动改了数值，播放时会被关键帧覆盖（除非打成关键帧）"的来源，也让现有的 gizmo 拖动不用改。</p>
+  <div class="demo">
+    <div class="title">演示 · 开关"跟随"，看第三步如何覆盖前两步</div>
+    <canvas id="ordCanvas" width="700" height="260"></canvas>
+    <div class="ctrl">
+      <label>t <input type="range" id="ordT" min="0" max="10" step="0.01" value="3"></label>
+      <label><input type="checkbox" id="ordFollow"> 机位跟随角色</label>
+      <span class="ro" id="ordRo"></span>
+    </div>
+    <div class="steps" id="ordSteps"><span class="step on">① 关键帧轨道</span><span class="step on">② 路径轨道</span><span class="step">③ 约束</span></div>
+  </div>
+
+  <h3>概念 4 · 程序化步行：相位由路程驱动</h3>
+  <p class="text">角色沿路径移动时，用关节滑条按公式生成走路：左腿抬腿 = A·sin(相位)，右腿取反，手臂和对侧腿同相。关键是<b>相位 = 已走路程 ÷ 步幅</b>，而不是由时间驱动。这样走得快步子就快，脚不会在地上打滑。速度超过阈值自动切跑步（步幅更大、膝盖更弯、身体前倾）。速度为 0 时不介入，角色保持手动摆的姿势。</p>
+  <div class="demo">
+    <div class="title">演示 · 调速度，看步频跟着变</div>
+    <canvas id="locoCanvas" width="700" height="220"></canvas>
+    <div class="ctrl">
+      <label>速度 <input type="range" id="locoV" min="0" max="3.5" step="0.05" value="1.2"> <span class="ro" id="locoRo"></span></label>
+      <label><input type="checkbox" id="locoTime"> 改成按时间驱动（看脚打滑）</label>
+    </div>
+  </div>
+</section>
+
+<!-- ================= D ================= -->
+<section class="stage" id="d">
+  <div class="label">阶段 D · 2–3 天</div>
+  <h2>时间轴面板：给内核装遥控器</h2>
+  <div class="text">
+    <p><b>做什么。</b>你清单的第一、二条：底部工具坞入口、播放/暂停/循环、时间显示与总时长、帧率下拉、可缩放刻度尺、可拖播放头、轨道列表与子行、关键帧增删拖、属性面板旁的实心/空心菱形、播放头移动时数值实时跟随。</p>
+    <div class="why"><b>为什么它是"薄"的</b>面板里每个控件都只做一件事：读内核的状态显示出来，或者把一个用户动作翻译成对内核的一次调用。打关键帧 = 往 Track 里插一条；拖播放头 = 调一次 evaluate(t)；改帧率 = 只改吸附和导出，内部时间一直是秒，已有关键帧不会挪位。面板不持有任何自己的状态，所以它坏了也只是显示错，不会把数据弄脏。</div>
+    <p>实心/空心菱形的判定也是查内核：当前时刻这条 Track 上有没有一个关键帧的时间等于 t。</p>
+  </div>
+</section>
+
+<!-- ================= E ================= -->
+<section class="stage" id="e">
+  <div class="label">阶段 E · 2–3 天</div>
+  <h2>角色路径：路径是源头，不是一堆关键帧</h2>
+  <div class="text">
+    <p><b>做什么。</b>角色面板第三页签"运动轨迹"：时长、路径自身的变换、"沿路径朝向"开关；五种绘制（圆环、直线、矩形模板一键生成；铅笔在地面拖；钢笔点锚点）；路径显示为蓝线、顶点可拖、整条可用 gizmo 移动；开启沿路径朝向后锁定角色 Y 旋转。</p>
+    <div class="why"><b>为什么不把路径烘成关键帧</b>竞品说"轨迹生成后自动翻译成关键帧"。如果真烘成几百个位置关键帧，用户再拖一下顶点，关键帧就和路径脱节了。我们把路径做成独立的轨道类型 <code>PathTrack</code>：时间轴上只显示起点和终点两颗菱形（代表路径的时长），位置每帧从曲线实时算。用户看到的效果一样，但路径随时可改，文档里也只存几个顶点而不是几百个关键帧。</div>
+    <p>曲线用 Catmull-Rom 样条：经过每一个锚点、自然平滑，three.js 自带 <code>CatmullRomCurve3</code>。朝向就是曲线在该点的切线方向。</p>
+  </div>
+  <div class="demo">
+    <div class="title">演示 · 点几下画路径，拖进度看位置和朝向</div>
+    <div class="hint">在画布上点击加锚点（钢笔），或用模板一键生成。蓝线是样条，角色位置 = 曲线在 u 处的点，朝向 = 切线。</div>
+    <canvas id="pathCanvas" width="700" height="320"></canvas>
+    <div class="ctrl">
+      <label>进度 u <input type="range" id="pathU" min="0" max="1" step="0.005" value="0.3"></label>
+      <button data-tpl="circle">圆环</button><button data-tpl="line">直线</button><button data-tpl="rect">矩形</button><button id="pathClear">清空</button>
+      <span class="ro" id="pathRo"></span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= F ================= -->
+<section class="stage" id="f">
+  <div class="label">阶段 F · 2–3 天</div>
+  <h2>机位：运镜是路径，注视和跟随是约束</h2>
+  <div class="text">
+    <p><b>做什么。</b>你清单的四、五、六条：7 种运镜预设（环绕、半弧、推近、拉远、升降、横移、螺旋上升），分"替换"和"追加"两组，追加可多段拼接；机位也能用五种方式绘制轨迹（紫线，可离地）；注视目标（坐标或某个角色/组）；FOV 关键帧（变焦）；跟随目标（每帧约束：机位 = 角色位置 + 偏移，始终看向角色）；播放时视口切到主机位画面并隐藏辅助线，整段视频只有一个主机位。</p>
+    <div class="why"><b>为什么运镜预设只是"路径生成器"</b>"环绕"本质上就是一条围着目标的圆形路径加一个注视约束；"推近"是一条指向目标的直线。所以 7 种预设不需要 7 套代码，它们都是"按参数生成一条 PathTrack + 设一个注视目标"。追加拼接 = 把两条路径首尾相接。这也是阶段 E 的路径系统直接复用的地方。</div>
+    <p>跟随和运镜互斥的原因在阶段 C 已经定了：跟随是约束，排在最后，开了它运镜就被覆盖。</p>
+  </div>
+  <div class="demo">
+    <div class="title">演示 · 7 种运镜（俯视）</div>
+    <div class="hint">绿点是被拍的角色，紫线是运镜路径，紫色三角是机位，细线指向它正在看的点。升降和螺旋的高度用数字标出。</div>
+    <canvas id="camCanvas" width="700" height="320"></canvas>
+    <div class="ctrl">
+      <label>运镜 <select id="camPreset">
+        <option value="orbit">环绕 orbit</option><option value="half_arc">半弧 half_arc</option><option value="push_in">推近 push_in</option>
+        <option value="pull_out">拉远 pull_out</option><option value="crane">升降 crane</option><option value="truck">横移 truck</option><option value="spiral">螺旋上升 spiral</option></select></label>
+      <label>t <input type="range" id="camT" min="0" max="1" step="0.005" value="0.35"></label>
+      <label><input type="checkbox" id="camLook" checked> 注视目标</label>
+      <span class="ro" id="camRo"></span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= G ================= -->
+<section class="stage" id="g">
+  <div class="label">阶段 G · 1–2 天</div>
+  <h2>导出视频：离线逐帧，不是录屏</h2>
+  <div class="text">
+    <p><b>做什么。</b>名牌从 DOM 覆盖层改成 3D 精灵（否则进不了画面）；用 WebCodecs 逐帧渲染：第 i 帧 = <code>evaluate(i / fps)</code>，渲染、编码、封装成 MP4；Chrome/Edge 可用。产出一个 MP4 文件，"生成画布节点"的对接取决于 CanvasFlow 主产品架构，另议。</p>
+    <div class="why"><b>为什么这一步依赖铁律 ②</b>录屏（MediaRecorder）是实时的：电脑卡一下就掉帧，出来的还是 WebM。离线逐帧是"我要第 i 帧，你算给我"，机器慢只是导出久一点，帧数一帧不少。这要求任意 t 的画面都能独立算出来，也就是 evaluate(t) 不能依赖上一帧——阶段 C 就是为这一刻准备的。</div>
+  </div>
+  <div class="demo">
+    <div class="title">演示 · 实时录屏 vs 离线逐帧</div>
+    <div class="hint">模拟一台偶尔卡顿的电脑。上排是实时录屏实际拿到的帧，下排是离线逐帧。</div>
+    <canvas id="expCanvas" width="700" height="150"></canvas>
+    <div class="ctrl">
+      <label>时长 <input type="number" id="expDur" min="1" max="30" value="10" style="width:64px"> s</label>
+      <label>帧率 <select id="expFps"><option>24</option><option selected>30</option><option>60</option></select></label>
+      <button id="expRun">再模拟一次</button>
+      <span class="ro" id="expRo"></span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= H ================= -->
+<section class="stage" id="h">
+  <div class="label">阶段 H · 2–3 天</div>
+  <h2>AI 生成：模型不点按钮，它写文档</h2>
+  <div class="text">
+    <p><b>做什么。</b>文本生成：提示词 = 场景文档 schema + 预设词汇表 + 几个范例 → 模型输出一份文档 → 校验 → 不过则把错误信息喂回去重试 → 通过则加载。对话式修改：模型输出对现有文档的补丁，不重写全文。识图导入：视觉模型只负责写"角色数量、位置、朝向、机位方向"，用户选插入或覆盖。</p>
+    <div class="why"><b>为什么它反而是最薄的一层</b>到这一步，难的事都做完了：文档格式定了（B），预设有名字了（③），路径和运镜能用几个参数描述（E、F）。AI 要做的只是"用这套词汇写一份合法文档"。它写错了，校验器会告诉它哪里错；它写对了，引擎就能放出来。竞品输入"三个人玩老鹰捉小鸡"得到的那个场景，就是这样一份文档。</div>
+  </div>
+  <div class="demo">
+    <div class="title">演示 · 一句话 → 文档 → 校验 → 场景</div>
+    <div class="hint">这里的"模型"是写死的示例，用来看流程。勾上"第一次故意写错"，看校验器怎么把它打回去。</div>
+    <div class="ctrl" style="margin-top:0">
+      <input type="text" id="aiPrompt" value="三个人玩老鹰捉小鸡" style="flex:1;min-width:200px;font:inherit;padding:6px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg)" aria-label="描述想搭建的场景">
+      <label><input type="checkbox" id="aiFail" checked> 第一次故意写错</label>
+      <button class="primary" id="aiGo">生成</button>
+    </div>
+    <div class="steps" id="aiSteps">
+      <span class="step">① schema + 词汇表</span><span class="step">② 模型写文档</span><span class="step">③ 校验</span><span class="step">④ 重试</span><span class="step">⑤ 加载</span>
+    </div>
+    <div class="split">
+      <pre id="aiOut" style="min-height:280px;margin:0"><code>（点"生成"）</code></pre>
+      <div><canvas id="aiCanvas" width="520" height="400"></canvas><div class="status" id="aiStatus">等待输入</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= I ================= -->
+<section class="stage" id="i">
+  <div class="label">阶段 I · 穿插</div>
+  <h2>内容补齐</h2>
+  <div class="text">
+    <p>姿势预设从 14 个补到竞品的 24 个（坐姿、蹲下、单膝跪、双膝跪、倚靠、看手机等）；儿童、胖、壮等体型从 BodyKun 派生。这些是数据，不是代码：阶段 A 之后加一个预设就是在 <code>posePresets.js</code> 里加一行，加一个体型就是在档案表里加一项。</p>
+    <p>另外两条独立的线：虚拟相机（手机扫码手持录运镜）本质是"从外部喂一串机位关键帧"，接口在阶段 C 就有了；"生成画布节点"取决于 CanvasFlow 主产品的架构。</p>
+  </div>
+</section>
+
+<footer>总量约 15–20 个工作日。A 与 B 并行；C 必须在 D 之前；H 只依赖 B 和 C。每个阶段结束都有一个能看到的东西。</footer>
+</main>
+</div>
+
+<script>
+(function(){
+'use strict';
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const TAU = Math.PI*2;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,u)=>a+(b-a)*u;
+function fit(cv){ // keep canvas crisp at CSS width
+  const ratio = Math.min(2, window.devicePixelRatio||1);
+  const w = cv.clientWidth || cv.width/ratio; const base = +cv.getAttribute('width'), baseH = +cv.getAttribute('height');
+  const h = w*baseH/base; cv.width=Math.round(w*ratio); cv.height=Math.round(h*ratio);
+  const ctx=cv.getContext('2d'); ctx.setTransform(cv.width/base,0,0,cv.height/baseH,0,0); return ctx;
+}
+function text(ctx,s,x,y,o={}){ctx.save();ctx.fillStyle=o.color||css('--muted');ctx.font=(o.size||11)+'px '+(o.mono?css('--mono'):css('--body'));ctx.textAlign=o.align||'left';ctx.textBaseline=o.base||'alphabetic';ctx.fillText(s,x,y);ctx.restore();}
+
+/* ---------- shared: scene-document renderer (top-down) ---------- */
+const VOCAB = ['stand','walk','run','wave','bow','akimbo','think','tpose'];
+const SAMPLE_DOC = {
+  schema:"director-stage/0.1",
+  scene:{ sky:"#bfe3ff", ground:true },
+  characters:[
+    { id:"c1", name:"老鹰", body:"male", color:"#8a6b4f", pos:[-2.8,0,0.4], rotY:106, pose:"run" },
+    { id:"c2", name:"母鸡", body:"female", color:"#ff6b3d", pos:[0,0,0], rotY:0, pose:"tpose" },
+    { id:"c3", name:"小鸡", body:"child", color:"#f3c13a", pos:[1.4,0,-0.9], rotY:-20, pose:"walk" }
+  ],
+  groups:[{ id:"g1", name:"游戏成员", members:["c1","c2","c3"] }],
+  paths:[{ id:"p1", target:"c1", type:"pen", points:[[-2.8,0.4],[-1.3,0.9],[0.9,1.2],[2.4,0.3]], duration:10, faceAlong:true }],
+  cameras:[{ id:"cam1", name:"主机位", pos:[-0.7,2.2,12.4], fov:55, lookAt:"g1", move:{ preset:"half_arc", duration:10 } }],
+  timeline:{ duration:10, fps:30, main:"cam1", tracks:[] }
+};
+function validateDoc(d){
+  const errs=[];
+  if(!d||typeof d!=='object') return ['文档不是对象'];
+  if(!Array.isArray(d.characters)) errs.push('缺少 characters 数组');
+  const ids=new Set();
+  (d.characters||[]).forEach((c,i)=>{
+    if(!c.id) errs.push(`characters[${i}] 缺少 id`); else ids.add(c.id);
+    if(!Array.isArray(c.pos)||c.pos.length!==3) errs.push(`角色 ${c.name||i} 的 pos 必须是 [x,y,z]`);
+    if(c.pose && !VOCAB.includes(c.pose)) errs.push(`角色 ${c.name||i} 的姿势 "${c.pose}" 不在词汇表里`);
+  });
+  (d.groups||[]).forEach(g=>{ if(g.id) ids.add(g.id); (g.members||[]).forEach(m=>{ if(!ids.has(m)) errs.push(`编组 ${g.name} 引用了不存在的成员 ${m}`); }); });
+  (d.paths||[]).forEach(p=>{ if(!ids.has(p.target)) errs.push(`路径 ${p.id} 的 target "${p.target}" 不存在`); if(!(p.points||[]).length) errs.push(`路径 ${p.id} 没有顶点`); });
+  (d.cameras||[]).forEach(c=>{ if(c.lookAt && !ids.has(c.lookAt)) errs.push(`机位 ${c.name} 注视的 "${c.lookAt}" 不存在`); if(c.fov && (c.fov<10||c.fov>120)) errs.push(`机位 ${c.name} 的 fov 超出 10–120`); });
+  return errs;
+}
+function renderDoc(cv, d){
+  const ctx=fit(cv); const W=520,H=400; ctx.clearRect(0,0,W,H);
+  const s=34, cx=W/2, cz=H/2+40; const X=x=>cx+x*s, Z=z=>cz-z*s; // z toward camera is "down" on screen
+  ctx.strokeStyle=css('--line'); ctx.lineWidth=1;
+  for(let i=-7;i<=7;i++){ ctx.beginPath(); ctx.moveTo(X(i),0); ctx.lineTo(X(i),H); ctx.stroke(); }
+  for(let j=-10;j<=5;j++){ ctx.beginPath(); ctx.moveTo(0,Z(j)); ctx.lineTo(W,Z(j)); ctx.stroke(); }
+  text(ctx,'俯视 · 1 格 = 1 m',8,14);
+  (d.paths||[]).forEach(p=>{ const pts=(p.points||[]); if(pts.length<2)return; ctx.strokeStyle=css('--path'); ctx.lineWidth=2; ctx.beginPath(); pts.forEach((q,i)=>{ i?ctx.lineTo(X(q[0]),Z(q[1])):ctx.moveTo(X(q[0]),Z(q[1])); }); ctx.stroke(); pts.forEach(q=>{ ctx.fillStyle=css('--path'); ctx.beginPath(); ctx.arc(X(q[0]),Z(q[1]),4,0,TAU); ctx.fill(); }); });
+  (d.cameras||[]).forEach(c=>{ const p=c.pos||[0,0,8]; const x=X(p[0]), z=Z(p[2]); let ang=-Math.PI/2; // default looks toward -z (up on screen)
+    const tgt=findTarget(d,c.lookAt); if(tgt){ ang=Math.atan2(Z(tgt[1])-z, X(tgt[0])-x); }
+    const fov=(c.fov||50)*Math.PI/180; ctx.fillStyle=css('--cam'); ctx.globalAlpha=.15; ctx.beginPath(); ctx.moveTo(x,z); ctx.arc(x,z,170,ang-fov/2,ang+fov/2); ctx.closePath(); ctx.fill(); ctx.globalAlpha=1;
+    ctx.save(); ctx.translate(x,z); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(-8,-7); ctx.lineTo(-8,7); ctx.closePath(); ctx.fill(); ctx.restore();
+    text(ctx,c.name||c.id,x+12,z+4,{color:css('--cam'),size:11}); });
+  (d.characters||[]).forEach(c=>{ const p=c.pos||[0,0,0]; const x=X(p[0]), z=Z(p[2]); const r=c.body==='child'?8:11; ctx.fillStyle=c.color||css('--accent'); ctx.beginPath(); ctx.arc(x,z,r,0,TAU); ctx.fill();
+    const a=-Math.PI/2 - (c.rotY||0)*Math.PI/180; ctx.strokeStyle=css('--fg'); ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x,z); ctx.lineTo(x+Math.cos(a)*(r+9), z+Math.sin(a)*(r+9)); ctx.stroke();
+    text(ctx,(c.name||c.id)+' · '+(c.pose||'stand'),x+r+4,z-r-2,{color:css('--fg'),size:11}); });
+}
+function findTarget(d,id){ if(!id)return null; const c=(d.characters||[]).find(c=>c.id===id); if(c) return [c.pos[0],c.pos[2]];
+  const g=(d.groups||[]).find(g=>g.id===id); if(g){ const ms=g.members.map(m=>(d.characters||[]).find(c=>c.id===m)).filter(Boolean); if(!ms.length)return null; return [ms.reduce((s,c)=>s+c.pos[0],0)/ms.length, ms.reduce((s,c)=>s+c.pos[2],0)/ms.length]; } return null; }
+
+/* ---------- B demo ---------- */
+const docText=document.getElementById('docText'), docStatus=document.getElementById('docStatus'), docCanvas=document.getElementById('docCanvas');
+let lastGood=JSON.parse(JSON.stringify(SAMPLE_DOC));
+function setDoc(obj){ docText.value=JSON.stringify(obj,null,2); applyDoc(); }
+function applyDoc(){ let d; try{ d=JSON.parse(docText.value);}catch(e){ docStatus.className='status bad'; docStatus.textContent='JSON 语法错误：'+e.message; renderDoc(docCanvas,lastGood); return; }
+  const errs=validateDoc(d); if(errs.length){ docStatus.className='status bad'; docStatus.textContent='校验未通过（拒绝加载，画面保持上一次合法状态）：'+errs.join('；'); renderDoc(docCanvas,lastGood); return; }
+  lastGood=d; docStatus.className='status'; docStatus.textContent='校验通过，已加载：'+(d.characters||[]).length+' 个角色，'+(d.cameras||[]).length+' 个机位，'+(d.paths||[]).length+' 条路径'; renderDoc(docCanvas,d); }
+docText.addEventListener('input',applyDoc);
+document.getElementById('docReset').onclick=()=>setDoc(SAMPLE_DOC);
+document.getElementById('docBreak').onclick=()=>{ const d=JSON.parse(JSON.stringify(lastGood)); if(d.characters[0]) d.characters[0].pose='飞扑'; docText.value=JSON.stringify(d,null,2); applyDoc(); };
+setDoc(SAMPLE_DOC);
+
+/* ---------- C1 tween ---------- */
+const twC=document.getElementById('twCanvas'), twT=document.getElementById('twT'), twEase=document.getElementById('twEase'), twRo=document.getElementById('twRo'), twPlay=document.getElementById('twPlay');
+const KEYS=[{t:0,v:0.12},{t:4,v:0.78},{t:10,v:0.40}];
+function easeInOut(u){return u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;}
+function evalKeys(keys,t,mode){ if(t<=keys[0].t)return keys[0].v; if(t>=keys[keys.length-1].t)return keys[keys.length-1].v;
+  for(let i=0;i<keys.length-1;i++){ const a=keys[i],b=keys[i+1]; if(t>=a.t&&t<=b.t){ let u=(t-a.t)/(b.t-a.t); if(mode==='step')return a.v; if(mode==='inout')u=easeInOut(u); return lerp(a.v,b.v,u);} } return keys[0].v; }
+let twPlaying=false, twLast=0;
+function drawTw(){ const ctx=fit(twC); const W=700,H=170; ctx.clearRect(0,0,W,H); const t=+twT.value, mode=twEase.value;
+  const x0=40,x1=660, Y=v=>130-v*100; const X=tt=>x0+(x1-x0)*tt/10;
+  ctx.strokeStyle=css('--line'); ctx.beginPath(); ctx.moveTo(x0,135); ctx.lineTo(x1,135); ctx.stroke();
+  for(let s=0;s<=10;s++){ ctx.beginPath(); ctx.moveTo(X(s),135); ctx.lineTo(X(s),141); ctx.stroke(); text(ctx,s+'s',X(s),155,{align:'center',size:10,mono:true}); }
+  ctx.strokeStyle=css('--accent'); ctx.lineWidth=2; ctx.beginPath(); for(let i=0;i<=200;i++){ const tt=i/20; const v=evalKeys(KEYS,tt,mode); i?ctx.lineTo(X(tt),Y(v)):ctx.moveTo(X(tt),Y(v)); } ctx.stroke(); ctx.lineWidth=1;
+  KEYS.forEach(k=>{ ctx.fillStyle=css('--fg'); ctx.save(); ctx.translate(X(k.t),Y(k.v)); ctx.rotate(Math.PI/4); ctx.fillRect(-5,-5,10,10); ctx.restore(); });
+  const v=evalKeys(KEYS,t,mode); ctx.strokeStyle=css('--muted'); ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(X(t),20); ctx.lineTo(X(t),135); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle=css('--path'); ctx.beginPath(); ctx.arc(X(t),Y(v),8,0,TAU); ctx.fill();
+  text(ctx,'值',14,Y(1)+4); text(ctx,'关键帧 ◆ · 曲线 = 补间',x0,16,{size:11});
+  twRo.textContent=`evaluate(${t.toFixed(2)}) = ${v.toFixed(3)}`; }
+twT.oninput=drawTw; twEase.onchange=drawTw;
+twPlay.onclick=()=>{ twPlaying=!twPlaying; twPlay.textContent=twPlaying?'暂停':'播放'; if(twPlaying){ twLast=performance.now(); requestAnimationFrame(twTick);} };
+function twTick(now){ if(!twPlaying)return; const dt=(now-twLast)/1000; twLast=now; let t=+twT.value+dt; if(t>10)t=0; twT.value=t.toFixed(2); drawTw(); requestAnimationFrame(twTick); }
+
+/* ---------- C2 rotation ---------- */
+const rotC=document.getElementById('rotCanvas'), rotU=document.getElementById('rotU'), rotRo=document.getElementById('rotRo');
+function drawRot(){ const ctx=fit(rotC); const W=700,H=190; ctx.clearRect(0,0,W,H); const u=+rotU.value; const a=350,b=10;
+  const lin=lerp(a,b,u); let d=((b-a+540)%360)-180; const sh=a+d*u;
+  [[180,lin,'按数字线性插值：350° → 10° 转了 '+Math.abs(b-a)+'°'],[520,sh,'最短路径（四元数的效果）：只转 '+Math.abs(d)+'°']].forEach(([cx,ang,label])=>{
+    const cy=95,r=62; ctx.strokeStyle=css('--line'); ctx.lineWidth=1; ctx.beginPath(); ctx.arc(cx,cy,r,0,TAU); ctx.stroke();
+    [a,b].forEach((k,i)=>{ const rad=(k-90)*Math.PI/180; ctx.fillStyle=css('--fg'); ctx.beginPath(); ctx.arc(cx+Math.cos(rad)*r,cy+Math.sin(rad)*r,4,0,TAU); ctx.fill(); text(ctx,(i?'终 ':'起 ')+k+'°',cx+Math.cos(rad)*(r+18),cy+Math.sin(rad)*(r+18)+4,{align:'center',size:10,mono:true}); });
+    const rad=(ang-90)*Math.PI/180; ctx.strokeStyle=css('--accent'); ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(rad)*(r-8),cy+Math.sin(rad)*(r-8)); ctx.stroke();
+    text(ctx,label,cx,178,{align:'center',size:11,color:css('--fg')}); });
+  rotRo.textContent=`u=${u.toFixed(2)} · 线性 ${lin.toFixed(0)}° · 最短 ${((sh%360)+360)%360|0}°`; }
+rotU.oninput=drawRot;
+
+/* ---------- C3 order ---------- */
+const ordC=document.getElementById('ordCanvas'), ordT=document.getElementById('ordT'), ordF=document.getElementById('ordFollow'), ordRo=document.getElementById('ordRo'), ordSteps=document.getElementById('ordSteps');
+function drawOrd(){ const ctx=fit(ordC); const W=700,H=260; ctx.clearRect(0,0,W,H); const t=+ordT.value, follow=ordF.checked;
+  // ① keyframe tracks: character x keys; camera has its own keys (a slow truck at the top)
+  const charX=evalKeys([{t:0,v:120},{t:6,v:540},{t:10,v:300}],t,'linear'), charY=170;
+  let camX=evalKeys([{t:0,v:200},{t:10,v:500}],t,'linear'), camY=50, camSrc='① 机位自己的关键帧';
+  // ② path: none in this demo. ③ constraint: follow
+  if(follow){ camX=charX-110; camY=charY-70; camSrc='③ 跟随约束（覆盖了 ①）'; }
+  ctx.strokeStyle=css('--line'); ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(120,charY); ctx.lineTo(540,charY); ctx.lineTo(300,charY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(200,50); ctx.lineTo(500,50); ctx.stroke(); ctx.setLineDash([]);
+  [[120,charY],[540,charY],[300,charY]].forEach(([x,y])=>{ ctx.fillStyle=css('--muted'); ctx.save(); ctx.translate(x,y); ctx.rotate(Math.PI/4); ctx.fillRect(-4,-4,8,8); ctx.restore(); });
+  [[200,50],[500,50]].forEach(([x,y])=>{ ctx.fillStyle=follow?css('--line'):css('--muted'); ctx.save(); ctx.translate(x,y); ctx.rotate(Math.PI/4); ctx.fillRect(-4,-4,8,8); ctx.restore(); });
+  text(ctx,'机位关键帧轨道'+(follow?'（被约束覆盖，失效）':''),200,36,{size:10});
+  text(ctx,'角色关键帧轨道',120,charY+26,{size:10});
+  ctx.fillStyle=css('--accent'); ctx.beginPath(); ctx.arc(charX,charY,12,0,TAU); ctx.fill(); text(ctx,'角色',charX,charY-18,{align:'center',color:css('--fg')});
+  const ang=Math.atan2(charY-camY,charX-camX); ctx.strokeStyle=css('--cam'); ctx.setLineDash([2,3]); ctx.beginPath(); ctx.moveTo(camX,camY); ctx.lineTo(charX,charY); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle=css('--cam'); ctx.save(); ctx.translate(camX,camY); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(12,0); ctx.lineTo(-9,-8); ctx.lineTo(-9,8); ctx.closePath(); ctx.fill(); ctx.restore();
+  text(ctx,'机位 ← '+camSrc,camX+16,camY+4,{color:css('--cam')});
+  ordRo.textContent=`t=${t.toFixed(2)} · 角色 x=${charX.toFixed(0)} · 机位 x=${camX.toFixed(0)}`;
+  ordSteps.children[2].classList.toggle('on',follow); }
+ordT.oninput=drawOrd; ordF.onchange=drawOrd;
+
+/* ---------- C4 locomotion ---------- */
+const locoC=document.getElementById('locoCanvas'), locoV=document.getElementById('locoV'), locoRo=document.getElementById('locoRo'), locoTime=document.getElementById('locoTime');
+let locoX=60, locoDist=0, locoLast=performance.now(), locoTimePhase=0;
+function drawLoco(now){ const ctx=fit(locoC); const W=700,H=220; const dt=Math.min(.05,(now-locoLast)/1000); locoLast=now; const v=+locoV.value; const pxPerM=80;
+  locoX+=v*pxPerM*dt; locoDist+=v*dt; locoTimePhase+=dt*2.2; if(locoX>W+30){locoX=-30;}
+  const run=v>2.0; const stride=run?1.3:0.75; const phase=locoTime.checked?locoTimePhase*TAU:(locoDist/stride)*TAU;
+  ctx.clearRect(0,0,W,H); ctx.strokeStyle=css('--line'); ctx.beginPath(); ctx.moveTo(0,180); ctx.lineTo(W,180); ctx.stroke();
+  for(let i=0;i<W;i+=pxPerM){ ctx.beginPath(); ctx.moveTo(i,180); ctx.lineTo(i,186); ctx.stroke(); }
+  const A=v===0?0:(run?55:32), armA=v===0?0:(run?50:22), lean=run?12:0; const hipY=120, up=38, low=36;
+  const leg=(side,ph)=>{ const a1=(A*Math.sin(ph))*Math.PI/180; const kneeBend=Math.max(0,-Math.sin(ph))*(run?70:35)*Math.PI/180; const kx=locoX+Math.sin(a1)*up, ky=hipY+Math.cos(a1)*up; const a2=a1-kneeBend; const fx=kx+Math.sin(a2)*low, fy=ky+Math.cos(a2)*low; ctx.strokeStyle=side?css('--accent'):css('--muted'); ctx.lineWidth=6; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(locoX,hipY); ctx.lineTo(kx,ky); ctx.lineTo(fx,fy); ctx.stroke(); return [fx,fy]; };
+  const sh=hipY-52+ (v?Math.abs(Math.sin(phase))*-3:0); const shx=locoX+Math.sin(lean*Math.PI/180)*52;
+  const arm=(side,ph)=>{ const a=(-armA*Math.sin(ph))*Math.PI/180; const ex=shx+Math.sin(a)*28, ey=sh+Math.cos(a)*28; const a2=a+ (run?-1.3:-0.4); const hx=ex+Math.sin(a2)*26, hy=ey+Math.cos(a2)*26; ctx.strokeStyle=side?css('--accent'):css('--muted'); ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(shx,sh); ctx.lineTo(ex,ey); ctx.lineTo(hx,hy); ctx.stroke(); };
+  leg(0,phase+Math.PI); arm(0,phase); // back limbs first
+  ctx.strokeStyle=css('--accent'); ctx.lineWidth=8; ctx.beginPath(); ctx.moveTo(locoX,hipY); ctx.lineTo(shx,sh); ctx.stroke(); ctx.fillStyle=css('--accent'); ctx.beginPath(); ctx.arc(shx+Math.sin(lean*Math.PI/180)*14,sh-16,11,0,TAU); ctx.fill();
+  leg(1,phase); arm(1,phase+Math.PI);
+  const stepsPerS=v===0?0:v/stride; locoRo.textContent=`${v.toFixed(2)} m/s · ${v===0?'静止：不介入，保持手动姿势':(run?'跑步':'走路')} · 步幅 ${stride} m · 步频 ${stepsPerS.toFixed(2)} 步/s`;
+  text(ctx,'相位 = 路程 ÷ 步幅'+(locoTime.checked?'（已改为按时间：慢速时脚在滑）':''),12,20,{color:css('--fg')});
+  text(ctx,'已走 '+locoDist.toFixed(1)+' m',12,38,{mono:true});
+  requestAnimationFrame(drawLoco); }
+requestAnimationFrame(drawLoco);
+
+/* ---------- E path ---------- */
+const pathC=document.getElementById('pathCanvas'), pathU=document.getElementById('pathU'), pathRo=document.getElementById('pathRo');
+let pts=[[120,220],[260,110],[420,230],[580,120]];
+function catmull(p0,p1,p2,p3,u){ const u2=u*u,u3=u2*u; return [0.5*((2*p1[0])+(-p0[0]+p2[0])*u+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*u2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*u3), 0.5*((2*p1[1])+(-p0[1]+p2[1])*u+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*u2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*u3)]; }
+function curvePoint(u,closed){ const n=pts.length; if(n===1)return pts[0]; if(closed){ const seg=u*n, i=Math.floor(seg)%n, f=seg-Math.floor(seg); return catmull(pts[(i-1+n)%n],pts[i],pts[(i+1)%n],pts[(i+2)%n],f); }
+  const seg=clamp(u,0,0.99999)*(n-1), i=Math.floor(seg), f=seg-i; const P=k=>pts[clamp(k,0,n-1)]; return catmull(P(i-1),P(i),P(i+1),P(i+2),f); }
+let pathClosed=false;
+function drawPath(){ const ctx=fit(pathC); const W=700,H=320; ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle=css('--line'); for(let i=0;i<W;i+=50){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,H);ctx.stroke();} for(let j=0;j<H;j+=50){ctx.beginPath();ctx.moveTo(0,j);ctx.lineTo(W,j);ctx.stroke();}
+  if(!pts.length){ text(ctx,'点击画布加锚点',W/2,H/2,{align:'center',size:13}); pathRo.textContent=''; return; }
+  if(pts.length>=2){ ctx.strokeStyle=css('--path'); ctx.lineWidth=2.5; ctx.beginPath(); const N=200; for(let i=0;i<=N;i++){ const p=curvePoint(i/N,pathClosed); i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); } ctx.stroke(); ctx.lineWidth=1; }
+  pts.forEach((p,i)=>{ ctx.fillStyle=css('--path'); ctx.beginPath(); ctx.arc(p[0],p[1],6,0,TAU); ctx.fill(); text(ctx,String(i+1),p[0],p[1]-10,{align:'center',size:10,mono:true}); });
+  const u=+pathU.value; const p=curvePoint(u,pathClosed), q=curvePoint(Math.min(u+0.01,1),pathClosed), ang=Math.atan2(q[1]-p[1],q[0]-p[0]);
+  ctx.fillStyle=css('--accent'); ctx.beginPath(); ctx.arc(p[0],p[1],11,0,TAU); ctx.fill(); ctx.strokeStyle=css('--fg'); ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(p[0],p[1]); ctx.lineTo(p[0]+Math.cos(ang)*24,p[1]+Math.sin(ang)*24); ctx.stroke();
+  text(ctx,'角色',p[0],p[1]-16,{align:'center',color:css('--fg')});
+  pathRo.textContent=`u=${u.toFixed(3)} → 位置 (${p[0].toFixed(0)}, ${p[1].toFixed(0)}) · 朝向 ${((ang*180/Math.PI+360)%360).toFixed(0)}° · 文档里只存 ${pts.length} 个顶点`; }
+pathC.addEventListener('click',e=>{ const r=pathC.getBoundingClientRect(); const x=(e.clientX-r.left)*700/r.width, y=(e.clientY-r.top)*320/r.height; pathClosed=false; pts.push([x,y]); drawPath(); });
+pathU.oninput=drawPath; document.getElementById('pathClear').onclick=()=>{pts=[];pathClosed=false;drawPath();};
+document.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>{ const k=b.dataset.tpl; if(k==='circle'){ pts=[]; for(let i=0;i<12;i++){ const a=i/12*TAU; pts.push([350+Math.cos(a)*120,160+Math.sin(a)*100]); } pathClosed=true; }
+  else if(k==='line'){ pts=[[100,250],[600,90]]; pathClosed=false; } else { pts=[[180,80],[520,80],[520,250],[180,250]]; pathClosed=true; } drawPath(); });
+
+/* ---------- F camera moves ---------- */
+const camC=document.getElementById('camCanvas'), camP=document.getElementById('camPreset'), camT=document.getElementById('camT'), camL=document.getElementById('camLook'), camRo=document.getElementById('camRo');
+const SUBJ=[350,185];
+function camPose(preset,t){ const [sx,sy]=SUBJ; const R=130; switch(preset){
+  case 'orbit': return {x:sx+Math.cos(t*TAU-Math.PI/2)*R, y:sy+Math.sin(t*TAU-Math.PI/2)*R, h:1.6};
+  case 'half_arc': { const a=-Math.PI/2+ (t-0.5)*Math.PI; return {x:sx+Math.cos(a)*R, y:sy+Math.sin(a)*R, h:1.6}; }
+  case 'push_in': return {x:sx, y:sy+lerp(150,60,t), h:1.6};
+  case 'pull_out': return {x:sx, y:sy+lerp(60,150,t), h:1.6};
+  case 'crane': return {x:sx, y:sy+120, h:lerp(0.8,4.5,t)};
+  case 'truck': return {x:lerp(sx-180,sx+180,t), y:sy+130, h:1.6};
+  case 'spiral': { const r=lerp(150,70,t); return {x:sx+Math.cos(t*TAU*1.5-Math.PI/2)*r, y:sy+Math.sin(t*TAU*1.5-Math.PI/2)*r, h:lerp(1.2,5,t)}; } } }
+function drawCam(){ const ctx=fit(camC); const W=700,H=320; ctx.clearRect(0,0,W,H); const preset=camP.value, t=+camT.value, look=camL.checked;
+  ctx.strokeStyle=css('--line'); for(let i=0;i<W;i+=50){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,H);ctx.stroke();} for(let j=0;j<H;j+=50){ctx.beginPath();ctx.moveTo(0,j);ctx.lineTo(W,j);ctx.stroke();}
+  ctx.strokeStyle=css('--cam'); ctx.lineWidth=2; ctx.setLineDash([5,4]); ctx.beginPath(); for(let i=0;i<=100;i++){ const p=camPose(preset,i/100); i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);} ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth=1;
+  ctx.fillStyle=css('--accent'); ctx.beginPath(); ctx.arc(SUBJ[0],SUBJ[1],12,0,TAU); ctx.fill(); text(ctx,'角色（注视目标）',SUBJ[0],SUBJ[1]-18,{align:'center',color:css('--fg')});
+  const p=camPose(preset,t); let ang; if(look) ang=Math.atan2(SUBJ[1]-p.y,SUBJ[0]-p.x); else ang=-Math.PI/2;
+  if(look){ ctx.strokeStyle=css('--cam'); ctx.setLineDash([2,3]); ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(SUBJ[0],SUBJ[1]); ctx.stroke(); ctx.setLineDash([]); }
+  ctx.fillStyle=css('--cam'); ctx.globalAlpha=.14; ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.arc(p.x,p.y,120,ang-0.45,ang+0.45); ctx.closePath(); ctx.fill(); ctx.globalAlpha=1;
+  ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(13,0); ctx.lineTo(-10,-9); ctx.lineTo(-10,9); ctx.closePath(); ctx.fill(); ctx.restore();
+  text(ctx,`高 ${p.h.toFixed(1)} m`,p.x+16,p.y+4,{color:css('--cam'),mono:true});
+  text(ctx,'文档里：{ preset:"'+preset+'", duration:10, lookAt:"c1" }',12,20,{mono:true,color:css('--fg')});
+  camRo.textContent=look?'注视开：机位朝向每帧由约束算出':'注视关：机位朝向回到自己的关键帧（这里是正前方）'; }
+camP.onchange=drawCam; camT.oninput=drawCam; camL.onchange=drawCam;
+
+/* ---------- G export ---------- */
+const expC=document.getElementById('expCanvas'), expDur=document.getElementById('expDur'), expFps=document.getElementById('expFps'), expRo=document.getElementById('expRo');
+function drawExp(){ const ctx=fit(expC); const W=700,H=150; ctx.clearRect(0,0,W,H); const dur=clamp(+expDur.value||10,1,30), fps=+expFps.value, n=dur*fps; const show=Math.min(n,300); const x0=120, w=(W-x0-20)/show;
+  let dropped=0; let seed=Math.random()*1e6; const rnd=()=>{ seed=(seed*9301+49297)%233280; return seed/233280; };
+  let stall=0; for(let i=0;i<show;i++){ let lost=false; if(stall>0){stall--;lost=true;} else if(rnd()<0.04){ stall=1+Math.floor(rnd()*6); lost=true; } if(lost)dropped++; ctx.fillStyle=lost?css('--bad'):css('--muted'); ctx.fillRect(x0+i*w,40,Math.max(1,w-1),30); }
+  for(let i=0;i<show;i++){ ctx.fillStyle=css('--accent'); ctx.fillRect(x0+i*w,95,Math.max(1,w-1),30); }
+  text(ctx,'实时录屏',12,60,{color:css('--fg')}); text(ctx,'离线逐帧',12,115,{color:css('--fg')});
+  text(ctx,`前 ${show} 帧示意 · 红 = 卡顿掉帧`,x0,30,{size:10});
+  text(ctx,'每帧 = evaluate(i / '+fps+')',x0,138,{size:10,mono:true});
+  expRo.textContent=`${dur}s × ${fps}fps = ${n} 帧 · 录屏约掉 ${Math.round(dropped/show*n)} 帧 · 离线 0 帧`; }
+expDur.oninput=drawExp; expFps.onchange=drawExp; document.getElementById('expRun').onclick=drawExp;
+
+/* ---------- H ai ---------- */
+const aiGo=document.getElementById('aiGo'), aiFail=document.getElementById('aiFail'), aiOut=document.getElementById('aiOut'), aiSteps=document.getElementById('aiSteps'), aiCanvas=document.getElementById('aiCanvas'), aiStatus=document.getElementById('aiStatus');
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+function mark(i,state){ [...aiSteps.children].forEach((s,k)=>{ if(k===i){ s.className='step '+(state||'on'); } }); }
+let aiBusy=false;
+aiGo.onclick=async()=>{ if(aiBusy)return; aiBusy=true; [...aiSteps.children].forEach(s=>s.className='step'); aiStatus.className='status'; aiStatus.textContent='生成中…';
+  mark(0); await wait(400); mark(1); await wait(600);
+  let doc=JSON.parse(JSON.stringify(SAMPLE_DOC)); let attempt=1;
+  if(aiFail.checked){ doc.characters[0].pose='飞扑'; }
+  aiOut.textContent=JSON.stringify(doc,null,2);
+  mark(2); await wait(500); let errs=validateDoc(doc);
+  if(errs.length){ mark(2,'bad'); aiStatus.className='status bad'; aiStatus.textContent='第 '+attempt+' 次校验未通过：'+errs.join('；')+' → 把错误喂回模型'; await wait(900);
+    mark(3); await wait(600); doc.characters[0].pose='run'; attempt++; aiOut.textContent=JSON.stringify(doc,null,2); mark(2); await wait(500); errs=validateDoc(doc); }
+  if(!errs.length){ mark(4); renderDoc(aiCanvas,doc); aiStatus.className='status'; aiStatus.textContent='第 '+attempt+' 次校验通过，已加载。模型只写了这份文档，剩下的是引擎的事。'; }
+  aiBusy=false; };
+renderDoc(aiCanvas,{characters:[],cameras:[],paths:[]});
+
+/* ---------- init / resize ---------- */
+function drawAll(){ drawTw(); drawRot(); drawOrd(); drawPath(); drawCam(); drawExp(); renderDoc(docCanvas,lastGood); }
+drawAll();
+let rto; window.addEventListener('resize',()=>{ clearTimeout(rto); rto=setTimeout(drawAll,120); });
+if(window.matchMedia){ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',drawAll); }
+new MutationObserver(drawAll).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+})();
+</script>
