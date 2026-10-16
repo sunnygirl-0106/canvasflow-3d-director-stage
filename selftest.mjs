@@ -11,6 +11,8 @@
 //     差异图写到 dirB/_diff/。不起浏览器。
 //   node selftest.mjs calib [profileId ...]
 //     对校准页 calib.html?profile=<id> 整页截图到 test-output/calib_<id>.png（默认全部档案）。
+//   node selftest.mjs collide [preset,...]
+//     对三个档案逐个预设做穿模检测（src/dev/poseCollision.js），列出穿模部位与最大深度；有穿模则退出码 1。
 import fs from 'node:fs';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
@@ -80,6 +82,37 @@ if (CMD === 'calib') {
   await browser.close();
   await server?.close();
   process.exit(errs.length ? 1 : 0);
+}
+
+if (CMD === 'collide') {
+  await page.goto(new URL('calib.html?profile=xbot', URL_).href, { waitUntil: 'networkidle0', timeout: 30000 });
+  await page.waitForFunction(() => window.__calibReady, { timeout: 60000 });
+  const report = await page.evaluate(async (only) => {
+    const { Character } = await import('/src/entities/Character.js');
+    const { PROFILES } = await import('/src/rig/profiles/index.js');
+    const { POSE_PRESETS } = await import('/src/entities/posePresets.js');
+    const { detectPenetration } = await import('/src/dev/poseCollision.js');
+    const out = [];
+    for (const p of Object.values(PROFILES)) {
+      const ch = await Character.load(p.id, { url: p.file, profile: p, height: p.heightM });
+      for (const pr of POSE_PRESETS) {
+        if (only && !only.split(',').includes(pr.key)) continue;
+        ch.applyPosePreset(pr.key);
+        out.push({ profile: p.id, preset: pr.key, hits: detectPenetration(ch.model) });
+      }
+    }
+    return out;
+  }, ARGS[0] || '');
+  let bad = 0;
+  for (const r of report) {
+    if (!r.hits.length) continue;
+    bad++;
+    console.log(`❌ ${r.profile.padEnd(16)} ${r.preset.padEnd(7)} ` + r.hits.map((h) => `${h.pair} ${(h.depth * 100).toFixed(1)}cm×${h.count}`).join('  '));
+  }
+  console.log(`\n=== ${report.length - bad}/${report.length} 无穿模 ===`);
+  await browser.close();
+  await server?.close();
+  process.exit(bad ? 1 : 0);
 }
 
 await page.goto(URL_, { waitUntil: 'networkidle0', timeout: 30000 });
