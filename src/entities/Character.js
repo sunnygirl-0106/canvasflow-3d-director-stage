@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { Entity } from './Entity.js';
+import { Entity, hexColor } from './Entity.js';
 import { POSE_PRESET_MAP } from './posePresets.js';
 import { JOINT_SCHEMA } from '../rig/jointSchema.js';
 import { getProfile } from '../rig/profiles/index.js';
@@ -10,6 +10,8 @@ import { resolveRig } from '../rig/RigProfile.js';
 import { Pose } from '../rig/Pose.js';
 import { buildBoneMap } from '../util/boneUtil.js';
 import { worldBox } from '../util/measure.js';
+import { round6 } from '../util/round.js';
+import { bodySpec } from '../config.js';
 
 const DEFAULT_HEIGHT = 1.7;
 const DEFAULT_COLOR = 0x34c759; // 截图同款素体绿
@@ -59,12 +61,14 @@ export class Character extends Entity {
   /**
    * @param {string} name
    * @param {THREE.Object3D} model 已克隆的模型场景
-   * @param {{url:string, profile?:object|string, height?:number, girth?:number}} spec 加载规格（复制时据此重建）
+   * @param {{url:string, profile?:object|string, height?:number, girth?:number, body?:string}} spec 加载规格（复制时据此重建）
+   * @param {string} [id]
    */
-  constructor(name, model, spec) {
+  constructor(name, model, spec, id) {
     const root = new THREE.Group();
-    super('character', name, root);
+    super('character', name, root, id);
     this.spec = { ...spec };
+    this.body = spec.body ?? null; // 体型 key（BODY_TYPES），场景文档据此重建
     // 体型参数：目标身高 + 横向围度（girth=X/Z 缩放）。由单一 Xbot 素体派生高/矮/胖/瘦。
     this.height = spec.height || DEFAULT_HEIGHT;
     this._girth = spec.girth || 1;
@@ -117,15 +121,47 @@ export class Character extends Entity {
     this.autoGround = true;
 
     this._normalize(); // 在文件静止位(T-pose)下量身高 / 落地
+    this._rootY0 = root.position.y; // 站立基准：归一化后 root 的固有高度偏移（文档 pos.y=0 即站在地面）
     this._modelBaseY = model.position.y;
     this._groundY = this._lowestBoneY(); // 地面高度（root 局部坐标），自动贴地以此为准
     this.applyPose();  // 默认即站立
   }
 
   /** 异步加载工厂：模板缓存 + 克隆。 */
-  static async load(name, spec) {
+  static async load(name, spec, id) {
     const gltf = await loadTemplate(spec.url);
-    return new Character(name, cloneSkinned(gltf.scene), spec);
+    return new Character(name, cloneSkinned(gltf.scene), spec, id);
+  }
+
+  // ---- 场景文档 ----
+  // pos 相对站立基准（减去 _rootY0），scale 相对素体自然尺寸（除以 baseScale·girth），二者都与模型文件单位无关。
+  _docTransformOpts() {
+    const b = this.baseScale, g = this._girth;
+    return { posOffset: [0, this._rootY0, 0], scaleDiv: [b * g, b, b * g] };
+  }
+
+  /** @param {{parent?:string|null}} opts parent = 所属组 id（群众成员） */
+  toJSON({ parent = null } = {}) {
+    const values = {};
+    for (const [k, v] of Object.entries(this.pose.toJSON().values)) values[k] = round6(v);
+    return {
+      type: 'character', id: this.id, name: this.name, body: this.body,
+      color: hexColor(this.color), visible: this.root.visible,
+      transform: this._transformJSON(this._docTransformOpts()),
+      pose: { preset: this.currentPreset, values },
+      parent,
+    };
+  }
+
+  static async fromJSON(json) {
+    const c = await Character.load(json.name, bodySpec(json.body), json.id);
+    c._applyTransform(json.transform, c._docTransformOpts());
+    c.setColor(json.color);
+    Object.assign(c.values, Pose.fromJSON(json.pose).values); // values 是 pose.values 的别名，原地写入
+    c.currentPreset = json.pose.preset;
+    c.applyPose();
+    c.setVisible(json.visible);
+    return c;
   }
 
   labelTargets() { return [this]; }

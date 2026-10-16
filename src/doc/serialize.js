@@ -6,6 +6,7 @@ import { Character } from '../entities/Character.js';
 import { Prop } from '../entities/Prop.js';
 import { CameraEntity } from '../entities/Camera.js';
 import { Crowd } from '../entities/Crowd.js';
+import { round6, xyz } from '../util/round.js';
 
 /* global __APP_VERSION__ */
 export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
@@ -22,14 +23,7 @@ export function emptyReserved() {
 
 /** 导演相机视角（仅导入 / 恢复存档时应用，撤销忽略）。 */
 function editorView(app) {
-  const r6 = (v) => [v.x, v.y, v.z].map(round6);
-  return { pos: r6(app.stage.camera.position), target: r6(app.rig.controls.target) };
-}
-
-/** 数值统一保留 6 位小数并消除 -0：度↔弧度、相对缩放的往返误差都在 1e-12 量级，舍入后导出→导入→导出严格相等。 */
-export function round6(x) {
-  const v = Math.round(x * 1e6) / 1e6;
-  return v === 0 ? 0 : v;
+  return { pos: xyz(app.stage.camera.position), target: xyz(app.rig.controls.target) };
 }
 
 /**
@@ -53,7 +47,6 @@ export function toDocument(app, { view = true } = {}) {
   }
 
   const s = app.sceneState;
-  const xyz = (o) => [o.x, o.y, o.z].map(round6);
   const reserved = clone(app.docReserved);
   // 预留字段里的机位引用可能随机位删除而悬空：置 null 保证导出的文档始终合法
   if (reserved.timeline.mainCameraId && !app.findCamera(reserved.timeline.mainCameraId)) reserved.timeline.mainCameraId = null;

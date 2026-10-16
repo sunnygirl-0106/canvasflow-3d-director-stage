@@ -84,6 +84,11 @@ export class ShotManager {
     if (this._drop((s) => s.cameraId === cameraId)) this.app.emit('shots');
   }
 
+  /** 清掉找不到所属机位的截图（导入别的场景后）。 */
+  pruneOrphans() {
+    if (this._drop((s) => !this.app.findCamera(s.cameraId))) this.app.emit('shots');
+  }
+
   clearShots() {
     this._drop(() => true);
     this._seq = {};

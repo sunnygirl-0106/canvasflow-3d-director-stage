@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Entity } from './Entity.js';
+import { round6, xyz } from '../util/round.js';
 
 const BODY_COLOR = 0xff8a3d;   // 橙色相机体（对齐截图）
 const FRUSTUM_COLOR = 0x35a7ff; // 青蓝色视锥线
@@ -39,9 +40,9 @@ function tintHelper(helper, color) {
  * - helper 必须挂到 scene（非 root），每帧 update()。
  */
 export class CameraEntity extends Entity {
-  constructor(name, { fov = 40, aspect = 16 / 9, near = 0.1, far = 1000, scene } = {}) {
+  constructor(name, { fov = 40, aspect = 16 / 9, near = 0.1, far = 1000, scene, id } = {}) {
     const root = new THREE.Group();
-    super('camera', name, root);
+    super('camera', name, root, id);
     this._scene = scene || null;
 
     // 真实相机（作为 root 子节点，继承位姿；far 保留供二期 POV 渲染）
@@ -67,6 +68,33 @@ export class CameraEntity extends Entity {
   }
 
   get fov() { return this.cam.fov; }
+
+  /** 视锥 helper 挂到场景（从文档重建时延后到入场那一刻，避免新视锥提前出现在画面里）。 */
+  attachScene(scene) {
+    if (this._scene === scene) return;
+    if (this._scene) this._scene.remove(this.helper);
+    this._scene = scene;
+    scene.add(this.helper);
+  }
+
+  // ---- 场景文档 ----
+  // transform 为准（rot 已含荷兰角）；lookAt 只回写面板显示，不触发重新瞄准；roll 供之后改注视坐标时叠加。
+  toJSON() {
+    return {
+      type: 'camera', id: this.id, name: this.name, visible: this.root.visible,
+      transform: this._transformJSON(), fov: round6(this.cam.fov),
+      roll: round6(this._roll * 180 / Math.PI), lookAt: xyz(this.lookTarget),
+    };
+  }
+
+  static async fromJSON(json, { app }) {
+    const c = new CameraEntity(json.name, { fov: json.fov, aspect: app.viewportAspect(), id: json.id });
+    c._applyTransform(json.transform);
+    c._roll = json.roll * Math.PI / 180;
+    c.lookTarget.fromArray(json.lookAt);
+    c.setVisible(json.visible);
+    return c;
+  }
 
   labelTargets() { return [this]; }
   labelOffset() { return 0.2; }

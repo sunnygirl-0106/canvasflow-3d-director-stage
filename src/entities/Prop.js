@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Entity } from './Entity.js';
+import { Entity, hexColor } from './Entity.js';
 
 // 道具：几何体（方块/圆柱/球/人体素模）。沿用 MVP demo 思路。
 const PRIM_COLORS = [0x7ee787, 0xbc8cff, 0xffb066, 0x68d6c8, 0x4f8ef7, 0xf07b6b];
@@ -52,18 +52,37 @@ function buildPrimitive(kind, mat) {
 }
 
 export class Prop extends Entity {
-  /** @param {'box'|'cylinder'|'sphere'|'mannequin'} kind */
-  constructor(kind, name) {
+  /**
+   * @param {'box'|'cylinder'|'sphere'|'mannequin'} kind
+   * @param {string} name
+   * @param {string} [id]
+   */
+  constructor(kind, name, id) {
     const color = PRIM_COLORS[_colorIdx++ % PRIM_COLORS.length];
     const mat = stdMat(color);
     const root = new THREE.Group();
     const mesh = kind === 'mannequin' ? buildMannequin(mat) : buildPrimitive(kind, mat);
     root.add(mesh);
-    super('prop', name, root);
+    super('prop', name, root, id);
     this.kind = kind;
     this.color = color;
     this.material = mat;
     this.mesh = mesh;
+  }
+
+  toJSON() {
+    return {
+      type: 'prop', id: this.id, name: this.name, kind: this.kind,
+      color: hexColor(this.color), visible: this.root.visible, transform: this._transformJSON(),
+    };
+  }
+
+  static async fromJSON(json) {
+    const p = new Prop(json.kind, json.name, json.id);
+    p._applyTransform(json.transform);
+    p.setColor(json.color);
+    p.setVisible(json.visible);
+    return p;
   }
 
   setColor(hex) {

@@ -1,15 +1,33 @@
+import { round6, xyz } from '../util/round.js';
+
 // 实体基类：gizmo 与选择都作用于 root。
 // 各类型差异通过覆盖下列钩子表达，App 不再按 type 字符串逐个分支。
-let _idSeq = 0;
+
+const D2R = Math.PI / 180;
+const R2D = 180 / Math.PI;
+
+/**
+ * 实体 id：8 位 base36 随机串。场景文档按 id 互相引用（parent / members / activeCameraId），
+ * 必须稳定且永不复用 —— 自增计数器在"导入文档后再新建"时会与文档里的 id 撞车。
+ */
+export function genId() {
+  const buf = new Uint32Array(2);
+  crypto.getRandomValues(buf);
+  return (buf[0].toString(36) + buf[1].toString(36)).padStart(8, '0').slice(-8);
+}
+
+/** '#rrggbb'（文档颜色格式）。 */
+export const hexColor = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0').slice(-6);
 
 export class Entity {
   /**
    * @param {'character'|'prop'|'camera'|'crowd'} type
    * @param {string} name
    * @param {THREE.Object3D} root
+   * @param {string} [id] 从文档重建时传入原 id；新建时随机生成
    */
-  constructor(type, name, root) {
-    this.id = `e${++_idSeq}`;
+  constructor(type, name, root, id = genId()) {
+    this.id = id;
     this.type = type;
     this.name = name;
     this.root = root;
@@ -38,6 +56,26 @@ export class Entity {
 
   /** 每帧渲染前同步（相机视锥等）。 */
   update() {}
+
+  // ---- 场景文档 ----
+  // 子类实现 toJSON() 与 static async fromJSON(json, ctx)（ctx = { app, assets, entity(id) }）。
+
+  /** root 的局部变换 → 文档 transform（rot 为度）。scaleDiv 用于把缩放换算成相对倍数。 */
+  _transformJSON({ posOffset = [0, 0, 0], scaleDiv = [1, 1, 1] } = {}) {
+    const r = this.root;
+    const pos = xyz(r.position).map((v, i) => round6(v - posOffset[i]));
+    const scale = [r.scale.x / scaleDiv[0], r.scale.y / scaleDiv[1], r.scale.z / scaleDiv[2]].map(round6);
+    return { pos, rot: xyz(r.rotation, R2D), scale };
+  }
+
+  /** 文档 transform → root 的局部变换（_transformJSON 的逆）。 */
+  _applyTransform({ pos, rot, scale }, { posOffset = [0, 0, 0], scaleDiv = [1, 1, 1] } = {}) {
+    const r = this.root;
+    r.position.set(pos[0] + posOffset[0], pos[1] + posOffset[1], pos[2] + posOffset[2]);
+    r.rotation.set(rot[0] * D2R, rot[1] * D2R, rot[2] * D2R);
+    r.scale.set(scale[0] * scaleDiv[0], scale[1] * scaleDiv[1], scale[2] * scaleDiv[2]);
+    r.updateMatrixWorld(true);
+  }
 
   /** 释放 GPU 资源。 */
   dispose() {

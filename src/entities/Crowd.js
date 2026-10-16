@@ -1,4 +1,6 @@
+import * as THREE from 'three';
 import { Entity } from './Entity.js';
+import { Character } from './Character.js';
 
 // 群众 / 组：一个 THREE.Group 轴心 + N 个 Character 成员。
 // 选中整组时 gizmo 作用于轴心 → 整组一起变换；颜色/姿势由 Inspector 广播到全部成员。
@@ -9,9 +11,10 @@ export class Crowd extends Entity {
    * @param {THREE.Group} root 轴心（已含各成员 root 为子节点）
    * @param {import('./Character.js').Character[]} members
    * @param {{rows?:number, cols?:number}} meta
+   * @param {string} [id]
    */
-  constructor(name, root, members, meta = {}) {
-    super('crowd', name, root);
+  constructor(name, root, members, meta = {}, id) {
+    super('crowd', name, root, id);
     this.members = members;
     this.rows = meta.rows;
     this.cols = meta.cols;
@@ -19,6 +22,30 @@ export class Crowd extends Entity {
   }
 
   get children() { return this.members; }
+
+  // ---- 场景文档（type='group'）：成员按 id 引用，顺序 = members 顺序；成员 transform 相对轴心 ----
+  toJSON() {
+    return {
+      type: 'group', id: this.id, name: this.name, visible: this.root.visible,
+      transform: this._transformJSON(), members: this.members.map((m) => m.id),
+    };
+  }
+
+  static async fromJSON(json, ctx) {
+    const settled = await Promise.allSettled(json.members.map((id) => Character.fromJSON(ctx.entity(id), ctx)));
+    const failed = settled.find((r) => r.status === 'rejected');
+    if (failed) {
+      for (const r of settled) if (r.status === 'fulfilled') r.value.dispose();
+      throw failed.reason;
+    }
+    const members = settled.map((r) => r.value);
+    const root = new THREE.Group();
+    for (const m of members) root.add(m.root);
+    const crowd = new Crowd(json.name, root, members, {}, json.id);
+    crowd._applyTransform(json.transform);
+    if (!json.visible) crowd.setVisible(false); // 成员各自的显隐已在 Character.fromJSON 里还原
+    return crowd;
+  }
 
   labelTargets() { return this.members; }
 

@@ -13,6 +13,7 @@ import { worldBox } from '../util/measure.js';
 import { ShotManager } from './ShotManager.js';
 import { Panorama } from './Panorama.js';
 import { Labels } from './Labels.js';
+import { toDocument, loadDocument, emptyReserved } from '../doc/serialize.js';
 
 /**
  * 应用状态：实体清单 / 选择 / 视角（导演 ↔ 机位 POV）/ 场景参数，统筹增删选改。
@@ -24,6 +25,7 @@ import { Labels } from './Labels.js';
  *   'view'      导演视角 / 机位视角切换
  *   'scene'     场景级参数（全景等）变化
  *   'shots'     截图增删、勾选
+ *   'document'  整份场景文档被加载（导入 / 撤销 / 恢复）
  * 任何事件都意味着画面可能变化，emit 时自动请求重绘。
  */
 export class App extends Emitter {
@@ -52,6 +54,12 @@ export class App extends Emitter {
       ground: { visible: true, opacity: 0.4, height: 0 },
     };
 
+    // 场景文档：元信息与后续阶段的预留字段（paths / constraints / timeline）——导入时替换，导出时原样带出
+    this.docMeta = { name: '未命名场景', createdAt: new Date().toISOString() };
+    this.docReserved = emptyReserved();
+    this._docChain = Promise.resolve(); // 文档加载串行化（连续撤销不会交错重建）
+    this.loadingDocument = false;       // 加载期间为 true：history / 自动保存据此屏蔽
+
     const dom = stage.renderer.domElement;
     this.gizmo = new TransformGizmo(stage.camera, dom, stage.scene, rig.controls, () => !this.cameraView);
     this.gizmo.onObjectChange(() => this.emit('transform'));
@@ -64,9 +72,9 @@ export class App extends Emitter {
     this.shots = new ShotManager(this);
     this.panorama = new Panorama(stage, {
       getSky: () => this.sceneState.sky,
-      onChange: (applied) => {
-        // 设背景后自动对准主体，避免主体被宏大背景比成小不点（仅导演视角）
-        if (applied && !this.cameraView) this.frameSubjects();
+      onChange: (applied, { silent } = {}) => {
+        // 设背景后自动对准主体，避免主体被宏大背景比成小不点（仅导演视角；加载文档时不动视角）
+        if (applied && !silent && !this.cameraView) this.frameSubjects();
         this.emit('scene');
       },
     });
@@ -175,7 +183,8 @@ export class App extends Emitter {
       const ch = res.value;
       const [r, c] = cells[i];
       ch.setColor(CROWD_PALETTE[i % CROWD_PALETTE.length]);
-      ch.root.position.set(c * spacing - w / 2, 0, r * spacing - d / 2);
+      ch.root.position.x = c * spacing - w / 2; // y 保留站立基准偏移（_rootY0）
+      ch.root.position.z = r * spacing - d / 2;
       group.add(ch.root);
       members.push(ch);
     });
@@ -496,6 +505,113 @@ export class App extends Emitter {
   setGroundVisible(v) { this.sceneState.ground.visible = v; this.stage.setGroundVisible(v); }
   setGroundOpacity(v) { this.sceneState.ground.opacity = v; this.stage.setGroundOpacity(v); }
   setGroundHeight(v) { this.sceneState.ground.height = v; this.stage.setGroundHeight(v); }
+
+  // ---- 场景文档 ----
+  /** 当前场景 → 文档（见 src/doc/schema.js）。opts.view=false 时不带导演视角（撤销快照用）。 */
+  toDocument(opts) { return toDocument(this, opts); }
+
+  /**
+   * 文档 → 场景：校验通过且全部资源加载成功后，一次性替换当前场景；否则抛错、场景不变。
+   * 多次调用按顺序串行执行。
+   * @param {object} doc
+   * @param {{applyView?:boolean, pruneShots?:boolean}} opts 见 serialize.loadDocument
+   */
+  loadDocument(doc, opts = {}) {
+    const run = async () => {
+      this.loadingDocument = true;
+      try { return await loadDocument(this, doc, opts); }
+      finally { this.loadingDocument = false; }
+    };
+    const p = this._docChain.then(run, run);
+    this._docChain = p.catch(() => {});
+    return p;
+  }
+
+  /** 清空场景专用路径：不经 remove()，因此不连带删截图、不切视角、不 toast。 */
+  _clearEntities() {
+    this.selectedId = null;
+    this.selectedIds = new Set();
+    this.gizmo.detach();
+    this.selection.highlight(null);
+    for (const ent of this.entities) {
+      this.stage.remove(ent.root);
+      this.labels.detach(ent);
+      ent.dispose();
+    }
+    this.entities = [];
+  }
+
+  /** 由 serialize.loadDocument 调用：实体与全景都已就绪，同步替换（中间不会渲染出半个场景）。 */
+  _commitDocument(doc, entities, panoHandle, { applyView = false, pruneShots = false } = {}) {
+    const prevSel = this.selectedId;
+    this._clearEntities();
+    for (const ent of entities) {
+      this.stage.add(ent.root);
+      if (ent.type === 'camera') ent.attachScene(this.stage.scene);
+      ent.setHelpersVisible(!this.cameraView);
+      this.labels.attach(ent);
+      this.entities.push(ent);
+    }
+
+    const s = doc.scene;
+    this.setSceneScale(s.scale);
+    ['x', 'y', 'z'].forEach((k, i) => { this.setScenePos(k, s.pos[i]); this.setSceneRot(k, s.rot[i]); });
+    this.setSkyColor(s.sky);
+    this.setLabelsVisible(s.labels);
+    this.setGroundVisible(s.ground.visible);
+    this.setGroundOpacity(s.ground.opacity);
+    this.setGroundHeight(s.ground.height);
+    this.ratio = s.ratio;
+    this._applyFrame();
+    this.panorama.commit(panoHandle, s.panorama || undefined);
+    this.activeCameraId = s.activeCameraId;
+
+    // 视角模式是会话态：保持导演/机位视角不变；机位视角下改用文档里的当前机位
+    if (this.cameraView) {
+      const cam = this.findCamera(this.activeCameraId) || this.cameras[0];
+      if (cam) this._usePovCamera(cam);
+      else this.setCameraView(false);
+    }
+    if (applyView) this._applyEditorView(doc.meta.editorView);
+
+    this.docMeta = { name: doc.meta.name, createdAt: doc.meta.createdAt };
+    this.docReserved = JSON.parse(JSON.stringify({ paths: doc.paths, constraints: doc.constraints, timeline: doc.timeline }));
+    if (pruneShots) this.shots.pruneOrphans();
+    this._bumpNameCounters();
+
+    this.emit('entities');
+    this.emit('scene');
+    this.select(this.findEntity(prevSel) ? prevSel : null); // id 稳定：撤销后仍选中同一对象
+    this.emit('document', doc);
+  }
+
+  /** 应用导演相机视角；文档没存视角时自动取景。 */
+  _applyEditorView(view) {
+    if (!view) { this.frameSubjects(); return; }
+    this.stage.camera.position.fromArray(view.pos);
+    this.rig.controls.target.fromArray(view.target);
+    this.rig.controls.update();
+    this.rig._home.pos.copy(this.stage.camera.position); // 「重置视角」回到存档时的视角
+    this.rig._home.target.copy(this.rig.controls.target);
+  }
+
+  /** 起名计数器按已有名字推进（只增不减），避免导入后新建出重名的「角色A」「机位1」。 */
+  _bumpNameCounters() {
+    const all = this.entities.flatMap((e) => [e, ...e.children]);
+    const propKind = Object.fromEntries(Object.entries(PROP_LABEL).map(([k, v]) => [v, k]));
+    for (const { name } of all) {
+      let m;
+      if ((m = /^角色([A-Z])(\d*)$/.exec(name))) {
+        const n = ((m[2] ? +m[2] : 1) - 1) * 26 + (m[1].charCodeAt(0) - 65) + 1;
+        this._charSeq = Math.max(this._charSeq, n);
+      } else if ((m = /^机位(\d+)$/.exec(name))) this._camCount = Math.max(this._camCount, +m[1]);
+      else if ((m = /^组(\d+)$/.exec(name))) this._groupCount = Math.max(this._groupCount, +m[1]);
+      else if ((m = /^(\D+?)(\d+)$/.exec(name)) && propKind[m[1]]) {
+        const k = propKind[m[1]];
+        this._propCount[k] = Math.max(this._propCount[k] || 0, +m[2]);
+      }
+    }
+  }
 
   // ---- 洁净渲染（截图 / 机位预览）----
   /**

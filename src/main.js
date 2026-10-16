@@ -68,8 +68,9 @@ stage.startLoop({
 (async () => {
   try {
     const [a, b] = await Promise.all([app.addCharacter('male'), app.addCharacter('female')]);
-    a?.root.position.set(-1.1, 0, 0.2);
-    b?.root.position.set(1.1, 0, 0.2);
+    // 只改水平位置：y 保留各素体的站立基准偏移（脚底贴地）
+    if (a) { a.root.position.x = -1.1; a.root.position.z = 0.2; }
+    if (b) { b.root.position.x = 1.1; b.root.position.z = 0.2; }
     app.frameSubjects(); // 自动对准主体，主体占满画面
     app.select(null);
   } catch (e) { console.error('seed failed', e); }

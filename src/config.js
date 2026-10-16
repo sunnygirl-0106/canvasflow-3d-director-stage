@@ -16,10 +16,10 @@ export const BODY_TYPES = {
   xbot:   { profile: PROFILES.xbot,            label: 'Xbot 素体', height: 1.75, girth: 1.00 },
 };
 
-/** 体型 key → 角色加载规格 { url, profile, height, girth }。 */
+/** 体型 key → 角色加载规格 { url, profile, height, girth, body }。 */
 export function bodySpec(key) {
   const b = BODY_TYPES[key];
-  return b ? { url: b.profile.file, profile: b.profile, height: b.height, girth: b.girth } : null;
+  return b ? { url: b.profile.file, profile: b.profile, height: b.height, girth: b.girth, body: key } : null;
 }
 
 export const PROP_KINDS = [['box', '方块'], ['cylinder', '圆柱'], ['sphere', '球体'], ['mannequin', '人体素模']];
