@@ -9,6 +9,8 @@
 //   node selftest.mjs posediff <dirA> <dirB> [maxRatio]
 //     逐张像素对比两组截图（pixelmatch），差异像素占比 > maxRatio（默认 0.001）判失败，
 //     差异图写到 dirB/_diff/。不起浏览器。
+//   node selftest.mjs calib [profileId ...]
+//     对校准页 calib.html?profile=<id> 整页截图到 test-output/calib_<id>.png（默认全部档案）。
 import fs from 'node:fs';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
@@ -62,6 +64,23 @@ const errs = [];
 const warns = [];
 page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); if (m.type() === 'warn') warns.push(m.text()); });
 page.on('pageerror', (e) => errs.push('PAGEERROR: ' + e.message));
+
+if (CMD === 'calib') {
+  const ids = ARGS.length ? ARGS : ['xbot', 'bodykun_male', 'bodychan_female'];
+  fs.mkdirSync('test-output', { recursive: true });
+  for (const id of ids) {
+    await page.goto(new URL(`calib.html?profile=${id}`, URL_).href, { waitUntil: 'networkidle0', timeout: 30000 });
+    await page.waitForFunction(() => window.__calibReady, { timeout: 60000 });
+    const err = await page.$eval('#err', (e) => e.textContent);
+    const out = `test-output/calib_${id}.png`;
+    await page.screenshot({ path: out, fullPage: true });
+    console.log(`${err ? '❌' : '📸'} ${out}${err ? ' — ' + err : ''}`);
+  }
+  if (errs.length) console.log('❌ console 错误：\n' + errs.join('\n'));
+  await browser.close();
+  await server?.close();
+  process.exit(errs.length ? 1 : 0);
+}
 
 await page.goto(URL_, { waitUntil: 'networkidle0', timeout: 30000 });
 await page.waitForFunction(() => window.__app && window.__app.entities.filter((e) => e.type === 'character' && e.bones?.size > 0).length >= 2, { timeout: 30000 });
