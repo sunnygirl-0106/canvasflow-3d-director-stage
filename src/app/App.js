@@ -155,14 +155,14 @@ export class App extends Emitter {
   }
 
   // ---- 群众阵列（组）----
-  /** 行×列网格生成 N 个标准素体（并行加载，模板只下载一次），挂在一个轴心组下。 */
+  /** 行×列网格生成 N 个男性素体（并行加载，模板只下载一次），挂在一个轴心组下。 */
   async addCrowd(rows = 3, cols = 3, spacing = 1.2) {
     rows = Math.max(1, Math.min(6, Math.round(rows)));
     cols = Math.max(1, Math.min(6, Math.round(cols)));
     spacing = Math.max(0.5, Math.min(5, spacing));
     toast(`加载群众阵列 ${rows}×${cols} …`);
 
-    const spec = bodySpec('standard');
+    const spec = bodySpec('male');
     const cells = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cells.push([r, c]);
     const results = await Promise.allSettled(cells.map(() => this._loadCharacter(spec)));

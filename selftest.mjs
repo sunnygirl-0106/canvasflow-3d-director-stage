@@ -119,17 +119,26 @@ async function shootPoses(outDir, bodyKey) {
 // 1 骨骼/restQ + 归一化（身高 = 体型注册表里的目标身高）
 const ci = await page.evaluate(async () => {
   const { BODY_TYPES } = await import('/src/config.js');
-  const c = window.__app.entities.find((e) => e.type === 'character');
-  return { bones: c.bones.size, restQ: c.restQ.size, base: c.baseScale, y: c.root.position.y, h: c.height, want: BODY_TYPES.standard.height };
+  const c = window.__app.entities.find((e) => e.type === 'character' && e.profile.id === BODY_TYPES.male.profile.id);
+  return { bones: c.bones.size, restQ: c.restQ.size, base: c.baseScale, y: c.root.position.y, h: c.height, want: BODY_TYPES.male.height };
 });
 ok('GLB 加载：骨骼表/restQ', ci.bones > 20 && ci.restQ > 10, `bones=${ci.bones} restQ=${ci.restQ}`);
 ok('身高归一化 + 落地 + baseScale', Math.abs(ci.h - ci.want) < 1e-3 && Math.abs(ci.y) < 0.2 && ci.base > 0, `h=${ci.h} baseScale=${ci.base.toFixed(3)} rootY=${ci.y.toFixed(3)}`);
 
+// 1a 默认人偶（男/女）骨骼档案完整兼容
+const compat = await page.evaluate(() => window.__app.entities.filter((e) => e.type === 'character')
+  .map((c) => `${c.profile.id}:${c.missingJoints.length}`).sort().join(' ')); // 并行加载，入列顺序不定
+ok('默认男/女人偶：档案关节全部命中', compat === 'bodychan_female:0 bodykun_male:0', compat);
+
 // 1b 模板缓存：同源角色共享几何体（只下载/上传一次）
-const shared = await page.evaluate(() => {
-  const [a, b] = window.__app.entities.filter((e) => e.type === 'character');
+const shared = await page.evaluate(async () => {
+  const app = window.__app;
+  const b = await app.addCharacter('male');
+  const a = app.entities.find((e) => e.type === 'character' && e !== b && e.spec.url === b.spec.url);
   const geo = (c) => { let g = null; c.model.traverse((o) => { if (!g && o.isSkinnedMesh) g = o.geometry; }); return g; };
-  return geo(a) && geo(a) === geo(b) && a._mats[0] !== b._mats[0];
+  const res = !!a && geo(a) && geo(a) === geo(b) && a._mats[0] !== b._mats[0];
+  app.remove(b.id); app.select(null);
+  return res;
 });
 ok('GLB 模板缓存：几何体共享、材质独立', shared);
 
@@ -188,7 +197,7 @@ const neutral = await page.evaluate(() => {
   const standZero = c.pose.isZero() && arm.quaternion.angleTo(rest) * 180 / Math.PI > 60;
   c.applyPosePreset('tpose');
   let tposeAtRest = true;
-  for (const [bone, q] of c.restQ) if (bone.quaternion.angleTo(q) > 1e-4) tposeAtRest = false;
+  for (const [bone, q] of c.restQ) if (!bone.quaternion.equals(q)) tposeAtRest = false; // 总角度 0 → 逐分量等于 restQ（文件里的 restQ 未必严格单位长，不能用 angleTo/dot）
   const tposeVals = c.values.lArmAbd === -c.profile.neutralOffset.lArmAbd;
   c.resetPose();
   return { standZero, tposeAtRest, tposeVals, resetStand: c.pose.isZero() && arm.quaternion.angleTo(rest) * 180 / Math.PI > 60 };

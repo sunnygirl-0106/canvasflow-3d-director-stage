@@ -64,10 +64,10 @@ stage.startLoop({
   beforeRender: () => { app.beforeRender(); navGizmo.update(); },
 });
 
-// ---- seed：两个角色，默认未选中（右侧显示 3D场景面板）----
+// ---- seed：男女各一个角色，默认未选中（右侧显示 3D场景面板）----
 (async () => {
   try {
-    const [a, b] = await Promise.all([app.addCharacter('standard'), app.addCharacter('standard')]);
+    const [a, b] = await Promise.all([app.addCharacter('male'), app.addCharacter('female')]);
     a?.root.position.set(-1.1, 0, 0.2);
     b?.root.position.set(1.1, 0, 0.2);
     app.frameSubjects(); // 自动对准主体，主体占满画面
