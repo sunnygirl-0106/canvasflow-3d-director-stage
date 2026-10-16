@@ -224,10 +224,18 @@ async function docTest() {
     a.setActiveCamera(c1.id);
     a.select(null);
     a.rig.controls.target.set(0, 0.9, -0.8); a.stage.camera.position.set(2.5, 2.6, 6.5); a.rig.controls.update();
+    // 动画数据（阶段 C）：轨道 / 路径 / 约束也要往返一致
+    const tl = a.timeline;
+    const tr = tl.addTrack({ target: p.id, property: 'rot' });
+    tl.setKey(tr.id, 0, [0, 0, 0]); tl.setKey(tr.id, 3, [0, 90, 0], 'smooth');
+    tl.addTrack({ target: c2.id, property: 'fov' }); // 空轨道
+    tl.addPath({ target: crowd.id, points: [[-0.4, 0, -3.2], [1.5, 0, -2], [3, 0, -3]], start: 1, duration: 5, speed: 'smooth', orient: 'tangent' });
+    tl.addConstraint({ type: 'lookAt', target: c2.id, subject: f.id, start: 0.5, end: 6 });
+    tl.setDuration(12); tl.setMainCamera(c1.id);
     a.history.reset();
-    return { n: a.entities.length, cams: a.cameras.length, pano: a.panorama.active };
+    return { n: a.entities.length, cams: a.cameras.length, pano: a.panorama.active, anim: tl.tracks.length + tl.paths.length + tl.constraints.length };
   });
-  ok('文档：API 搭建场景', built.n === 6 && built.cams === 2 && built.pano, JSON.stringify(built));
+  ok('文档：API 搭建场景（含动画轨道 / 路径 / 约束）', built.n === 6 && built.cams === 2 && built.pano && built.anim === 4, JSON.stringify(built));
 
   // ---- 2 截图 A → doc1 → 清空 → load(doc1) → 截图 B → doc2 ----
   const shotA = await shootViewport(`${OUT}/A_director.png`);
@@ -594,6 +602,121 @@ async function animTest() {
   ok('约束：follow 相对偏移恒等于 offset（subject yaw 坐标系），覆盖 pos 轨道', cons.maxOff < 1e-6, `max ${cons.maxOff.toExponential(2)}m`);
   ok('约束：follow 朝向随 subject yaw 刚性旋转', cons.maxRot < 1e-3, `max ${cons.maxRot.toExponential(2)}°`);
   ok('约束：生效区间外 follow 失效，pos 轨道接管', Math.abs(cons.trackX + 3) < 1e-9, `x=${cons.trackX}`);
+  // ======== 验收 1–6：完整动画场景（pos/rot/scale/fov 轨道各 1、角色路径 1、lookAt 1、follow 1）========
+  await buildAnimScene().then((v) => Object.assign(ids, v));
+  await page.evaluate(async (ids) => {
+    const a = window.__app, tl = a.timeline;
+    const tp = tl.addTrack({ target: ids.f, property: 'pos' });
+    tl.setKey(tp.id, 0, [1.0, 0, 0.6]); tl.setKey(tp.id, 6, [2.2, 0, -0.8], 'smooth');
+    const tr = tl.addTrack({ target: ids.f, property: 'rot' });
+    tl.setKey(tr.id, 0, [0, 0, 0]); tl.setKey(tr.id, 6, [0, -120, 0]);
+    const ts = tl.addTrack({ target: ids.m, property: 'scale' });
+    tl.setKey(ts.id, 0, [1, 1, 1]); tl.setKey(ts.id, 8, [1.15, 1.15, 1.15]);
+    const tf = tl.addTrack({ target: ids.c1, property: 'fov' });
+    tl.setKey(tf.id, 0, 40); tl.setKey(tf.id, 8, 28, 'smooth');
+    tl.addPath({ target: ids.m, points: [[-1.2, 0, 0], [-0.5, 0, 2], [1, 0, 3], [2.5, 0, 2.5]], start: 0.5, duration: 6, speed: 'smooth', orient: 'tangent' });
+    tl.addConstraint({ type: 'lookAt', target: ids.c1, subject: ids.m });
+    tl.addConstraint({ type: 'follow', target: ids.c2, subject: ids.f, offset: [0.3, 1.5, 2.2] });
+    a.history.reset();
+  }, ids);
+  // 被驱动属性的全量记录
+  const record = () => page.evaluate(() => {
+    const a = window.__app, out = [];
+    for (const e of a.entities.flatMap((x) => [x, ...x.children])) {
+      out.push(...e.root.position.toArray(), ...e.root.quaternion.toArray(), ...e.root.scale.toArray());
+      if (e.type === 'camera') out.push(e.cam.fov);
+      if (e.type === 'character') out.push(...Object.values(e.values), e.model.position.y);
+    }
+    return out;
+  });
+  const manualShot = await shootViewport(`${OUT}/manual.png`);
+  const manualDoc = await page.evaluate(() => window.__app.toDocument());
+  const prop0 = await page.evaluate((id) => window.__app.findEntity(id).root.position.toArray(), ids.p);
+
+  // 1 纯函数：真实播放 2.0 s → 暂停记录；stop → seek(同一时刻) 再记录
+  await page.evaluate(() => window.__app.playback.play());
+  await new Promise((r) => setTimeout(r, 2000));
+  const tPlay = await page.evaluate(() => { window.__app.playback.pause(); return window.__app.playback.time; });
+  const recA = await record();
+  await page.evaluate((t) => { const pb = window.__app.playback; pb.stop(); pb.seek(t); }, tPlay);
+  const recB = await record();
+  const maxDiff = recA.reduce((m, v, i) => Math.max(m, Math.abs(v - recB[i])), recA.length === recB.length ? 0 : Infinity);
+  ok('验收1 纯函数：播放到 t 与直接 seek(t) 逐项差 < 1e-6', maxDiff < 1e-6, `t=${tPlay.toFixed(3)}s，${recA.length} 个数，max 差 ${maxDiff.toExponential(2)}`);
+
+  // 2 跳转一致：seek(0)→seek(7.3)→seek(2.5) ≡ 直接 seek(2.5)
+  await page.evaluate(() => { const pb = window.__app.playback; pb.stop(); pb.seek(0); pb.seek(7.3); pb.seek(2.5); });
+  const jumpA = await shootViewport(`${OUT}/seek_jump_2.5.png`);
+  await page.evaluate(() => { const pb = window.__app.playback; pb.stop(); pb.seek(2.5); });
+  const jumpB = await shootViewport(`${OUT}/seek_direct_2.5.png`);
+  const dJump = pixelDiff(jumpA, jumpB, `${OUT}/_diff_seek.png`);
+  ok('验收2 跳转一致：截图像素差 0%', dJump === 0, `${(dJump * 100).toFixed(4)}%`);
+
+  // 3 手动值保持：未打键的道具 t=0 / t=5 / stop 后不变；stop 后整场 ≡ 进入 active 前
+  const hold = await page.evaluate((id) => {
+    const a = window.__app, pb = a.playback, p = a.findEntity(id);
+    pb.seek(0); const p0 = p.root.position.toArray();
+    pb.seek(5); const p5 = p.root.position.toArray();
+    return { p0, p5 };
+  }, ids.p);
+  // 4 导出不污染：t=5 时导出
+  const docAt5 = await page.evaluate(() => window.__app.toDocument());
+  await shootViewport(`${OUT}/t5.png`);
+  await page.evaluate(() => window.__app.playback.stop());
+  const pStop = await page.evaluate((id) => window.__app.findEntity(id).root.position.toArray(), ids.p);
+  const stopShot = await shootViewport(`${OUT}/after_stop.png`);
+  const same3 = (x) => JSON.stringify(x) === JSON.stringify(prop0);
+  ok('验收3 手动值保持：未打键道具 t=0 / t=5 / stop 后位置不变', same3(hold.p0) && same3(hold.p5) && same3(pStop));
+  const dStop = pixelDiff(manualShot, stopShot, `${OUT}/_diff_stop.png`);
+  ok('验收3 stop() 后整场截图 ≡ 进入 active 前', dStop === 0, `${(dStop * 100).toFixed(4)}%`);
+  const strip = (d) => JSON.stringify({ ...d, meta: { ...d.meta, updatedAt: null } });
+  const charT = (d) => JSON.stringify(d.entities.filter((e) => e.type === 'character').map((e) => [e.transform, e.pose]));
+  ok('验收4 导出不污染：t=5 导出的角色 transform / 姿势 ≡ 进入 active 前', charT(docAt5) === charT(manualDoc) && strip(docAt5) === strip(manualDoc));
+
+  // 5 往返：导出 → 清空 → 导入 → 导出；导入后 seek(3) 截图 ≡ 导入前 seek(3)
+  await page.evaluate(() => window.__app.playback.seek(3));
+  const rtA = await shootViewport(`${OUT}/roundtrip_before_t3.png`);
+  const rtDoc1 = await page.evaluate(() => window.__app.toDocument());
+  fs.writeFileSync(`${OUT}/doc1.json`, JSON.stringify(rtDoc1, null, 2));
+  await page.evaluate(async (d) => {
+    const { createEmptyDocument } = await import('/src/doc/schema.js');
+    const a = window.__app;
+    a.playback.stop();
+    await a.loadDocument(createEmptyDocument());
+    await a.loadDocument(d, { applyView: true });
+  }, rtDoc1);
+  const rtDoc2 = await page.evaluate(() => window.__app.toDocument());
+  fs.writeFileSync(`${OUT}/doc2.json`, JSON.stringify(rtDoc2, null, 2));
+  ok('验收5 往返：含 timeline 的 doc1 ≡ doc2（忽略 updatedAt）', strip(rtDoc1) === strip(rtDoc2) && rtDoc1.timeline.tracks.length === 4 && rtDoc1.paths.length === 1 && rtDoc1.constraints.length === 2);
+  await page.evaluate(() => window.__app.playback.seek(3));
+  const rtB = await shootViewport(`${OUT}/roundtrip_after_t3.png`);
+  const dRt = pixelDiff(rtA, rtB, `${OUT}/_diff_roundtrip.png`);
+  ok('验收5 导入后 seek(3) 截图 ≡ 导入前', dRt === 0, `${(dRt * 100).toFixed(4)}%`);
+  await page.evaluate(() => window.__app.playback.stop());
+
+  // 6 撤销：addTrack → setKey → addPath，撤销 ×3、重做 ×3，每步 timeline.toJSON 与操作时一致
+  const undo = await page.evaluate(async (ids) => {
+    const a = window.__app, tl = a.timeline, h = a.history;
+    const wait = () => new Promise((r) => setTimeout(r, 20));
+    h.reset();
+    const snaps = [JSON.stringify(tl.toJSON())];
+    const tr = tl.addTrack({ target: ids.p, property: 'pos' }); await wait(); snaps.push(JSON.stringify(tl.toJSON()));
+    tl.setKey(tr.id, 1, [0.2, 0.5, -1.4]); await wait(); snaps.push(JSON.stringify(tl.toJSON()));
+    tl.addPath({ target: ids.c1, points: [[0, 2, 5], [3, 2, 4]], duration: 3 }); await wait(); snaps.push(JSON.stringify(tl.toJSON()));
+    const res = [h.entries.length];
+    for (let i = 2; i >= 0; i--) { await h.undo(); res.push(JSON.stringify(tl.toJSON()) === snaps[i]); }
+    for (let i = 1; i <= 3; i++) { await h.redo(); res.push(JSON.stringify(tl.toJSON()) === snaps[i]); }
+    return res;
+  }, ids);
+  ok('验收6 撤销：三步各记一步，撤销 ×3 / 重做 ×3 的 timeline 与操作时一致', undo[0] === 4 && undo.slice(1).every(Boolean), JSON.stringify(undo));
+
+  // 步态示意图：角色沿路径行走 t=1..6 叠在一张图（导演视角）
+  await page.evaluate(() => window.__app.playback.seek(0));
+  for (const t of [1.5, 3.5, 5.5]) {
+    await page.evaluate((t) => window.__app.playback.seek(t), t);
+    await shootViewport(`${OUT}/scene_t${t}.png`);
+  }
+  await page.evaluate(() => window.__app.playback.stop());
+
   ok('文档：删除实体连带删除引用它的路径 / 约束', bad.pruned.paths === 0 && bad.pruned.constraints === 0 && bad.pruned.tracks === 2 && bad.pruned.valid, JSON.stringify(bad.pruned));
   ok('坏文档：基准文档（含 timeline / paths / constraints）合法', bad.good.ok, bad.good.errors.slice(0, 3).join(' | '));
   for (const b of bad.out) ok(`坏文档：${b.name}`, b.ok && b.located && b.rejected && b.unchanged, b.first);

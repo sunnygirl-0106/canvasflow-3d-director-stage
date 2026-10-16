@@ -26,6 +26,7 @@
 - **取景与截图** — 多比例取景框（21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16 / 自由），所见即所得裁剪导出 PNG（不含辅助 gizmo），截图带历史管理。
 - **全景背景** — 载入 2:1 等距柱状全景图作为环境，或自定义天空颜色。
 - **场景编排** — 左侧清单支持搜索、显隐、改名、多选，以及打组 / 副本 / 批量删除等右键操作。
+- **动画内核（无界面，供时间轴 / AI 调用）** — 角色 / 道具 / 组 / 机位的位置 · 旋转 · 缩放 · FOV 关键帧；沿 Catmull-Rom 路径移动（切线朝向、匀速 / 缓入缓出）；角色沿路径自动切程序化步行 / 跑步（脚踩点 + 腿部 IK，不悬空不打滑，停下恢复原姿势）；机位注视 / 刚性跟随约束。任意时刻状态 = `timeline.evaluate(t)`，播放与跳转结果逐数值一致；播放中导出 / 撤销记的是手动值。
 
 ## 🚀 快速开始
 
@@ -44,11 +45,29 @@ npm run test:e2e     # 端到端自测（headless Chrome，自动起 dev server�
 node selftest.mjs poses <outDir> [bodyKey]   # 单角色逐个套姿势预设截图（默认 xbot）
 node selftest.mjs posediff <dirA> <dirB>     # 两组姿势截图逐像素对比（pixelmatch）
 node selftest.mjs calib [profileId ...]      # 校准页整页截图 → test-output/calib_<id>.png
-node selftest.mjs collide [preset,...]       # 姿势预设穿模检测（改预设后必跑）
+node selftest.mjs collide [preset,...]       # 姿势预设 + 步态（gait：走 / 跑各 8 相位）穿模检测（改预设 / 步态后必跑）
 node selftest.mjs doc                        # 场景文档验收：往返一致 / 坏文档拒绝 / 撤销重做 → test-output/doc/
+node selftest.mjs anim                       # 动画内核验收：纯函数 / 跳转 / 导出不污染 / 往返 / 撤销 / 步态 / 约束 → test-output/anim/
 ```
 
 开发时校准页：`npm run dev` 后打开 `/calib.html?profile=bodykun_male`。
+
+## 🎞️ 动画 API（阶段 C，暂无界面）
+
+控制台里通过 `__app.timeline` / `__app.playback` 调用；所有增删改都会校验（规则与导入文档一致，不合法抛 `DocumentError`）并记一步撤销。值的口径与文档 `transform` 相同（角色 pos 相对站立基准，rot 为 XYZ 欧拉角度数）。
+
+```js
+const tl = __app.timeline, pb = __app.playback;
+const [a] = __app.entities;                                   // 某个角色
+tl.addPath({ target: a.id, points: [[0,0,0],[2,0,3],[4,0,3]], duration: 4, speed: 'smooth', orient: 'tangent' });
+const cam = __app.cameras[0];
+tl.addConstraint({ type: 'lookAt', target: cam.id, subject: a.id });
+const fov = tl.addTrack({ target: cam.id, property: 'fov' });
+tl.setKey(fov.id, 0, 40); tl.setKey(fov.id, 4, 25, 'smooth');
+pb.play();            // pause() / seek(t) / stop()（回到手动值）/ loop = true
+```
+
+词汇表（AI 用，定了不改）：property `pos / rot / scale / fov`；ease `linear / smooth / step`；路径 speed `linear / smooth`、orient `tangent / keep`；约束 `lookAt / follow`。文档形状见 `src/doc/schema.js` 顶部注释。
 
 ## ⌨️ 操作
 
@@ -88,6 +107,14 @@ src/
 │  ├─ schema.js         版本号 / 文档形状说明 / 默认值 / validate（错误定位到字段路径）
 │  ├─ serialize.js      toDocument / loadDocument（先建好再一次性替换，失败不留半个场景）
 │  └─ migrate.js        按版本逐级升级
+├─ anim/                动画内核（无界面）：文档里的 timeline / paths / constraints → evaluate(t)
+│  ├─ Timeline.js       数据持有 + idle/active + base 快照 + evaluate（关键帧 → 路径/步态 → 约束）+ 编辑 API
+│  ├─ Playback.js       play / pause / stop / seek / loop（挂在 Stage 按需渲染循环上）
+│  ├─ Channel.js        关键帧插值（位置/缩放/FOV 线性，旋转四元数 slerp）· Track.js 轨道
+│  ├─ Path.js           Catmull-Rom + 弧长表 + 速度曲线 · PathTrack.js 沿路径移动 / 切线朝向
+│  ├─ Locomotion.js     程序化步态（相位按路程；脚踩点 + 两段腿 IK；走跑混合）
+│  ├─ Constraint.js     lookAt / follow
+│  └─ ease.js           linear / smooth / step
 ├─ rig/                 姿势与模型解耦层
 │  ├─ jointSchema.js    语义关节表（与模型无关；min/max 相对站立）
 │  ├─ profiles/         骨骼档案：每个模型一份（骨头 / 轴向 / 正负 / 站立偏移）
@@ -100,7 +127,7 @@ src/
 └─ styles/style.css
 public/assets/          Xbot.glb（中性素体，meshopt 压缩）
 public/assets/figures/  BodyKun / BodyChan 关节人偶 GLB + 交接文档
-docs/                   技术规划文档
+docs/                   交接文档 / 技术规划 / 任务说明（已完成的在 docs/done/）
 ```
 
 ## 🧍 人偶资产规范
