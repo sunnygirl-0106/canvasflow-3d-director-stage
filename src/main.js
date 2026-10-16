@@ -44,11 +44,27 @@ $('helpBtn').onclick = () =>
   toast('空白拖动=环绕视角 · 拖三色 gizmo=变换选中 · 底部「＋」加角色/模型 · 右侧「姿势」摆全身');
 $('closeBtn').onclick = () => toast('（演示）关闭');
 
-// 键盘：输入控件内不拦截
+// 撤销重做：每个用户操作结束后记一步（快照与栈顶相同则不记）。
+// 拖动类操作（gizmo / 轴标签拖动 / 滑条）只在 pointerup / change 时记录，不按帧记录；
+// 异步完成的操作（加角色 / 群众 / 复制 / 全景）在 'entities' / 'scene' 事件时记录。
+const history = app.history;
+for (const t of ['pointerup', 'click', 'change', 'keyup']) window.addEventListener(t, () => history.schedule());
+app.on('entities', () => history.schedule());
+app.on('scene', () => history.schedule());
+
+// 键盘：输入控件内不拦截（文本框里的 ⌘Z 留给浏览器做文字撤销）
 window.addEventListener('keydown', (e) => {
   const t = e.target;
   if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
   const k = e.key.toLowerCase();
+  if (e.metaKey || e.ctrlKey) {
+    // ⌘Z / Ctrl+Z 撤销；⌘⇧Z / Ctrl+Shift+Z / Ctrl+Y 重做
+    if (k === 'z' || k === 'y') {
+      e.preventDefault();
+      if (k === 'y' || e.shiftKey) history.redo(); else history.undo();
+    }
+    return;
+  }
   if (k === 'v') app.setTransformMode('translate');
   else if (k === 'r') app.setTransformMode('rotate');
   else if (k === 's') app.setTransformMode('scale');
@@ -74,4 +90,5 @@ stage.startLoop({
     app.frameSubjects(); // 自动对准主体，主体占满画面
     app.select(null);
   } catch (e) { console.error('seed failed', e); }
+  history.reset(); // 种子场景作为撤销起点（之前的添加不进撤销栈）
 })();

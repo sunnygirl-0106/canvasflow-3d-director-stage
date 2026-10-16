@@ -10,9 +10,12 @@ const svg = (name, w = 21) => icon(name, w);
 
 // 素体清单从体型注册表生成（单一事实来源，见 config.js）
 const CHARACTERS = Object.entries(BODY_TYPES).map(([key, v]) => [key, v.label]);
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const KEY_UNDO = IS_MAC ? '⌘Z' : 'Ctrl+Z';
+const KEY_REDO = IS_MAC ? '⇧⌘Z' : 'Ctrl+Y';
 const TF_MODES = [['translate', 'move', '移动'], ['rotate', 'rotate', '旋转'], ['scale', 'scale', '缩放']];
 
-// 底部悬浮工具坞：变换 / 添加 / 全景图 / 机位 / 比例 / 截图 / 全屏
+// 底部悬浮工具坞：变换 / 添加 / 全景图 / 机位 / 比例 / 截图 / 场景（撤销·重做·导出·导入）/ 全屏
 export class Dock {
   constructor(container, app) {
     this.app = app;
@@ -39,12 +42,13 @@ export class Dock {
 
   _sep() { return el('div', { class: 'dock-sep' }); }
 
-  // 通用菜单项（可选打勾）
-  _item(iconName, label, onClick, checked = false, iconSize = 17) {
-    return el('div', { class: 'menu-item', onclick: onClick }, [
+  // 通用菜单项（可选打勾 / 快捷键提示 / 禁用）
+  _item(iconName, label, onClick, checked = false, iconSize = 17, { key, disabled } = {}) {
+    return el('div', { class: 'menu-item' + (disabled ? ' disabled' : ''), onclick: onClick }, [
       el('span', { class: 'mi-ic', html: iconName ? svg(iconName, iconSize) : '' }),
       el('span', { class: 'mi-label', text: label }),
       checked ? el('span', { class: 'mi-check', text: '✓' }) : null,
+      key ? el('span', { class: 'mi-key', text: key }) : null,
     ]);
   }
 
@@ -78,11 +82,15 @@ export class Dock {
     // 6 截图
     const shot = this._btn('shot', '截图', () => app.shots.captureShot());
 
-    // 7 全屏（发送按钮已移除，职能迁移到右侧「摄像机截图」面板）
+    // 7 场景：撤销 / 重做 / 导出 / 导入
+    const scene = this._btn('scene', '场景（撤销 / 重做 / 导出 / 导入）', (e) => { e.stopPropagation(); this.sceneMenu.toggle(); });
+    this.sceneBtn = scene;
+
+    // 8 全屏（发送按钮已移除，职能迁移到右侧「摄像机截图」面板）
     const full = this._btn('expand', '全屏', () => this._toggleFullscreen());
     this.fullBtn = full;
 
-    c.append(tf, addBtn, pano, camAdd, this._sep(), frame, shot, this._sep(), full);
+    c.append(tf, addBtn, pano, camAdd, this._sep(), frame, shot, this._sep(), scene, full);
 
     // ---- 菜单（统一由 DockMenu 管理）----
     this.menu = new DockMenu(c);
@@ -96,6 +104,7 @@ export class Dock {
     this.addMenu = this.menu.create({ anchor: addBtn, build: () => this._buildAddItems() });
     this.panoMenu = this.menu.create({ anchor: pano, build: () => this._buildPanoItems() });
     this.camMenu = this.menu.create({ anchor: camAdd, className: 'cammenu', build: () => this._buildCamItems() });
+    this.sceneMenu = this.menu.create({ anchor: scene, minWidth: '170px', build: () => this._buildSceneItems() });
 
     this.ratioMenu = this.menu.create({
       anchor: frame, minWidth: '150px',
@@ -219,6 +228,15 @@ export class Dock {
       }
     }
     return items;
+  }
+
+  // ---- 场景菜单 ----
+  _buildSceneItems() {
+    const h = this.app.history;
+    return [
+      this._item('undo', '撤销', () => { this.menu.close(); h.undo(); }, false, 17, { key: KEY_UNDO, disabled: !h.canUndo }),
+      this._item('redo', '重做', () => { this.menu.close(); h.redo(); }, false, 17, { key: KEY_REDO, disabled: !h.canRedo }),
+    ];
   }
 
   _toggleFullscreen() {

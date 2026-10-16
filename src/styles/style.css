@@ -234,6 +234,8 @@ main { flex: 1; display: flex; min-height: 0; }
 .menu-item input[type=file] { display: none; }
 .menu-item .mi-label { flex: 1; }
 .menu-item .mi-check { margin-left: 12px; color: var(--accent); font-size: 12px; }
+.menu-item .mi-key { margin-left: 16px; color: var(--dim2); font-size: 11px; letter-spacing: .04em; }
+.menu-item.disabled { opacity: .38; pointer-events: none; }
 
 /* 菜单分组标题（机位预设） */
 .menu-group { font-size: 11px; color: var(--dim2); padding: 8px 12px 4px; letter-spacing: .4px; }

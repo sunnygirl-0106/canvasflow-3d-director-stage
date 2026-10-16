@@ -14,6 +14,7 @@ import { ShotManager } from './ShotManager.js';
 import { Panorama } from './Panorama.js';
 import { Labels } from './Labels.js';
 import { toDocument, loadDocument, emptyReserved } from '../doc/serialize.js';
+import { History } from './History.js';
 
 /**
  * 应用状态：实体清单 / 选择 / 视角（导演 ↔ 机位 POV）/ 场景参数，统筹增删选改。
@@ -59,6 +60,7 @@ export class App extends Emitter {
     this.docReserved = emptyReserved();
     this._docChain = Promise.resolve(); // 文档加载串行化（连续撤销不会交错重建）
     this.loadingDocument = false;       // 加载期间为 true：history / 自动保存据此屏蔽
+    this.history = new History(this);
 
     const dom = stage.renderer.domElement;
     this.gizmo = new TransformGizmo(stage.camera, dom, stage.scene, rig.controls, () => !this.cameraView);
