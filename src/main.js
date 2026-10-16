@@ -77,6 +77,7 @@ window.addEventListener('keydown', (e) => {
 
 // 调试句柄（selftest 也通过它驱动）
 window.__app = app;
+window.__timelinePanel = timelinePanel;
 
 // ---- 按需渲染循环 ----
 stage.startLoop({

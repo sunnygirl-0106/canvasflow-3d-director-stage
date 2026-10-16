@@ -20,6 +20,9 @@
 //   node selftest.mjs anim
 //     动画内核验收（阶段 C）：纯函数 / 跳转一致 / 手动值保持 / 导出不污染 / 往返 / 撤销 / 步态 / 约束 / 坏文档。
 //     产物在 test-output/anim/。
+//   node selftest.mjs tl
+//     时间轴面板验收（阶段 D）：puppeteer 真实点击 / 拖拽 —— 从零打键做动画、自动打键、菱形状态、拖键 + 撤销、
+//     区间条、约束段、播放 / 停止、快捷键、性能、折叠。产物在 test-output/tl/。
 import fs from 'node:fs';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
@@ -147,6 +150,16 @@ if (CMD === 'poses') {
 
 if (CMD === 'anim') {
   await animTest();
+  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
+  await browser.close();
+  await server?.close();
+  const failed = results.filter((r) => !r.pass).length;
+  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
+  process.exit(failed ? 1 : 0);
+}
+
+if (CMD === 'tl') {
+  await tlTest();
   ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
   await browser.close();
   await server?.close();
@@ -720,6 +733,348 @@ async function animTest() {
   ok('文档：删除实体连带删除引用它的路径 / 约束', bad.pruned.paths === 0 && bad.pruned.constraints === 0 && bad.pruned.tracks === 2 && bad.pruned.valid, JSON.stringify(bad.pruned));
   ok('坏文档：基准文档（含 timeline / paths / constraints）合法', bad.good.ok, bad.good.errors.slice(0, 3).join(' | '));
   for (const b of bad.out) ok(`坏文档：${b.name}`, b.ok && b.located && b.rejected && b.unchanged, b.first);
+  console.log(`📁 产物：${OUT}/`);
+}
+
+// ---- 时间轴面板验收（阶段 D）：真实点击 / 拖拽 ----
+// 用函数声明（会提升）：子命令分发在文件前部，调用时这些定义还没执行到
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+/** 等界面刷新：两帧 rAF（Inspector / 标尺都是 rAF 节流）+ 一点余量。 */
+async function settle(ms = 60) {
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await sleep(ms);
+}
+
+async function centerOf(sel) {
+  const r = await page.$eval(sel, (n) => { const b = n.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; });
+  return r;
+}
+async function clickSel(sel, opts) { const [x, y] = await centerOf(sel); await page.mouse.click(x, y, opts); }
+async function dragFromTo([x0, y0], [x1, y1], { steps = 10, hold } = {}) {
+  await page.mouse.move(x0, y0);
+  await sleep(30);
+  await page.mouse.down();
+  await page.mouse.move(x1, y1, { steps });
+  if (hold) await hold();
+  await page.mouse.up();
+  await settle();
+}
+
+/** 左栏点选实体（按名字）。 */
+async function pickInOutliner(name) {
+  const xy = await page.evaluate((name) => {
+    const n = [...document.querySelectorAll('#outliner .node')].find((x) => x.querySelector('.nm')?.textContent === name);
+    if (!n) return null;
+    const b = n.getBoundingClientRect();
+    return [b.x + 40, b.y + b.height / 2];
+  }, name);
+  if (!xy) throw new Error('左栏找不到 ' + name);
+  await page.mouse.click(...xy);
+  await settle();
+}
+
+/** 时刻 t 在标尺上的屏幕坐标。 */
+async function rulerPoint(t) {
+  return page.evaluate((t) => {
+    const p = window.__timelinePanel;
+    const r = p.scroll.getBoundingClientRect();
+    const rr = p.rulerRow.getBoundingClientRect();
+    return [r.left + p.timeToX(t) - p.scroll.scrollLeft, rr.top + rr.height / 2];
+  }, t);
+}
+
+/** 拖播放头：从当前位置按下，拖到 t。 */
+async function dragPlayhead(t) {
+  const cur = await page.evaluate(() => window.__app.playback.time);
+  await dragFromTo(await rulerPoint(cur), await rulerPoint(t), { steps: 8 });
+}
+
+/**
+ * 真实拖 gizmo 的某个轴箭头，使选中对象沿该轴移动 worldDelta（世界坐标）：
+ * 按在箭头上（拾取体 0..0.6 × 手柄尺度），拖到"箭头点 + 位移"的投影处。
+ */
+async function gizmoDrag(axis, delta) {
+  const pts = await page.evaluate((axis, delta) => {
+    const a = window.__app;
+    a.stage.render();
+    const giz = a.gizmo.control._gizmo;
+    giz.updateMatrixWorld(true);
+    const h = giz.picker.translate.children.find((c) => c.name === axis.toUpperCase());
+    const V = () => a.stage.camera.position.clone().set(0, 0, 0);
+    const dir = V().set(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
+    const p0 = h.position.clone().add(dir.clone().multiplyScalar(0.4 * h.scale.x));
+    const p1 = p0.clone().add(dir.clone().multiplyScalar(delta));
+    const cam = a.getRenderCamera();
+    const r = a.stage.renderer.domElement.getBoundingClientRect();
+    const scr = (p) => { const n = p.clone().project(cam); return [r.left + (n.x + 1) / 2 * r.width, r.top + (1 - n.y) / 2 * r.height]; };
+    return [scr(p0), scr(p1)];
+  }, axis, delta);
+  await page.mouse.move(pts[0][0] - 6, pts[0][1]);
+  await page.mouse.move(...pts[0], { steps: 3 }); // 悬停：TransformControls 先拾取到轴
+  await sleep(40);
+  await page.mouse.down();
+  await page.mouse.move(...pts[1], { steps: 16 });
+  await page.mouse.up();
+  await settle();
+}
+
+/** 视口画布像素（同步渲染后立即读，时刻与画面严格对应），写成 PNG。 */
+async function canvasShot(file) {
+  const url = await page.evaluate(() => { const a = window.__app; a.stage.render(); return a.stage.renderer.domElement.toDataURL('image/png'); });
+  fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));
+  return file;
+}
+
+async function tlTest() {
+  const OUT = 'test-output/tl';
+  fs.rmSync(OUT, { recursive: true, force: true });
+  fs.mkdirSync(OUT, { recursive: true });
+  // 清掉会话偏好后重新加载：窗口 810 高 < 900，应默认折叠
+  await page.evaluate(() => { localStorage.removeItem('director-stage.timeline'); });
+  await page.reload({ waitUntil: 'networkidle0' });
+  await page.waitForFunction(() => window.__app?.history.enabled, { timeout: 30000 });
+  await page.addStyleTag({ content: '#toast{visibility:hidden!important}' });
+  const defCollapsed = await page.evaluate(() => document.getElementById('timeline').classList.contains('collapsed'));
+  await clickSel('#dock .dockbtn[title^="时间轴"]');
+  await settle(120);
+  const expanded = await page.evaluate(() => document.getElementById('timeline').offsetHeight);
+  ok('折叠：窗口高 < 900 默认折叠，Dock「时间轴」按钮展开到 220px', defCollapsed && expanded === 220, `default=${defCollapsed} h=${expanded}`);
+
+  // ---- 场景：1 角色 + 2 道具 + 1 机位，导演相机俯视地面中心 ----
+  const ids = await page.evaluate(async () => {
+    const { createEmptyDocument } = await import('/src/doc/schema.js');
+    const a = window.__app;
+    a.playback.stop();
+    await a.loadDocument(createEmptyDocument());
+    const m = await a.addCharacter('male');
+    m.root.position.set(0.9, m.root.position.y, 0);
+    const p1 = a.addProp('box'); p1.root.position.set(-1.2, 0, 1.2);
+    const p2 = a.addProp('cylinder'); p2.root.position.set(-0.4, 0, -1.4);
+    const cam = a.addCamera('front_mid');
+    a.select(null);
+    a.rig.controls.target.set(0.4, 0, 0.3); a.stage.camera.position.set(0.6, 5.2, 6.4); a.rig.controls.update();
+    a.history.reset();
+    return { m: m.id, mName: m.name, p1: p1.id, p1Name: p1.name, p2: p2.id, p2Name: p2.name, cam: cam.id, camName: cam.name };
+  });
+  await settle(200);
+
+  // ---- 1 从零做一段动画只靠界面 ----
+  await pickInOutliner(ids.mName);
+  await clickSel('#inspector .field .kf-dia'); // 位置栏菱形：idle → t=0 打键并进入 active
+  await settle();
+  await page.screenshot({ path: `${OUT}/02_inspector_keyed.png`, clip: await page.$eval('#rightPanel', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; }) });
+  const k0 = await page.evaluate((id) => ({ active: window.__app.timeline.active, tracks: window.__app.timeline.toJSON().timeline.tracks.filter((t) => t.target === id) }), ids.m);
+  await dragPlayhead(3);
+  const t3 = await page.evaluate(() => window.__app.playback.time);
+  const before = await page.evaluate((id) => window.__app.timeline.valueOf(window.__app.findEntity(id), 'pos'), ids.m);
+  await gizmoDrag('x', 2 - before[0]);
+  await gizmoDrag('z', 1 - before[2]);
+  const keys1 = await page.evaluate((id) => window.__app.timeline.toJSON().timeline.tracks.find((t) => t.target === id && t.property === 'pos').keys, ids.m);
+  await dragPlayhead(1.5);
+  const mid = await page.evaluate((id) => ({ t: window.__app.playback.time, v: window.__app.timeline.valueOf(window.__app.findEntity(id), 'pos') }), ids.m);
+  await shootViewport(`${OUT}/1_t1.5.png`);
+  const want = keys1.length === 2 ? keys1[0].value.map((v, i) => (v + keys1[1].value[i]) / 2) : [NaN, NaN, NaN];
+  const err1 = Math.max(...want.map((v, i) => Math.abs(v - mid.v[i])));
+  const k3 = keys1[1]?.value || [];
+  ok('验收1 菱形在 t=0 打键并进入 active', k0.active && k0.tracks.length === 1 && k0.tracks[0].keys.length === 1 && k0.tracks[0].keys[0].t === 0, JSON.stringify(k0.tracks[0]?.keys));
+  ok('验收1 拖播放头到 3s、gizmo 拖到 (2,0,1) → t=3 写键（已有轨道，自动打键关）',
+    t3 === 3 && keys1.length === 2 && keys1[1].t === 3 && Math.abs(k3[0] - 2) < 0.03 && Math.abs(k3[1]) < 1e-6 && Math.abs(k3[2] - 1) < 0.03,
+    `t=${t3} key3=${JSON.stringify(k3)}`);
+  ok('验收1 播放头回 1.5s：角色位于两键中点 ±1cm', mid.t === 1.5 && err1 < 0.01, `pos=${JSON.stringify(mid.v)} 中点=${JSON.stringify(want.map((v) => +v.toFixed(4)))} 误差=${(err1 * 100).toFixed(3)}cm`);
+
+  // ---- 2 自动打键 ----
+  await clickSel('#timeline .tl-autokey');
+  await dragPlayhead(2);
+  await pickInOutliner(ids.p1Name);
+  const n0 = await page.evaluate(() => window.__app.timeline.toJSON().timeline.tracks.length);
+  await gizmoDrag('x', 0.6);
+  const auto = await page.evaluate((id) => ({ autoKey: window.__app.autoKey, tracks: window.__app.timeline.toJSON().timeline.tracks.filter((t) => t.target === id) }), ids.p1);
+  ok('验收2 自动打键开：t=2 拖无轨道道具 → 新建 pos 轨道 + 1 键',
+    auto.autoKey && auto.tracks.length === 1 && auto.tracks[0].property === 'pos' && auto.tracks[0].keys.length === 1 && auto.tracks[0].keys[0].t === 2,
+    JSON.stringify(auto.tracks.map((t) => [t.property, t.keys.map((k) => k.t)])));
+  await clickSel('#timeline .tl-autokey');
+  await pickInOutliner(ids.p2Name);
+  const docPos = () => page.evaluate((id) => window.__app.toDocument().entities.find((e) => e.id === id).transform.pos, ids.p2);
+  const p2a = await docPos();
+  const n1 = await page.evaluate(() => window.__app.timeline.toJSON().timeline.tracks.length);
+  await gizmoDrag('x', 0.5);
+  const p2b = await docPos();
+  const n2 = await page.evaluate(() => window.__app.timeline.toJSON().timeline.tracks.length);
+  ok('验收2 自动打键关：拖无轨道道具 → 手动值改变、无新轨道',
+    n1 === n0 + 1 && n2 === n1 && !(await page.evaluate(() => window.__app.autoKey)) && Math.abs(p2b[0] - p2a[0] - 0.5) < 0.03,
+    `tracks ${n0}→${n1}→${n2} pos.x ${p2a[0]}→${p2b[0]}`);
+
+  // ---- 3 菱形状态 ----
+  const diaState = async (file) => {
+    await settle();
+    const s = await page.$eval('#inspector .field .kf-dia', (d) => ({ cls: d.className, bg: getComputedStyle(d).backgroundColor }));
+    const clip = await page.$eval('#inspector .field.kf-row, #inspector .kf-label', (n) => { const b = n.closest('.field').getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; });
+    await page.screenshot({ path: file, clip });
+    return s;
+  };
+  await pickInOutliner(ids.mName);
+  await page.keyboard.press('Home');
+  const dKey = await diaState(`${OUT}/3_dia_key_t0.png`);
+  await dragPlayhead(1.5);
+  const dTrack = await diaState(`${OUT}/3_dia_track_t1.5.png`);
+  await pickInOutliner(ids.p2Name);
+  const dNone = await diaState(`${OUT}/3_dia_none.png`);
+  ok('验收3 菱形：t=0 实心 / t=1.5 空心亮 / 无轨道空心灰',
+    dKey.cls.endsWith(' key') && dKey.bg === 'rgb(59, 130, 246)' && dTrack.cls.endsWith(' track') && dTrack.bg === 'rgba(0, 0, 0, 0)' && dNone.cls.endsWith(' none'),
+    `${dKey.cls}(${dKey.bg}) / ${dTrack.cls} / ${dNone.cls}`);
+
+  // ---- 4 拖键 3s → 4s（吸附开，fps 30）+ 撤销 / 重做 ----
+  const trackId = await page.evaluate((id) => window.__app.timeline.toJSON().timeline.tracks.find((t) => t.target === id && t.property === 'pos').id, ids.m);
+  const fps = await page.evaluate(() => [window.__app.timeline.fps, window.__timelinePanel.snap]);
+  const keySel = `.tl-key[data-track="${trackId}"][data-t="3"]`;
+  const [kx, ky] = await centerOf(keySel);
+  const pps = await page.evaluate(() => window.__timelinePanel.pps);
+  await dragFromTo([kx, ky], [kx + pps * 1.004, ky], {
+    steps: 10,
+    hold: async () => { await settle(); await page.screenshot({ path: `${OUT}/03_key_dragging.png` }); },
+  });
+  const keyTimes = () => page.evaluate((tid) => window.__app.timeline.toJSON().timeline.tracks.find((t) => t.id === tid).keys.map((k) => k.t), trackId);
+  const kt1 = await keyTimes();
+  await page.keyboard.down('Meta'); await page.keyboard.press('z'); await page.keyboard.up('Meta');
+  await sleep(400);
+  const kt2 = await keyTimes();
+  await page.keyboard.down('Meta'); await page.keyboard.down('Shift'); await page.keyboard.press('z'); await page.keyboard.up('Shift'); await page.keyboard.up('Meta');
+  await sleep(400);
+  const kt3 = await keyTimes();
+  ok('验收4 拖键 3s → 4s（吸附、30fps）', fps[0] === 30 && fps[1] && JSON.stringify(kt1) === '[0,4]', JSON.stringify(kt1));
+  ok('验收4 撤销一次回 3、重做回 4', JSON.stringify(kt2) === '[0,3]' && JSON.stringify(kt3) === '[0,4]', `${JSON.stringify(kt2)} / ${JSON.stringify(kt3)}`);
+
+  // ---- 5 区间条（路径）----
+  const pathId = await page.evaluate((id) => {
+    const a = window.__app, e = a.findEntity(id);
+    const [x, , z] = a.timeline.valueOf(e, 'pos');
+    return a.timeline.addPath({ target: id, points: [[x, 0, z], [x + 1.5, 0, z + 0.8], [x + 2.5, 0, z]], start: 0, duration: 4 }).id;
+  }, ids.p2);
+  await settle();
+  const pathOf = () => page.evaluate((pid) => { const p = window.__app.timeline.toJSON().paths.find((x) => x.id === pid); return { start: p.start, duration: p.duration }; }, pathId);
+  const endXY = await centerOf('.tl-bar-path .tl-bar-end.end');
+  await dragFromTo(endXY, [endXY[0] + pps * 2, endXY[1]]);
+  const pa = await pathOf();
+  const midXY = await page.$eval('.tl-bar-path', (n) => { const b = n.getBoundingClientRect(); return [b.x + b.width * 0.4, b.y + b.height / 2]; });
+  await dragFromTo(midXY, [midXY[0] + pps, midXY[1]]);
+  await settle();
+  const pb = await pathOf();
+  const insp = await page.$$eval('#inspector [data-sec="path"] .num-input', (ns) => ns.map((n) => +n.value));
+  await page.screenshot({ path: `${OUT}/05_path_bar.png` });
+  ok('验收5 拖路径条右端到 6s → duration=6', pa.start === 0 && pa.duration === 6, JSON.stringify(pa));
+  ok('验收5 拖中间到 start 1 → start=1（时长不变），Inspector 路径段一致',
+    pb.start === 1 && pb.duration === 6 && insp[0] === 1 && insp[1] === 6, `${JSON.stringify(pb)} inspector=${JSON.stringify(insp)}`);
+
+  // ---- 6 约束段 ----
+  await pickInOutliner(ids.camName);
+  const cnsSel = async (i) => (await page.$$('#inspector [data-sec="constraint"] select'))[i];
+  await (await cnsSel(0)).select(ids.m);
+  await settle();
+  const c1 = await page.evaluate((cam) => window.__app.timeline.toJSON().constraints.filter((c) => c.target === cam), ids.cam);
+  const typeInto = async (i, text) => {
+    const inp = (await page.$$('#inspector [data-sec="constraint"] .num-input'))[i];
+    await inp.click({ clickCount: 3 });
+    await page.keyboard.type(text);
+    await page.keyboard.press('Tab');
+    await settle();
+  };
+  await typeInto(0, '1');
+  await typeInto(1, '3');
+  const c2 = await page.evaluate((cam) => window.__app.timeline.toJSON().constraints.filter((c) => c.target === cam), ids.cam);
+  await page.evaluate(() => { document.querySelector('#inspector [data-sec="constraint"]').scrollIntoView(); });
+  await page.screenshot({ path: `${OUT}/06_constraint.png`, clip: await page.$eval('#rightPanel', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; }) });
+  await (await cnsSel(0)).select('');
+  await settle();
+  const c3 = await page.evaluate((cam) => window.__app.timeline.toJSON().constraints.filter((c) => c.target === cam), ids.cam);
+  ok('验收6 约束段：注视 → 角色 产生 lookAt', c1.length === 1 && c1[0].type === 'lookAt' && c1[0].subject === ids.m && c1[0].start === null && c1[0].end === null, JSON.stringify(c1));
+  ok('验收6 约束段：start=1 / end=3 写入文档', c2.length === 1 && c2[0].start === 1 && c2[0].end === 3, JSON.stringify(c2.map((c) => [c.start, c.end])));
+  ok('验收6 约束段：选「无」删除', c3.length === 0, JSON.stringify(c3));
+
+  // ---- 7 播放 / 停止 ----
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Escape');
+  await settle(150);
+  const idleShot = await shootViewport(`${OUT}/7_before.png`);
+  const idle = await page.evaluate(() => !window.__app.timeline.active);
+  await page.keyboard.press('Space');
+  await sleep(1000);
+  const playing = await page.evaluate(() => window.__app.playback.playing);
+  await page.screenshot({ path: `${OUT}/04_playing.png` });
+  // 播放中：同一同步块里读时刻并出图（画面与时刻严格对应）
+  const tPlay = await page.evaluate(() => window.__app.playback.time);
+  const shotPlay = await canvasShot(`${OUT}/7_playing.png`);
+  const tPlay2 = await page.evaluate(() => window.__app.playback.time);
+  await page.keyboard.press('Space');
+  await page.evaluate((t) => window.__app.playback.seek(t), tPlay);
+  const shotSeek = await canvasShot(`${OUT}/7_seek.png`);
+  const dPlay = pixelDiff(shotPlay, shotSeek, `${OUT}/_diff_play.png`);
+  ok('验收7 Space 开始播放，约 1s 时的画面 ≡ seek(该时刻)（< 0.5%）', idle && playing && tPlay > 0.6 && dPlay < 0.005,
+    `t=${tPlay.toFixed(3)}（读图后 ${tPlay2.toFixed(3)}） 差 ${(dPlay * 100).toFixed(3)}%`);
+  await page.keyboard.press('Escape');
+  await settle(150);
+  const stopShot = await shootViewport(`${OUT}/7_after_esc.png`);
+  const dStop = pixelDiff(idleShot, stopShot, `${OUT}/_diff_esc.png`);
+  ok('验收7 Esc 后场景 ≡ 进入前（0%）', dStop === 0 && await page.evaluate(() => !window.__app.timeline.active), `${(dStop * 100).toFixed(4)}%`);
+
+  // ---- 8 快捷键 ----
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  const tFrame = await page.evaluate(() => window.__app.playback.time);
+  await page.keyboard.press('End');
+  const tEnd = await page.evaluate(() => [window.__app.playback.time, window.__app.timeline.duration]);
+  await page.click('#timeline .tl-num');
+  await page.keyboard.press('Space');
+  await sleep(200);
+  const typed = await page.evaluate(() => ({ playing: window.__app.playback.playing, focus: document.activeElement?.className }));
+  await page.evaluate(() => document.activeElement?.blur());
+  ok('验收8 → 一帧 = 1/fps；End = duration', Math.abs(tFrame - 1 / 30) < 1e-12 && tEnd[0] === tEnd[1], `→ ${tFrame} / End ${tEnd[0]}`);
+  ok('验收8 输入框聚焦时 Space 不触发播放', !typed.playing && typed.focus === 'tl-num', JSON.stringify(typed));
+
+  // ---- 10 面板性能：100 键、10 条轨道，播放 5s，主线程长任务 = 0 ----
+  await page.keyboard.press('Escape');
+  const perfSetup = await page.evaluate(async () => {
+    const a = window.__app, tl = a.timeline;
+    const props = [];
+    for (let i = 0; i < 5; i++) { const p = a.addProp('box'); p.root.position.set(-2 + i, 0, 2.2); props.push(p); }
+    a.select(null);
+    for (const [i, p] of props.entries()) {
+      const tp = tl.addTrack({ target: p.id, property: 'pos' });
+      const tr = tl.addTrack({ target: p.id, property: 'rot' });
+      for (let k = 0; k < 10; k++) {
+        tl.setKey(tp.id, k, [-2 + i, (k % 2) * 0.5, 2.2], k % 3 === 0 ? 'smooth' : 'linear');
+        tl.setKey(tr.id, k + 0.5, [0, k * 36, 0]);
+      }
+    }
+    // 只统计这 10 条轨道（场景里另有前面步骤留下的轨道）
+    const mine = tl.toJSON().timeline.tracks.filter((t) => props.some((p) => p.id === t.target));
+    return { tracks: mine.length, keys: mine.reduce((n, t) => n + t.keys.length, 0) };
+  });
+  await settle(300);
+  await page.evaluate(() => {
+    window.__longTasks = [];
+    window.__lt = new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__longTasks.push(Math.round(e.duration)); });
+    window.__lt.observe({ type: 'longtask' });
+  });
+  await page.keyboard.press('Space');
+  await sleep(5000);
+  await page.keyboard.press('Space');
+  const perf = await page.evaluate(() => { window.__lt.disconnect(); return { long: window.__longTasks, t: window.__app.playback.time }; });
+  ok('验收10 100 键 / 10 条轨道播放 5s：主线程长任务（>50ms）为 0', perfSetup.keys === 100 && perfSetup.tracks === 10 && perf.long.length === 0,
+    `keys=${perfSetup.keys} tracks=${perfSetup.tracks} 播放到 ${perf.t.toFixed(2)}s 长任务=${JSON.stringify(perf.long)}`);
+  await page.keyboard.press('Escape');
+  await settle(150);
+  await page.screenshot({ path: `${OUT}/01_panel.png` });
+
+  // ---- 9 折叠：视口高 +184px，刷新保持 ----
+  const vh0 = await page.evaluate(() => document.getElementById('viewport').clientHeight);
+  await clickSel('#timeline .tl-fold');
+  await settle(150);
+  const vh1 = await page.evaluate(() => document.getElementById('viewport').clientHeight);
+  await page.reload({ waitUntil: 'networkidle0' });
+  await page.waitForFunction(() => window.__app?.history.enabled, { timeout: 30000 });
+  const kept = await page.evaluate(() => ({ collapsed: document.getElementById('timeline').classList.contains('collapsed'), h: document.getElementById('timeline').offsetHeight, vh: document.getElementById('viewport').clientHeight }));
+  ok('验收9 折叠后视口高度增加 184px', vh1 - vh0 === 184, `${vh0} → ${vh1}`);
+  ok('验收9 刷新页面保持折叠', kept.collapsed && kept.h === 36 && kept.vh === vh1, JSON.stringify(kept));
   console.log(`📁 产物：${OUT}/`);
 }
 
