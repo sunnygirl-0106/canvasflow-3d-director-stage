@@ -544,6 +544,56 @@ async function animTest() {
   ok('步态：压到 1.5 s（4 m/s）t=0.75 为跑步（膝屈 > 45°）', gait.runKnee > 45, `膝 ${gait.runKnee.toFixed(1)}°`);
   ok('步态：stop() 后恢复原姿势', gait.restored);
   ok('步态：组沿路径时成员一起走、步伐错开，停下恢复', gait.crowdWalk && gait.crowdRestored);
+  // ---- 约束：lookAt 保留 roll；follow 刚性跟随且覆盖 pos 轨道 / 路径 ----
+  await buildAnimScene().then((v) => Object.assign(ids, v));
+  const cons = await page.evaluate(async (ids) => {
+    const { aimPoint, anchorOf } = await import('/src/anim/Constraint.js');
+    const a = window.__app, tl = a.timeline, pb = a.playback;
+    const c1 = a.findEntity(ids.c1), c2 = a.findEntity(ids.c2);
+    const V = c1.root.position.constructor, Q = c1.root.quaternion.constructor;
+    c1._roll = 12 * Math.PI / 180; // 荷兰角
+    // f 沿弧线走（会转向）；c1 注视 f；c2 跟随 f，并且有自己的 pos 轨道和 rot 关键帧（应被 follow 覆盖 / 按 f 的 yaw 旋转）
+    tl.addPath({ target: ids.f, points: [[1, 0, 0.6], [2.5, 0, -1], [1, 0, -3], [-1, 0, -2]], start: 0, duration: 5, speed: 'linear', orient: 'tangent' });
+    tl.addConstraint({ type: 'lookAt', target: ids.c1, subject: ids.f });
+    const tp = tl.addTrack({ target: ids.c2, property: 'pos' });
+    tl.setKey(tp.id, 0, [5, 5, 5]); tl.setKey(tp.id, 5, [-5, 5, 5]);
+    const fo = tl.addConstraint({ type: 'follow', target: ids.c2, subject: ids.f, offset: [0.4, 1.6, -2.5] });
+    const R2D = 180 / Math.PI;
+    let maxAim = 0, maxRoll = 0, maxOff = 0, maxRot = 0;
+    for (let i = 0; i <= 10; i++) {
+      const t = i * 0.5;
+      pb.seek(t);
+      // lookAt：−Z 与指向注视点的夹角
+      const p = aimPoint(a, ids.f);
+      const fwd = new V(0, 0, -1).applyQuaternion(c1.root.quaternion);
+      const to = p.clone().sub(c1.root.position).normalize();
+      maxAim = Math.max(maxAim, Math.acos(Math.min(1, fwd.dot(to))) * R2D);
+      // roll：去掉 roll 后相机的 up 应在"竖直平面"里 —— 等价于：实际 up 与无 roll up 的夹角 = 12°
+      const up = new V(0, 1, 0).applyQuaternion(c1.root.quaternion);
+      const right0 = fwd.clone().cross(new V(0, 1, 0)).normalize();
+      const up0 = right0.clone().cross(fwd).normalize();
+      const roll = Math.atan2(up.dot(right0) * -1, up.dot(up0)) * R2D;
+      maxRoll = Math.max(maxRoll, Math.abs(Math.abs(roll) - 12));
+      // follow：相对偏移（subject yaw 坐标系）恒等于 offset
+      const an = anchorOf(a, ids.f);
+      const rel = c2.root.position.clone().sub(an.pos).applyQuaternion(new Q().setFromAxisAngle(new V(0, 1, 0), -an.yaw));
+      maxOff = Math.max(maxOff, rel.distanceTo(new V(0.4, 1.6, -2.5)));
+      // follow 朝向：Ry(yaw) × 机位手动朝向
+      const want = new Q().setFromAxisAngle(new V(0, 1, 0), an.yaw).multiply(new Q().setFromEuler(tl.baseOf(c2).rotation));
+      maxRot = Math.max(maxRot, 2 * Math.acos(Math.min(1, Math.abs(want.dot(c2.root.quaternion)))) * R2D);
+    }
+    // 生效区间：end 之后 follow 失效，pos 轨道接管
+    tl.updateConstraint(fo.id, { start: 0, end: 2 });
+    pb.seek(4);
+    const trackX = c2.root.position.x; // pos 轨道 t=4：5 + (−10)×0.8 = −3
+    pb.stop();
+    return { maxAim, maxRoll, maxOff, maxRot, trackX, rollKept: Math.abs(c1._roll * R2D - 12) < 1e-9 };
+  }, ids);
+  ok('约束：lookAt 机位 −Z 对准 subject（每 0.5 s 采样）', cons.maxAim < 0.1, `max ${cons.maxAim.toExponential(2)}°`);
+  ok('约束：lookAt 保留荷兰角 roll', cons.maxRoll < 0.1 && cons.rollKept, `max 偏差 ${cons.maxRoll.toExponential(2)}°`);
+  ok('约束：follow 相对偏移恒等于 offset（subject yaw 坐标系），覆盖 pos 轨道', cons.maxOff < 1e-6, `max ${cons.maxOff.toExponential(2)}m`);
+  ok('约束：follow 朝向随 subject yaw 刚性旋转', cons.maxRot < 1e-3, `max ${cons.maxRot.toExponential(2)}°`);
+  ok('约束：生效区间外 follow 失效，pos 轨道接管', Math.abs(cons.trackX + 3) < 1e-9, `x=${cons.trackX}`);
   ok('文档：删除实体连带删除引用它的路径 / 约束', bad.pruned.paths === 0 && bad.pruned.constraints === 0 && bad.pruned.tracks === 2 && bad.pruned.valid, JSON.stringify(bad.pruned));
   ok('坏文档：基准文档（含 timeline / paths / constraints）合法', bad.good.ok, bad.good.errors.slice(0, 3).join(' | '));
   for (const b of bad.out) ok(`坏文档：${b.name}`, b.ok && b.located && b.rejected && b.unchanged, b.first);

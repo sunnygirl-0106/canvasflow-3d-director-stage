@@ -5,6 +5,7 @@ import { genId } from '../entities/Entity.js';
 import { Track } from './Track.js';
 import { PathTrack } from './PathTrack.js';
 import { applyLocomotion } from './Locomotion.js';
+import { applyConstraint, constraintActive } from './Constraint.js';
 
 const GOLDEN = 0.6180339887; // 群众成员步伐错开：第 i 个成员相位偏移 frac(i·φ)
 
@@ -88,6 +89,10 @@ export class Timeline extends Emitter {
       const ent = this.app.findEntity(p.target);
       if (ent?.type === 'character') add(p.target, 'pose');
       else if (ent) for (const m of ent.children) add(m.id, 'pose');
+    }
+    for (const c of this.constraints) {
+      if (c.type === 'follow') add(c.target, 'pos', 'rot');
+      else add(c.target, 'rot');
     }
     return map;
   }
@@ -193,6 +198,20 @@ export class Timeline extends Emitter {
 
     for (const st of states.values()) this._write(st);
     this._locomote(states);
+
+    // 3 约束：读的是已写入的 subject（关键帧 / 路径 / 步态之后），改完机位再写一次。follow 先于 lookAt。
+    const touched = new Set();
+    for (const type of ['follow', 'lookAt']) {
+      for (const c of this.constraints) {
+        if (c.type !== type || !constraintActive(c, t)) continue;
+        const st = states.get(c.target);
+        if (!st) continue;
+        applyConstraint(this.app, c, st);
+        this._write(st);
+        touched.add(st);
+      }
+    }
+    for (const st of touched) st.ent.update();
     this.app.stage?.invalidate();
   }
 
