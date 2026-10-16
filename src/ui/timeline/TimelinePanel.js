@@ -2,8 +2,10 @@ import { el } from '../../util/dom.js';
 import { Emitter } from '../../util/Emitter.js';
 import { Transport } from './Transport.js';
 import { Ruler } from './Ruler.js';
+import { TrackRows, keyId } from './TrackRows.js';
 
 export const NAME_W = 184;   // 左侧行名列宽
+export const GUTTER = 12;    // 0 秒距名列的留白（t=0 的键不被名列遮住）
 const RULER_H = 24;
 const PAD_R = 24;            // 时长之后留白（末尾的键 / 播放头不贴边）
 const MAX_PPS = 1500;        // 最大缩放（px / 秒）
@@ -42,6 +44,7 @@ export class TimelinePanel extends Emitter {
     this.pps = 100;          // px / 秒
     this.fit = true;         // 未手动缩放：时长铺满可见宽度
     this.scrollLeft = 0;
+    this.selKeys = new Set(); // 选中的关键帧（keyId）
 
     this._build();
     this.setCollapsed(this.collapsed, { save: false });
@@ -49,7 +52,8 @@ export class TimelinePanel extends Emitter {
     tl.on('change', () => this._onTimelineChange());
     pb.on('tick', (t) => this._onTick(t));
     pb.on('state', () => this.transport.reflectState());
-    app.on('entities', () => this.transport.reflectCameras());
+    app.on('entities', () => { this.transport.reflectCameras(); this.rebuild(); }); // 改名 / 删除
+    app.on('selection', () => this._applySelection());
     window.addEventListener('keydown', (e) => this._onKey(e), true); // 捕获阶段：先于全局快捷键（Del 删键而非删实体）
     new ResizeObserver(() => this._layout()).observe(this.scroll);
   }
@@ -58,6 +62,7 @@ export class TimelinePanel extends Emitter {
   _build() {
     this.transport = new Transport(this);
     this.ruler = new Ruler(this);
+    this.trackRows = new TrackRows(this);
     this.phHead = el('div', { class: 'tl-ph-head' });
     this.bindScrub(this.phHead);
     this.corner = el('div', { class: 'tl-corner', style: { width: NAME_W + 'px' } });
@@ -67,9 +72,68 @@ export class TimelinePanel extends Emitter {
     this.content = el('div', { class: 'tl-content' }, [this.rulerRow, this.rows, this.phLine]);
     this.scroll = el('div', { class: 'tl-scroll' }, [this.content]);
     this.scroll.style.setProperty('--name-w', NAME_W + 'px');
+    this.scroll.style.setProperty('--gutter', GUTTER + 'px');
     this.scroll.addEventListener('scroll', () => { this.scrollLeft = this.scroll.scrollLeft; this._drawRuler(); });
     this.scroll.addEventListener('wheel', (e) => this._onWheel(e), { passive: false });
+    this.rows.addEventListener('pointerdown', (e) => this._onRowsPointer(e));
     this.container.replaceChildren(this.transport.el, this.scroll);
+    this._rebuildNow();
+  }
+
+  /** 行全量重建（同一同步流程内多次触发只重建一次，在下一帧绘制之前完成）。 */
+  rebuild() {
+    if (this._rebuildQueued) return;
+    this._rebuildQueued = true;
+    queueMicrotask(() => { this._rebuildQueued = false; this._rebuildNow(); });
+  }
+
+  _rebuildNow() {
+    this.rows.replaceChildren(this.trackRows.build());
+    // 丢掉已不存在的选中键
+    const alive = new Set();
+    for (const g of this.trackRows.groups) for (const r of g.rows) if (r.kind === 'track') for (const k of r.data.keys) alive.add(keyId(r.data.id, k.t));
+    for (const id of [...this.selKeys]) if (!alive.has(id)) this.selKeys.delete(id);
+    this._applySelection();
+  }
+
+  /** 选中联动：选中实体的行高亮；选中键高亮。 */
+  _applySelection() {
+    const sel = this.app.selectedIds;
+    for (const row of this.rows.querySelectorAll('.tl-row')) row.classList.toggle('sel', sel.has(row.dataset.ent));
+    for (const k of this.rows.querySelectorAll('.tl-key')) k.classList.toggle('sel', this.selKeys.has(keyId(k.dataset.track, k.dataset.t)));
+  }
+
+  /** 行区点击：点键 = 选键（⇧ 多选）；点行其它位置 = 选中实体。 */
+  _onRowsPointer(e) {
+    if (e.button !== 0) return;
+    const key = e.target.closest('.tl-key');
+    if (key) {
+      const id = keyId(key.dataset.track, key.dataset.t);
+      if (e.shiftKey) { if (this.selKeys.has(id)) this.selKeys.delete(id); else this.selKeys.add(id); }
+      else if (!this.selKeys.has(id)) { this.selKeys.clear(); this.selKeys.add(id); }
+      this._selectEntityOf(key);
+      this._applySelection();
+      return;
+    }
+    if (e.target.closest('.tl-op, .tl-caret')) return;
+    const row = e.target.closest('.tl-row');
+    if (!e.shiftKey) this.selKeys.clear();
+    if (row) this._selectEntityOf(row);
+    this._applySelection();
+  }
+
+  _selectEntityOf(node) {
+    const id = node.closest('.tl-row')?.dataset.ent;
+    if (id && this.app.selectedId !== id && this.app.findEntity(id)) this.app.select(id);
+  }
+
+  /** 删除某实体的全部动画（轨道 / 路径 / 以它为对象的约束），一次撤销。 */
+  removeAllAnimation(entId) {
+    const tl = this.app.timeline;
+    const { timeline, paths, constraints } = tl.toJSON();
+    for (const t of timeline.tracks) if (t.target === entId) tl.removeTrack(t.id);
+    for (const p of paths) if (p.target === entId) tl.removePath(p.id);
+    for (const c of constraints) if (c.target === entId) tl.removeConstraint(c.id);
   }
 
   /** 尺寸 / 缩放 / 时长变化后重新排版：内容宽度、标尺、播放头、行内元素位置。 */
@@ -78,7 +142,9 @@ export class TimelinePanel extends Emitter {
     const vis = Math.max(0, this.scroll.clientWidth - NAME_W);
     if (this.fit) this.pps = this._fitPps();
     const { duration } = this.app.timeline;
-    this.content.style.width = NAME_W + duration * this.pps + PAD_R + 'px';
+    this.content.style.width = NAME_W + GUTTER + duration * this.pps + PAD_R + 'px';
+    this.content.style.setProperty('--pps', this.pps);
+    this.content.style.setProperty('--dur', duration);
     this.ruler.resize(vis, RULER_H);
     this.scrollLeft = this.scroll.scrollLeft;
     this._drawRuler();
@@ -87,7 +153,7 @@ export class TimelinePanel extends Emitter {
   }
 
   _fitPps() {
-    const vis = Math.max(1, this.scroll.clientWidth - NAME_W - PAD_R);
+    const vis = Math.max(1, this.scroll.clientWidth - NAME_W - GUTTER - PAD_R);
     return Math.max(1, vis / this.app.timeline.duration);
   }
 
@@ -99,12 +165,12 @@ export class TimelinePanel extends Emitter {
 
   // ---- 坐标换算 ----
   /** 时刻 → 内容坐标 x（含左侧名列）。 */
-  timeToX(t) { return NAME_W + t * this.pps; }
+  timeToX(t) { return NAME_W + GUTTER + t * this.pps; }
 
   /** 视口 clientX → 时刻（未夹取）。 */
   clientXToTime(clientX) {
     const r = this.scroll.getBoundingClientRect();
-    return (clientX - r.left + this.scroll.scrollLeft - NAME_W) / this.pps;
+    return (clientX - r.left + this.scroll.scrollLeft - NAME_W - GUTTER) / this.pps;
   }
 
   /** 吸附开启时按帧取整。 */
@@ -128,7 +194,7 @@ export class TimelinePanel extends Emitter {
 
   /** 播放时播放头跑出可见区则翻页。 */
   _follow(t) {
-    const x = t * this.pps;
+    const x = GUTTER + t * this.pps;
     const vis = this.scroll.clientWidth - NAME_W;
     if (x < this.scroll.scrollLeft || x > this.scroll.scrollLeft + vis - 8) this.scroll.scrollLeft = Math.max(0, x - 8);
   }
@@ -204,6 +270,7 @@ export class TimelinePanel extends Emitter {
     }
     this.transport.reflectTimeline();
     this._layout();
+    this.rebuild();
   }
 
   /** ⌘ / Ctrl + 滚轮缩放（以光标处时刻为锚点）；普通滚轮交给浏览器滚动。 */
@@ -217,7 +284,7 @@ export class TimelinePanel extends Emitter {
     this.fit = pps <= minPps + 1e-6;
     this.pps = pps;
     this._layout();
-    this.scroll.scrollLeft = Math.max(0, NAME_W + anchorT * pps - (e.clientX - r.left));
+    this.scroll.scrollLeft = Math.max(0, NAME_W + GUTTER + anchorT * pps - (e.clientX - r.left));
   }
 
   _onKey(e) {

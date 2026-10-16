@@ -1,4 +1,5 @@
 import { el } from '../../util/dom.js';
+import { GUTTER } from './TimelinePanel.js';
 
 const MAJOR_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120]; // 秒
 const MIN_LABEL_PX = 64;  // 两个秒标签之间至少这么宽
@@ -46,8 +47,9 @@ export class Ruler {
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const t0 = panel.scrollLeft / pps;          // 可见区间起点（秒）
+    const t0 = (panel.scrollLeft - GUTTER) / pps; // canvas 左缘对应的时刻（秒，可为负）
     const t1 = Math.min(duration, t0 + w / pps);
+    const ts = Math.max(0, t0);
     const x = (t) => (t - t0) * pps + 0.5;
 
     // 时长之外压暗
@@ -58,7 +60,7 @@ export class Ruler {
     if (pps / fps >= MIN_FRAME_PX) {
       ctx.strokeStyle = dim2;
       ctx.beginPath();
-      for (let f = Math.ceil(t0 * fps); f / fps <= t1 + 1e-9; f++) {
+      for (let f = Math.ceil(ts * fps); f / fps <= t1 + 1e-9; f++) {
         const xx = Math.round(x(f / fps)) + 0.5;
         ctx.moveTo(xx, h - 4); ctx.lineTo(xx, h);
       }
@@ -73,9 +75,9 @@ export class Ruler {
     ctx.textBaseline = 'top';
     ctx.beginPath();
     const half = major / 2;
-    for (let i = Math.floor(t0 / half); i * half <= t1 + 1e-9; i++) {
+    for (let i = Math.floor(ts / half); i * half <= t1 + 1e-9; i++) {
       const t = i * half;
-      if (t < t0 - 1e-9) continue;
+      if (t < ts - 1e-9) continue;
       const xx = Math.round(x(t)) + 0.5;
       const isMajor = i % 2 === 0;
       ctx.moveTo(xx, isMajor ? h - 10 : h - 6); ctx.lineTo(xx, h);
