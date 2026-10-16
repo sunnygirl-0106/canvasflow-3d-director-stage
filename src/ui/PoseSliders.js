@@ -17,6 +17,7 @@ export class PoseSliders {
     this.sliderEls = {};
     const ch = this.character;
     const wrap = el('div', { class: 'sliders' });
+    const missing = new Set(ch.missingJoints || []); // 模型缺少骨头的关节：滑条置灰禁用
 
     for (const g of groupJoints(JOINT_SCHEMA)) {
       wrap.appendChild(el('h4', { text: g.group }));
@@ -36,7 +37,9 @@ export class PoseSliders {
               this.onChange && this.onChange();
             },
           });
-          const row = el('div', { class: 'sld' }, [
+          const off = missing.has(j.key);
+          input.disabled = off;
+          const row = el('div', { class: off ? 'sld disabled' : 'sld', title: off ? '该模型缺少此关节' : null }, [
             el('div', { class: 'lab' }, [el('b', { text: j.label }), valSpan]),
             input,
           ]);

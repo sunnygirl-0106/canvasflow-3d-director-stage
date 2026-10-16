@@ -109,6 +109,14 @@ export class App extends Emitter {
   /** 加载一个角色（不入场）。所有角色都经此创建，保证 spec 完整、可复制。 */
   _loadCharacter(spec) { return Character.load(this._nextCharName(), spec); }
 
+  /** 骨骼兼容性校验：缺关节时 console.warn 列出并返回提示文案；完整兼容返回 null。 */
+  _rigWarning(c) {
+    const miss = c.missingJoints || [];
+    if (!miss.length) return null;
+    console.warn(`[rig] ${c.profile?.id || '?'}（${c.spec.url}）缺少 ${miss.length} 个关节：`, miss.join(', '));
+    return `该模型缺少 ${miss.length} 个关节，相关姿势滑条已禁用`;
+  }
+
   _placeNew(root) {
     const n = this.entities.length;
     const a = n * 0.95;
@@ -135,7 +143,7 @@ export class App extends Emitter {
     let c;
     try { c = await this._loadCharacter(spec); }
     catch (err) { console.error(err); toast('角色加载失败：' + (err?.message || err)); return null; }
-    this._registerEntity(c, { msg: '已添加：' + c.name });
+    this._registerEntity(c, { msg: this._rigWarning(c) || '已添加：' + c.name });
     return c;
   }
 
@@ -173,7 +181,7 @@ export class App extends Emitter {
     });
     if (!members.length) { toast('群众加载失败'); return null; }
     const crowd = new Crowd(`群众 (${rows}x${cols})`, group, members, { rows, cols });
-    this._registerEntity(crowd, { msg: `已添加群众阵列（共 ${members.length} 人）` });
+    this._registerEntity(crowd, { msg: this._rigWarning(members[0]) || `已添加群众阵列（共 ${members.length} 人）` });
     return crowd;
   }
 

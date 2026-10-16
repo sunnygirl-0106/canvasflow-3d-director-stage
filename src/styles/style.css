@@ -476,6 +476,8 @@ select.dropdown:focus { border-color: var(--line2); }
 }
 .sld input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; }
 .sld input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; border: none; }
+.sld.disabled { opacity: .35; }
+.sld.disabled input[type=range]::-webkit-slider-thumb { cursor: not-allowed; }
 
 /* small action buttons */
 .minibtn {

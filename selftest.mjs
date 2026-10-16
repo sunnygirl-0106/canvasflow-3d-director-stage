@@ -59,7 +59,8 @@ const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new'
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 810, deviceScaleFactor: 1 });
 const errs = [];
-page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+const warns = [];
+page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); if (m.type() === 'warn') warns.push(m.text()); });
 page.on('pageerror', (e) => errs.push('PAGEERROR: ' + e.message));
 
 await page.goto(URL_, { waitUntil: 'networkidle0', timeout: 30000 });
@@ -193,6 +194,30 @@ const neutral = await page.evaluate(() => {
   return { standZero, tposeAtRest, tposeVals, resetStand: c.pose.isZero() && arm.quaternion.angleTo(rest) * 180 / Math.PI > 60 };
 });
 ok('零点=站立 / T型回静止位 / 复位回站立', Object.values(neutral).every(Boolean), JSON.stringify(neutral));
+
+// 4a' 加载校验：档案缺关节 → toast 提示 + console.warn 列出 + 对应滑条禁用；角色仍可添加/移动
+const rigCheck = await page.evaluate(async () => {
+  const a = window.__app;
+  const { PROFILES } = await import('/src/rig/profiles/index.js');
+  const base = PROFILES.xbot;
+  const joints = { ...base.joints, lHand: { bone: 'mixamorig:NoSuchBone', axis: 'x' } };
+  delete joints.rHand;
+  const c = await a._loadCharacter({ url: './assets/Xbot.glb', profile: { ...base, id: 'broken_test', joints }, height: 1.7 });
+  a._registerEntity(c, { msg: a._rigWarning(c) });
+  const toastTxt = document.getElementById('toast').textContent;
+  a.select(c.id);
+  const tab = (t) => [...document.querySelectorAll('#inspector .ptabs button')].find((x) => x.textContent === t)?.click();
+  tab('姿势');
+  const disabled = [...document.querySelectorAll('#inspector .sld input[type=range]')].filter((i) => i.disabled).length;
+  tab('属性');
+  c.root.position.x += 0.5;
+  const res = { missing: c.missingJoints.join(','), toastTxt, disabled, added: a.entities.includes(c) };
+  a.remove(c.id);
+  return res;
+});
+ok('加载校验：缺关节 toast / 滑条禁用 / 仍可添加',
+  rigCheck.missing === 'lHand,rHand' && rigCheck.toastTxt === '该模型缺少 2 个关节，相关姿势滑条已禁用'
+  && rigCheck.disabled === 2 && rigCheck.added && warns.some((w) => w.includes('lHand, rHand')), JSON.stringify(rigCheck));
 
 // 4b 角色命名超过 26 个不溢出成标点
 const names = await page.evaluate(() => {
