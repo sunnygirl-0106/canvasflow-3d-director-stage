@@ -4,6 +4,9 @@ import { DEFAULT_TIMELINE, validate, DocumentError } from '../doc/schema.js';
 import { genId } from '../entities/Entity.js';
 import { Track } from './Track.js';
 import { PathTrack } from './PathTrack.js';
+import { applyLocomotion } from './Locomotion.js';
+
+const GOLDEN = 0.6180339887; // 群众成员步伐错开：第 i 个成员相位偏移 frac(i·φ)
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const T_EPS = 1e-9; // 同一时刻判定（setKey 覆盖 / removeKey）
@@ -81,6 +84,10 @@ export class Timeline extends Emitter {
     for (const p of this.paths) {
       add(p.target, 'pos');
       if (p.orient === 'tangent') add(p.target, 'rot');
+      // 步态：角色自己，或组的全部成员（整组沿路径时成员一起走）
+      const ent = this.app.findEntity(p.target);
+      if (ent?.type === 'character') add(p.target, 'pose');
+      else if (ent) for (const m of ent.children) add(m.id, 'pose');
     }
     return map;
   }
@@ -185,7 +192,28 @@ export class Timeline extends Emitter {
     }
 
     for (const st of states.values()) this._write(st);
+    this._locomote(states);
     this.app.stage?.invalidate();
+  }
+
+  /**
+   * 步态：沿路径移动的角色 / 组成员按速度与路程切程序化步态（Locomotion）；其余被驱动角色的姿势保持 base。
+   * 每次都从 base.values 出发，无"上一帧"状态。
+   */
+  _locomote(states) {
+    for (const st of states.values()) {
+      const { ent, motion } = st;
+      if (!motion) continue;
+      if (ent.type === 'character') {
+        applyLocomotion(ent, st.base.values, motion, st.scale.y / ent.baseScale);
+      } else {
+        ent.children.forEach((m, i) => {
+          const base = this._base.get(m);
+          if (!base || m.type !== 'character') return;
+          applyLocomotion(m, base.values, motion, (m.root.scale.y / m.baseScale) * st.scale.y, (i * GOLDEN) % 1);
+        });
+      }
+    }
   }
 
   /** 回到 idle：全部被驱动实体写回 base。 */

@@ -12,7 +12,8 @@
 //   node selftest.mjs calib [profileId ...]
 //     对校准页 calib.html?profile=<id> 整页截图到 test-output/calib_<id>.png（默认全部档案）。
 //   node selftest.mjs collide [preset,...]
-//     对三个档案逐个预设做穿模检测（src/dev/poseCollision.js），列出穿模部位与最大深度；有穿模则退出码 1。
+//     对三个档案逐个预设 + 步态（走 / 跑各 8 相位，可用 gait 指代）做穿模检测（src/dev/poseCollision.js），
+//     列出穿模部位与最大深度；有穿模则退出码 1。
 //   node selftest.mjs doc
 //     场景文档验收：搭场景 → 截图 A → toDocument → 清空 → loadDocument → 截图 B → toDocument，
 //     断言两份文档深度相等、两图像素差 < 0.5%；5 种坏文档被定位并拒绝；撤销/重做画面一致。产物在 test-output/doc/。
@@ -98,6 +99,7 @@ if (CMD === 'collide') {
     const { PROFILES } = await import('/src/rig/profiles/index.js');
     const { POSE_PRESETS } = await import('/src/entities/posePresets.js');
     const { detectPenetration } = await import('/src/dev/poseCollision.js');
+    const { gaitPose } = await import('/src/anim/Locomotion.js');
     const out = [];
     for (const p of Object.values(PROFILES)) {
       const ch = await Character.load(p.id, { url: p.file, profile: p, height: p.heightM });
@@ -105,6 +107,18 @@ if (CMD === 'collide') {
         if (only && !only.split(',').includes(pr.key)) continue;
         ch.applyPosePreset(pr.key);
         out.push({ profile: p.id, preset: pr.key, hits: detectPenetration(ch.model) });
+      }
+      // 步态：走 / 跑各 8 个相位（w=1 的完整步态，阶段 C Locomotion）
+      if (!only || only.split(',').includes('gait')) {
+        for (const [name, k] of [['walk', 0], ['run', 1]]) {
+          for (let i = 0; i < 8; i++) {
+            const g = gaitPose(ch.legGeom, i / 8, k);
+            ch.resetPose();
+            Object.assign(ch.values, g.values);
+            ch.applyPose();
+            out.push({ profile: p.id, preset: `${name}@${i}/8`, hits: detectPenetration(ch.model) });
+          }
+        }
       }
     }
     return out;
@@ -471,6 +485,65 @@ async function animTest() {
   ok('路径：active 时导出的仍是手动位置', pt.charDocY === 0);
   ok('路径：smooth 首尾速度为 0、中段最快', pt.speeds[0] === 0 && pt.speeds[2] === 0 && pt.speeds[3] === 0 && pt.speeds[4] === 0 && Math.abs(pt.speeds[1] - 1.125) < 1e-6 && pt.startCreep < 1e-4, JSON.stringify(pt.speeds.map((v) => +v.toFixed(4))) + ` 起步=${pt.startCreep.toExponential(2)}m`);
   ok('路径：stop() 回到手动位置', pt.stopped);
+  // ---- 步态：6 m 直线 smooth 4 s；压到 1.5 s 为跑步；组沿路径成员一起走 ----
+  await buildAnimScene().then((v) => Object.assign(ids, v));
+  const gait = await page.evaluate(async (ids) => {
+    const a = window.__app, tl = a.timeline, pb = a.playback;
+    const m = a.findEntity(ids.m);
+    m.applyPosePreset('think'); // 原姿势不是站立：停下后应回到它
+    a.history.reset();
+    const base = { ...m.values };
+    const dir = [Math.sin(0.5), 0, Math.cos(0.5)]; // 斜向 6 m
+    const start = [m.root.position.x, 0, m.root.position.z];
+    const path = tl.addPath({ target: ids.m, points: [start, start.map((v, i) => v + dir[i] * 6)], start: 0, duration: 4, speed: 'smooth', orient: 'tangent' });
+    const same = (v) => Object.keys(base).every((k) => v[k] === base[k]);
+    const R2D = 180 / Math.PI;
+    const out = {};
+    pb.seek(0); out.t0 = same(m.values) && m.autoGround;
+    pb.seek(4); out.t4 = same(m.values) && m.autoGround;
+    pb.seek(2);
+    out.walking = !same(m.values) && !m.autoGround && Math.abs(m.values.lLegFwd - m.values.rLegFwd) > 5;
+    const want = Math.atan2(dir[0], dir[2]);
+    out.yawErr = Math.abs(((m.root.rotation.y - want) * R2D + 540) % 360 - 180);
+    // 逐帧：骨盆世界高度相邻帧差；w=1 时脚底贴地（脚底最低点 vs 站立时）
+    let prev = null; out.maxDy = 0; out.soleErr = 0;
+    const P = new (await import('/src/anim/Path.js')).Path(path);
+    for (let i = 0; i <= 120; i++) {
+      pb.seek(i / 30);
+      const y = m.root.position.y + m.model.position.y * m.root.scale.y;
+      if (prev !== null) out.maxDy = Math.max(out.maxDy, Math.abs(y - prev));
+      prev = y;
+      // 纯走（w=1、速度 ≤ 1.8 m/s）时任意时刻都有一只脚着地；走跑混合区有腾空期，不查
+      const v = P.speedAt(i / 30);
+      if (v >= 0.5 && v <= 1.8) {
+        const e = (m.lowestSoleY() - m.legGeom.ground / m.baseScale) * m.root.scale.y;
+        if (Math.abs(e) > Math.abs(out.soleErr)) out.soleErr = e;
+      }
+    }
+    // 跑：同一路径压到 1.5 s（平均 4 m/s）
+    tl.updatePath(path.id, { duration: 1.5 });
+    pb.seek(0.75);
+    out.runKnee = Math.max(m.values.lKnee, m.values.rKnee);
+    pb.stop();
+    out.restored = same(m.values);
+    // 组沿路径：成员切步态、彼此相位错开；停下恢复各自原姿势
+    const crowd = await a.addCrowd(2, 2, 1.1);
+    a.select(null);
+    tl.addPath({ target: crowd.id, points: [[-2, 0, -3], [2, 0, -3]], start: 0, duration: 4, speed: 'linear', orient: 'tangent' });
+    pb.seek(2);
+    const legs = crowd.members.map((c) => +(c.values.lLegFwd - c.values.rLegFwd).toFixed(2));
+    out.crowdWalk = legs.every((d) => d !== 0) && new Set(legs).size > 1;
+    pb.stop();
+    out.crowdRestored = crowd.members.every((c) => Object.values(c.values).every((v) => v === 0));
+    return out;
+  }, ids);
+  ok('步态：t=0 / t=4 姿势 ≡ 原姿势（values 逐项相等，自动贴地）', gait.t0 && gait.t4);
+  ok('步态：t=2 为步行姿势且朝向路径方向', gait.walking && gait.yawErr < 1, `yaw 误差 ${gait.yawErr.toFixed(4)}°`);
+  ok('步态：逐帧骨盆高度相邻帧差 < 2cm（不跳）', gait.maxDy < 0.02, `max ${(gait.maxDy * 100).toFixed(2)}cm`);
+  ok('步态：行走中脚底贴地（±1cm）', Math.abs(gait.soleErr) < 0.01, `最大偏差 ${(gait.soleErr * 100).toFixed(2)}cm（正 = 悬空）`);
+  ok('步态：压到 1.5 s（4 m/s）t=0.75 为跑步（膝屈 > 45°）', gait.runKnee > 45, `膝 ${gait.runKnee.toFixed(1)}°`);
+  ok('步态：stop() 后恢复原姿势', gait.restored);
+  ok('步态：组沿路径时成员一起走、步伐错开，停下恢复', gait.crowdWalk && gait.crowdRestored);
   ok('文档：删除实体连带删除引用它的路径 / 约束', bad.pruned.paths === 0 && bad.pruned.constraints === 0 && bad.pruned.tracks === 2 && bad.pruned.valid, JSON.stringify(bad.pruned));
   ok('坏文档：基准文档（含 timeline / paths / constraints）合法', bad.good.ok, bad.good.errors.slice(0, 3).join(' | '));
   for (const b of bad.out) ok(`坏文档：${b.name}`, b.ok && b.located && b.rejected && b.unchanged, b.first);

@@ -8,7 +8,7 @@ import { JOINT_SCHEMA } from '../rig/jointSchema.js';
 import { getProfile } from '../rig/profiles/index.js';
 import { resolveRig } from '../rig/RigProfile.js';
 import { Pose } from '../rig/Pose.js';
-import { buildBoneMap } from '../util/boneUtil.js';
+import { buildBoneMap, norm } from '../util/boneUtil.js';
 import { worldBox } from '../util/measure.js';
 import { round6 } from '../util/round.js';
 import { bodySpec } from '../config.js';
@@ -27,6 +27,11 @@ function loadTemplate(url) {
   }
   return _templates.get(url);
 }
+
+// 脚底采样点缓存：模型 url → [{ bone: 归一化骨名, foot: 0 左 / 1 右, p: [x,y,z] 骨骼局部坐标 }]（同源克隆的骨骼局部坐标相同）
+const _soleCache = new Map();
+const SOLE_BAND = 0.03;   // 静止位下离最低点 3cm 以内的脚部顶点视为脚底
+const SOLE_MAX = 24;      // 每只脚最多保留的采样点数
 
 // applyPose 复用的临时对象
 const _q = new THREE.Quaternion();
@@ -96,6 +101,7 @@ export class Character extends Entity {
     // 语义关节 → 骨头；缺失的关节（missingJoints）不参与摆姿
     const rig = resolveRig(model, this.profile, this.bones);
     this.missingJoints = rig.missing;
+    this._jointBones = rig.bones; // 语义关节 key → 骨头
 
     // 涉及骨头的静止四元数（restQ），以及 bone → 该骨头上的 [{key, local, sign}]（按 schema 顺序）
     // local：档案身体轴换算到该骨头的局部轴（在文件静止位下计算一次）
@@ -124,7 +130,10 @@ export class Character extends Entity {
     this._rootY0 = root.position.y; // 站立基准：归一化后 root 的固有高度偏移（文档 pos.y=0 即站在地面）
     this._modelBaseY = model.position.y;
     this._groundY = this._lowestBoneY(); // 地面高度（root 局部坐标），自动贴地以此为准
+    this._sole = this._buildSole();       // 脚底采样点（步态贴地用）
     this.applyPose();  // 默认即站立
+    this._standModelY = this.model.position.y; // 站立（自动贴地后）的 model 高度：步态的骨盆起伏以此为零点
+    this.legGeom = this._buildLegGeom();       // 站立腿部几何（步态 IK 用）
   }
 
   /** 异步加载工厂：模板缓存 + 克隆。 */
@@ -225,6 +234,91 @@ export class Character extends Entity {
     this.model.traverse((o) => {
       if (o.isBone && (_v.setFromMatrixPosition(o.matrixWorld).applyMatrix4(_m).y < min)) min = _v.y;
     });
+    return min;
+  }
+
+  /**
+   * 脚底采样点：静止位下双脚（踝骨及其子骨主导的）蒙皮顶点里离最低点 SOLE_BAND 以内的，
+   * 记成所属骨头的局部坐标；每只脚按前后均匀抽 SOLE_MAX 个。摆姿后用骨头世界矩阵变换即得脚底，
+   * 脚跟 / 脚尖着地都能量准（骨头只有踝 / 趾关节，脚跟没有骨头）。缺脚骨的模型返回空表。
+   */
+  _buildSole() {
+    const feet = ['lFoot', 'rFoot'].map((k) => this._jointBones.get(k)).filter(Boolean);
+    if (!feet.length) return [];
+    const resolve = (list) => list.map(({ bone, foot, p }) => ({ bone: this.bones.get(bone), foot, p: new THREE.Vector3(...p) })).filter((m) => m.bone);
+    const cached = _soleCache.get(this.spec.url);
+    if (cached) return resolve(cached);
+
+    // 骨头 → 所属的脚（踝骨及其全部子骨）
+    const footOf = new Map();
+    feet.forEach((f, i) => f.traverse((b) => { if (b.isBone) footOf.set(b, i); }));
+    this.root.updateMatrixWorld(true);
+    _m.copy(this.root.matrixWorld).invert();
+    const pts = feet.map(() => []); // [{ bone, local, y, z }]
+    const inv = new THREE.Matrix4();
+    this.model.traverse((o) => {
+      if (!o.isSkinnedMesh) return;
+      const si = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight;
+      const n = o.geometry.attributes.position.count;
+      for (let i = 0; i < n; i++) {
+        let best = 0, bw = -1;
+        for (let c = 0; c < 4; c++) { const w = sw.getComponent(i, c); if (w > bw) { bw = w; best = si.getComponent(i, c); } }
+        const bone = o.skeleton.bones[best];
+        const foot = footOf.get(bone);
+        if (foot === undefined) continue;
+        o.getVertexPosition(i, _v);       // 蒙皮后（静止位）的模型空间坐标
+        o.localToWorld(_v);
+        const local = _v.clone().applyMatrix4(inv.copy(bone.matrixWorld).invert());
+        const r = _v.applyMatrix4(_m);    // root 局部
+        pts[foot].push({ bone, foot, local, y: r.y, z: r.z });
+      }
+    });
+    const out = [];
+    for (const list of pts) {
+      if (!list.length) continue;
+      const minY = Math.min(...list.map((q) => q.y));
+      const band = list.filter((q) => q.y <= minY + SOLE_BAND).sort((a, b) => a.z - b.z);
+      const step = Math.max(1, (band.length - 1) / (SOLE_MAX - 1));
+      for (let k = 0; k < band.length; k += step) out.push(band[Math.round(k)]);
+      out.push(band[band.length - 1]); // 确保含最前（脚尖）与最后（脚跟）
+    }
+    const list = out.map((q) => ({ bone: norm(q.bone.name), foot: q.foot, p: q.local.toArray() }));
+    _soleCache.set(this.spec.url, list);
+    return resolve(list);
+  }
+
+  /**
+   * 站立姿势下的腿部几何（矢状面 [y 上, z 前]，单位 = 相对素体自然尺寸的米，root 原点为参照）：
+   * 每条腿的髋 / 膝 / 踝关节、脚底采样点，以及地面高度。
+   * 缺腿部关节或脚底采样点的模型返回 null（不做步态）。
+   */
+  _buildLegGeom() {
+    const sx = this.baseScale * this._girth, sy = this.baseScale;
+    this.root.updateMatrixWorld(true);
+    _m.copy(this.root.matrixWorld).invert();
+    const yz = (v) => [v.y * sy, v.z * sx];
+    const at = (bone) => yz(bone.getWorldPosition(_v).applyMatrix4(_m));
+    const legs = [];
+    for (const [i, side] of [[0, 'l'], [1, 'r']]) {
+      const [hip, knee, ankle] = [`${side}LegFwd`, `${side}Knee`, `${side}Foot`].map((k) => this._jointBones.get(k));
+      const sole = this._sole.filter((q) => q.foot === i).map((q) => yz(q.p.clone().applyMatrix4(q.bone.matrixWorld).applyMatrix4(_m)));
+      if (!hip || !knee || !ankle || !sole.length) return null;
+      legs.push({ hip: at(hip), knee: at(knee), ankle: at(ankle), sole });
+    }
+    const ground = Math.min(...this._sole.map((q) => q.p.clone().applyMatrix4(q.bone.matrixWorld).applyMatrix4(_m).y)) * sy;
+    return { legs, ground, height: this.height };
+  }
+
+  /** 当前姿势下脚底最低点在 root 局部坐标里的 y（含 model 偏移）；没有脚底采样点时退回最低骨头。 */
+  lowestSoleY() {
+    if (!this._sole.length) return this._lowestBoneY();
+    this.root.updateMatrixWorld(true);
+    _m.copy(this.root.matrixWorld).invert();
+    let min = Infinity;
+    for (const { bone, p } of this._sole) {
+      const y = _v.copy(p).applyMatrix4(bone.matrixWorld).applyMatrix4(_m).y;
+      if (y < min) min = y;
+    }
     return min;
   }
 

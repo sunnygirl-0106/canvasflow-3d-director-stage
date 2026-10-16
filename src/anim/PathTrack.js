@@ -35,6 +35,6 @@ export class PathTrack {
         st.rotTouched = true;
       }
     }
-    st.motion = { speed: path.speedAt(t), distance: s };
+    st.motion = { speed: path.speedAt(t), distance: s, gaitDistance: path.gaitDistanceAt(t) };
   }
 }

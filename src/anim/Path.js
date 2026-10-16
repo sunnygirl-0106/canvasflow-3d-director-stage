@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { EASE, smoothDeriv, clamp01 } from './ease.js';
+import { cycleFactor } from './Locomotion.js';
 
 const MIN_SEGMENTS = 200;
 const SEGMENTS_PER_POINT = 64;
+const GAIT_SAMPLES = 512; // 步态相位积分表的采样数
 
 /**
  * 路径曲线（文档 Path 的只读视图）：centripetal Catmull-Rom + 弧长表，按弧长 s（米）取位置 / 切线。
@@ -58,6 +60,25 @@ export class Path {
 
   /** t 时刻已走的路程（米）。 */
   distanceAt(t) { return this.progress(t) * this.length; }
+
+  /**
+   * 步态路程：∫ v / cycleFactor(v) dt（从 start 积到 t）。除以身高即得相位（周期数）。
+   * 纯走 / 纯跑时等于 路程 ÷ 周期系数；走跑混合时周期长度随速度变，积分保证相位单调、不倒退。
+   * 积分表在首次调用时建（梯形法，GAIT_SAMPLES 段），之后线性插值 —— 只依赖文档，仍是纯函数。
+   */
+  gaitDistanceAt(t) {
+    const { start, duration } = this.json;
+    if (!this._gait) {
+      const n = GAIT_SAMPLES, g = new Float64Array(n + 1);
+      const f = (i) => { const v = this.speedAt(start + (i / n) * duration); return v / cycleFactor(v); };
+      let prev = f(0);
+      for (let i = 1; i <= n; i++) { const cur = f(i); g[i] = g[i - 1] + (prev + cur) / 2 * (duration / n); prev = cur; }
+      this._gait = g;
+    }
+    const x = clamp01((t - start) / duration) * GAIT_SAMPLES;
+    const i = Math.min(Math.floor(x), GAIT_SAMPLES - 1);
+    return this._gait[i] + (this._gait[i + 1] - this._gait[i]) * (x - i);
+  }
 
   /** t 时刻的瞬时速度（米/秒）：弧长对时间的导数（解析式；区间外为 0）。 */
   speedAt(t) {
