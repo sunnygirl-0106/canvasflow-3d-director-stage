@@ -1,5 +1,6 @@
+import * as THREE from 'three';
 import { el, toast } from '../util/dom.js';
-import { tripleRow, sliderRow, colorRow, dropdownRow, infoTip, shotCard, toHex } from './widgets.js';
+import { tripleRow, sliderRow, colorRow, dropdownRow, infoTip, shotCard, toHex, numberRow, toggleRow } from './widgets.js';
 import { PoseSliders } from './PoseSliders.js';
 import { POSE_PRESETS } from '../entities/posePresets.js';
 import { downloadURL } from '../app/ShotManager.js';
@@ -30,8 +31,9 @@ export class Inspector {
     app.on('transform', () => this._syncFn?.());
     // 时间轴：播放头移动 / 动画数据变化 / 进出 active 时刷新数值与关键帧菱形（每帧至多一次）
     app.playback.on('tick', () => this.scheduleAnimRefresh());
-    app.timeline.on('change', () => this.scheduleAnimRefresh());
+    app.timeline.on('change', () => { this._sectionsDirty = true; this.scheduleAnimRefresh(); });
     app.timeline.on('active', () => this.scheduleAnimRefresh());
+    app.on('inspect', (req) => this.inspect(req));
     app.on('entities', () => this.refreshName());
     app.on('shots', () => { if (this.entity?.type === 'camera') this.show(this.entity); });
   }
@@ -40,6 +42,7 @@ export class Inspector {
     this._syncFn = null;
     this._animRows = [];    // [{ ent, prop, row, dia }] 可打键的属性行
     this._activeHint = null;
+    this._animHost = null;  // 路径段 / 约束段的容器（timeline 'change' 时重建）
     this._nameInput = null;
     this.poseSliders = null;
     this._previewEnt = null;
@@ -87,9 +90,136 @@ export class Inspector {
     requestAnimationFrame(() => {
       this._animPending = false;
       if (!this.entity) return;
+      if (this._sectionsDirty) { this._sectionsDirty = false; this._renderAnimSections(); }
       this._syncFn?.();
       this._refreshAnim();
     });
+  }
+
+  /** 打开某实体的属性页并定位到路径段 / 约束段（时间轴面板双击区间条）。 */
+  inspect({ id, section }) {
+    const ent = this.app.findEntity(id);
+    if (!ent) return;
+    if (ent.type in this.tabs) this.tabs[ent.type] = 'attr';
+    if (this.app.selectedId !== id) this.app.select(id); else this.show(ent);
+    const sec = this.container.querySelector(`[data-sec="${section}"]`);
+    if (!sec) return;
+    sec.scrollIntoView({ block: 'nearest' });
+    sec.classList.remove('flash');
+    void sec.offsetWidth; // 重新触发动画
+    sec.classList.add('flash');
+  }
+
+  // ---- 路径段 / 约束段 ----
+  _renderAnimSections() {
+    const host = this._animHost, ent = this.entity;
+    if (!host || !ent) return;
+    const anim = this.app.timeline.toJSON();
+    const nodes = [];
+    const path = anim.paths.find((p) => p.target === ent.id);
+    if (path) nodes.push(this._pathSection(path));
+    if (ent.type === 'camera') nodes.push(this._constraintSection(ent, anim.constraints.filter((c) => c.target === ent.id)));
+    host.replaceChildren(...nodes);
+  }
+
+  /** 执行 timeline 写操作；失败 toast 字段路径并按文档重画（输入框回到文档值）。 */
+  _tl(fn) {
+    try { fn(this.app.timeline); } catch (err) { toastError(err); this._renderAnimSections(); }
+  }
+
+  /** 路径段：start / duration / speed / orient / closed / 点数（只读）/ 删除。绘制与顶点拖动在阶段 E。 */
+  _pathSection(p) {
+    const upd = (patch) => this._tl((tl) => tl.updatePath(p.id, patch));
+    return el('div', { class: 'anim-sec', 'data-sec': 'path' }, [
+      el('div', { class: 'sec-title' }, [el('span', { text: '路径' }), el('span', { class: 'sec-tag path', text: `${p.points.length} 个点` })]),
+      el('div', { class: 'anim-pair' }, [
+        numberRow({ label: '开始', value: p.start, step: 0.1, min: 0, unit: 's', onChange: (v) => upd({ start: v }) }).el,
+        numberRow({ label: '时长', value: p.duration, step: 0.1, min: 0.01, unit: 's', onChange: (v) => upd({ duration: v }) }).el,
+      ]),
+      dropdownRow({
+        label: '速度', value: p.speed,
+        options: [{ value: 'linear', label: '匀速' }, { value: 'smooth', label: '缓入缓出' }],
+        onChange: (v) => upd({ speed: v }),
+      }).el,
+      dropdownRow({
+        label: '朝向', value: p.orient,
+        options: [{ value: 'tangent', label: '沿路径方向' }, { value: 'keep', label: '保持手动朝向' }],
+        onChange: (v) => upd({ orient: v }),
+      }).el,
+      toggleRow({ label: '闭合路径', checked: p.closed, onChange: (v) => upd({ closed: v }) }).el,
+      el('div', { class: 'anim-info', text: `点数：${p.points.length}（绘制与拖动顶点将在后续版本提供）` }),
+      el('button', { class: 'minibtn', text: '删除路径', onclick: () => this._tl((tl) => tl.removePath(p.id)) }),
+    ]);
+  }
+
+  /** 约束段（机位）：注视（无 / 实体 / 自定义点）、跟随（实体 + 偏移），各自生效区间。 */
+  _constraintSection(cam, list) {
+    const app = this.app;
+    const look = list.find((c) => c.type === 'lookAt');
+    const follow = list.find((c) => c.type === 'follow');
+    const subjects = [];
+    for (const e of app.entities) {
+      if (e !== cam) subjects.push({ value: e.id, label: e.name });
+      for (const m of e.children) subjects.push({ value: m.id, label: `${e.name} / ${m.name}` });
+    }
+    const r3 = (v) => v.map((x) => Math.round(x * 1000) / 1000);
+    const range = (c) => el('div', { class: 'anim-pair' }, [
+      numberRow({ label: '开始', value: c.start, step: 0.1, min: 0, unit: 's', allowEmpty: true, placeholder: '开头', onChange: (v) => this._tl((tl) => tl.updateConstraint(c.id, { start: v })) }).el,
+      numberRow({ label: '结束', value: c.end, step: 0.1, min: 0, unit: 's', allowEmpty: true, placeholder: '结尾', onChange: (v) => this._tl((tl) => tl.updateConstraint(c.id, { end: v })) }).el,
+    ]);
+    const vecRow = (label, arr, onCommit) => {
+      const v = [...arr];
+      return tripleRow({
+        label, step: 0.05, onCommit: () => onCommit(r3(v)),
+        axes: ['x', 'y', 'z'].map((k, i) => ({ key: k, get: () => v[i], set: (x) => { v[i] = x; } })),
+      }).el;
+    };
+
+    const nodes = [el('div', { class: 'sec-title' }, [el('span', { text: '约束' }), el('span', { class: 'sec-tag cns', text: '播放时生效' })])];
+
+    // 注视
+    const lookVal = !look ? '' : Array.isArray(look.subject) ? '__point' : look.subject;
+    nodes.push(dropdownRow({
+      label: '注视', value: lookVal,
+      options: [{ value: '', label: '无' }, ...subjects, { value: '__point', label: '自定义点' }],
+      onChange: (v) => this._tl((tl) => {
+        if (!v) { if (look) tl.removeConstraint(look.id); return; }
+        const subject = v === '__point' ? (Array.isArray(look?.subject) ? look.subject : r3(cam.lookTarget.toArray())) : v;
+        if (look) tl.updateConstraint(look.id, { subject });
+        else tl.addConstraint({ type: 'lookAt', target: cam.id, subject });
+      }),
+    }).el);
+    if (look && Array.isArray(look.subject)) nodes.push(vecRow('注视点', look.subject, (v) => this._tl((tl) => tl.updateConstraint(look.id, { subject: v }))));
+    if (look) nodes.push(range(look));
+
+    // 跟随
+    nodes.push(dropdownRow({
+      label: '跟随', value: follow?.subject ?? '',
+      options: [{ value: '', label: '无' }, ...subjects],
+      onChange: (v) => this._tl((tl) => {
+        if (!v) { if (follow) tl.removeConstraint(follow.id); return; }
+        if (follow) tl.updateConstraint(follow.id, { subject: v });
+        else tl.addConstraint({ type: 'follow', target: cam.id, subject: v, offset: this._followOffset(cam, v) });
+      }),
+    }).el);
+    if (follow) {
+      nodes.push(vecRow('偏移', follow.offset, (v) => this._tl((tl) => tl.updateConstraint(follow.id, { offset: v }))));
+      nodes.push(range(follow));
+    }
+    return el('div', { class: 'anim-sec', 'data-sec': 'constraint' }, nodes);
+  }
+
+  /** 新建跟随时的默认偏移：机位相对 subject 的当前位置（subject 的 yaw 坐标系），机位不会跳走。 */
+  _followOffset(cam, subjectId) {
+    const sub = this.app.findEntity(subjectId);
+    if (!sub) return [0, 0, 0];
+    const world = this.app.stage.world;
+    world.updateMatrixWorld(true);
+    const p = world.worldToLocal(sub.root.getWorldPosition(new THREE.Vector3()));
+    const q = sub.root.getWorldQuaternion(new THREE.Quaternion());
+    const yaw = new THREE.Euler().setFromQuaternion(q, 'YXZ').y;
+    const d = cam.root.position.clone().sub(p).applyAxisAngle(new THREE.Vector3(0, 1, 0), -yaw);
+    return d.toArray().map((x) => Math.round(x * 1000) / 1000);
   }
 
   /** 关键帧菱形状态 + 被驱动属性灰字 + active 提示条。 */
@@ -187,6 +317,9 @@ export class Inspector {
 
     root.append(pos.el, rot.el, scl.el, uni.el, col.el);
     this._keyable(ent, [['pos', pos.el], ['rot', rot.el], ['scale', scl.el]]);
+    this._animHost = el('div');
+    root.appendChild(this._animHost);
+    this._renderAnimSections();
     this._syncFn = () => { pos.syncAll(); rot.syncAll(); scl.syncAll(); uni.set(o.scale.y / ent.baseScale); };
   }
 
@@ -243,6 +376,9 @@ export class Inspector {
     fovField.el.querySelector('label')?.appendChild(infoTip(FOV_TIP));
     root.appendChild(fovField.el);
     this._keyable(ent, [['pos', pos.el], ['rot', lookRow.el], ['fov', fovField.el]]);
+    this._animHost = el('div');
+    root.appendChild(this._animHost);
+    this._renderAnimSections();
 
     const myShots = app.shots.shotsForCamera(ent.id);
     if (myShots.length) {

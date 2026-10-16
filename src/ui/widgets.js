@@ -155,3 +155,23 @@ export function toggleRow({ label, checked = false, onChange }) {
 }
 
 export const toHex = (n) => '#' + new THREE.Color(n).getHexString();
+
+// 数值行：label + 数字输入框 + 可选单位。change 时回调（一次修改结束）；解析失败回填原值。
+// allowEmpty：允许清空，清空时回调 null（placeholder 说明空值含义，如「全程」）。
+export function numberRow({ label, value, step = 0.1, min, unit, placeholder, allowEmpty = false, onChange }) {
+  const fmt = (v) => (v == null ? '' : String(+(+v).toFixed(4)));
+  const input = el('input', { class: 'num-input', type: 'number', step, min, placeholder, value: fmt(value) });
+  let cur = value;
+  input.addEventListener('change', () => {
+    const raw = input.value.trim();
+    if (raw === '' && allowEmpty) { onChange(null); return; }
+    const v = parseFloat(raw);
+    if (!Number.isFinite(v) || (min != null && v < min)) { input.value = fmt(cur); return; }
+    onChange(v);
+  });
+  const row = el('div', { class: 'field' }, [
+    el('label', { text: label }),
+    el('div', { class: 'num-row' }, [input, unit ? el('span', { class: 'num-unit', text: unit }) : null]),
+  ]);
+  return { el: row, set(v) { cur = v; if (document.activeElement !== input) input.value = fmt(v); } };
+}
