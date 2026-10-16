@@ -18,8 +18,8 @@
 
 ## ✨ 功能
 
-- **多角色素体** — 一键添加 标准 / 高大 / 矮小 / 宽厚 / 纤细 五种体型，自动归一化身高并落地；同一模型只下载一次，角色间共享几何体。
-- **全身姿势** — 右侧「姿势」面板按关节分组的 FK 滑条实时驱动骨骼；内置行走、挥手、抱臂等姿势预设一键套用。
+- **多角色素体** — 男 / 女关节人偶（BodyKun / BodyChan，CC0）及 高大 / 矮小 / 宽厚 / 纤细 派生体型，另有 Xbot 备选；自动归一化身高并落地，默认自然站立；同一模型只下载一次，角色间共享几何体。
+- **全身姿势** — 右侧「姿势」面板按关节分组的 FK 滑条实时驱动骨骼（0° = 自然站立）；内置行走、挥手、抱臂等姿势预设一键套用。姿势只认语义关节，换模型只需一份骨骼档案。
 - **群众阵列** — 行×列网格批量生成群众，可整组平移/旋转，也可随时解组为独立角色。
 - **几何道具** — 方块 / 圆柱 / 球体 / 人体素模，颜色与尺寸可调。
 - **机位系统** — 相机作为一等实体，支持景别预设与对准主体；**机位视角（POV）** 下透过镜头实时取景，并可直接选中、平移、旋转画面里的角色与道具。
@@ -39,7 +39,14 @@ npm run preview      # 本地预览构建产物
 npm run lint         # ESLint
 npm run test:e2e     # 端到端自测（headless Chrome，自动起 dev server）
                      # 非 macOS 需设 CHROME_PATH 指向 Chrome 可执行文件
+
+# selftest 子命令（截图输出到 test-output/，不入库）
+node selftest.mjs poses <outDir> [bodyKey]   # 单角色逐个套姿势预设截图（默认 xbot）
+node selftest.mjs posediff <dirA> <dirB>     # 两组姿势截图逐像素对比（pixelmatch）
+node selftest.mjs calib [profileId ...]      # 校准页整页截图 → test-output/calib_<id>.png
 ```
+
+开发时校准页：`npm run dev` 后打开 `/calib.html?profile=bodykun_male`。
 
 ## ⌨️ 操作
 
@@ -70,13 +77,49 @@ src/
 │  ├─ TransformGizmo.js TransformControls 封装（模式切换 / 与环绕互斥）
 │  ├─ NavGizmo.js       右上角坐标指示器
 │  └─ cameraPresets.js  机位景别预设
-├─ entities/            Entity 基类 + Character / Prop / Camera / Crowd / 关节表 / 姿势预设
+├─ rig/                 姿势与模型解耦层
+│  ├─ jointSchema.js    语义关节表（与模型无关；min/max 相对站立）
+│  ├─ profiles/         骨骼档案：每个模型一份（骨头 / 轴向 / 正负 / 站立偏移）
+│  ├─ RigProfile.js     resolveRig：档案 → 模型骨头，返回缺失关节
+│  └─ Pose.js           姿势数据（values，0 = 站立）
+├─ calib.js             骨骼档案校准页（calib.html，开发用）
+├─ entities/            Entity 基类 + Character / Prop / Camera / Crowd / 姿势预设
 ├─ ui/                  Dock / Outliner / Inspector / ScenePanel / 姿势滑条 / 弹层 / 图标
 ├─ util/                事件总线 / 度量 / 骨骼 / 素材库 / DOM helper
 └─ styles/style.css
-public/assets/          Xbot.glb（中性素体，meshopt 压缩，所有体型由其程序化派生）
+public/assets/          Xbot.glb（中性素体，meshopt 压缩）
+public/assets/figures/  BodyKun / BodyChan 关节人偶 GLB + 交接文档
 docs/                   技术规划文档
 ```
+
+## 🧍 人偶资产规范
+
+姿势系统通过「骨骼档案」驱动模型，新模型满足以下规范即可接入：
+
+| 项 | 要求 |
+| --- | --- |
+| 骨骼命名 | Mixamo 标准命名（`mixamorig:Hips`、`mixamorig:LeftArm` …）；GLTFLoader 清洗冒号无妨，查找时会归一化 |
+| 静止位 | 标准 **T-Pose**：手臂水平 ±X，腿垂直，角色面朝 +Z |
+| 单位 / 朝向 | 米，Y 向上，脚底在 y=0 |
+| 变换 | 导出前 **Apply Transforms**（根节点无残余旋转 / 缩放） |
+| 材质 | 无材质、无贴图（应用统一上素体色） |
+| 动画 | 无动画轨道 |
+| 格式 | **GLB**（单文件；可选 meshopt 压缩） |
+| 局部轴向 | 尽量与 Xbot 同名骨一致（Blender 可用 `align_roll` 对齐），这样档案可直接复用 |
+
+## ➕ 新增一个人偶
+
+1. **放模型**：GLB 放到 `public/assets/figures/<id>.glb`。
+2. **复制档案**：`src/rig/profiles/bodykun_male.js` → `src/rig/profiles/<id>.js`，改 `id` / `label` / `file` / `heightM`；
+   在 `src/rig/profiles/index.js` 登记。
+   - `joints`：语义关节 → `{ bone, axis, sign }`；骨名不同就改 `bone`。
+   - `neutralOffset`：T-Pose → 自然站立 的逐关节偏移（度），通常沿用 `{ lArmAbd: -80, rArmAbd: 80, lFore: -8, rFore: 8 }`。
+3. **跑校准页**：`npm run dev`，打开 `/calib.html?profile=<id>`（或 `node selftest.mjs calib <id>` 出图）。
+   每格是该关节 +30°，灰色残影是站立参考；对照 `?profile=xbot` 的同一格看方向。
+4. **修方向**：某关节转反了 → 该关节加 `sign: -1`；转错了轴（如前臂不弯、抬腿变侧摆）→ 改 `axis`。
+   格子灰掉并标「缺失」= 骨头没找到，检查 `bone` 名。重复 3–4 直到每格与 Xbot 同向。
+5. **注册体型**：在 `src/config.js` 的 `BODY_TYPES` 加一项 `{ profile: PROFILES.<id>, label, height, girth }`，
+   底部「＋」菜单即出现该体型。加载时若仍有缺失关节，会 toast 提示并禁用对应滑条。
 
 ## 🛠️ 技术栈
 
