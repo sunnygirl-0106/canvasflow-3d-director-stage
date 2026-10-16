@@ -2,8 +2,16 @@
 // 运行：npm run test:e2e
 //   - 默认自动起一个 Vite dev server；也可用 TEST_URL=http://localhost:5173/ 指向已有服务
 //   - Chrome 路径：CHROME_PATH 环境变量，默认 macOS 安装位置
+// 子命令：
+//   node selftest.mjs poses [outDir] [bodyKey]
+//     对单个角色逐个套用全部姿势预设并截图到 outDir/<preset>.png（默认 test-output/poses，
+//     bodyKey 默认 xbot；不存在时取 BODY_TYPES 第一项）。用于重构前后逐像素对比。
+import fs from 'node:fs';
+import path from 'node:path';
 import puppeteer from 'puppeteer-core';
 import { createServer } from 'vite';
+
+const [CMD, ...ARGS] = process.argv.slice(2);
 
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
@@ -27,6 +35,56 @@ page.on('pageerror', (e) => errs.push('PAGEERROR: ' + e.message));
 
 await page.goto(URL_, { waitUntil: 'networkidle0', timeout: 30000 });
 await page.waitForFunction(() => window.__app && window.__app.entities.filter((e) => e.type === 'character' && e.bones?.size > 0).length >= 2, { timeout: 30000 });
+
+if (CMD === 'poses') {
+  await shootPoses(ARGS[0] || 'test-output/poses', ARGS[1]);
+  await browser.close();
+  await server?.close();
+  process.exit(errs.length ? 1 : 0);
+}
+
+/**
+ * 单角色姿势截图：隐藏其余实体与名牌，角色放原点，固定相机出 正面 + 3/4 侧面 两视图拼一张。
+ * 渲染走 Stage.snapshot（主渲染器），保证与应用内画面一致且确定。
+ */
+async function shootPoses(outDir, bodyKey) {
+  fs.mkdirSync(outDir, { recursive: true });
+  const keys = await page.evaluate(async (bodyKey) => {
+    const { BODY_TYPES } = await import('/src/config.js');
+    const { POSE_PRESETS } = await import('/src/entities/posePresets.js');
+    const a = window.__app;
+    const key = bodyKey || (BODY_TYPES.xbot ? 'xbot' : Object.keys(BODY_TYPES)[0]);
+    const c = await a.addCharacter(key);
+    a.select(null);
+    for (const e of a.entities) if (e !== c) e.setVisible(false);
+    a.setLabelsVisible(false);
+    c.root.position.set(0, c.root.position.y, 0);
+    c.root.rotation.set(0, 0, 0);
+    c.root.updateMatrixWorld(true);
+    const Cam = a.stage.camera.constructor; // THREE.PerspectiveCamera（页面内无法直接 import 裸模块名）
+    const mk = (x, z) => { const cam = new Cam(30, 1, 0.05, 100); cam.position.set(x, 1.0, z); cam.lookAt(0, 0.9, 0); cam.updateMatrixWorld(true); return cam; };
+    window.__poseCams = [mk(0, 5.2), mk(3.7, 3.7)];
+    window.__poseChar = c;
+    return { body: key, presets: POSE_PRESETS.map((p) => p.key) };
+  }, bodyKey);
+  console.log(`📐 姿势截图：body=${keys.body} → ${outDir}`);
+  for (const preset of keys.presets) {
+    const url = await page.evaluate((preset) => {
+      const c = window.__poseChar;
+      c.applyPosePreset(preset);
+      c.root.updateMatrixWorld(true);
+      const W = 360, H = 480;
+      const out = document.createElement('canvas'); out.width = W * 2; out.height = H;
+      const g = out.getContext('2d');
+      window.__poseCams.forEach((cam, i) => g.drawImage(window.__app.stage.snapshot(cam, { width: W, height: H }), i * W, 0, W, H));
+      window.__app.stage.render();
+      return out.toDataURL('image/png');
+    }, preset);
+    fs.writeFileSync(path.join(outDir, preset + '.png'), Buffer.from(url.split(',')[1], 'base64'));
+    console.log('  📸 ' + preset);
+  }
+  if (errs.length) console.log('❌ console 错误：\n' + errs.join('\n'));
+}
 
 // 1 骨骼/restQ + 归一化（身高 = 体型注册表里的目标身高）
 const ci = await page.evaluate(async () => {
