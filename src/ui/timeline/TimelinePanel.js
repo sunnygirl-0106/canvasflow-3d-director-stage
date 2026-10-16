@@ -40,6 +40,7 @@ export class TimelinePanel extends Emitter {
     const prefs = loadPrefs();
     this.collapsed = prefs.collapsed ?? (window.innerHeight < SHORT_WINDOW);
     this.autoKey = !!prefs.autoKey;
+    app.autoKey = this.autoKey;
     this.snap = prefs.snap ?? true;
     pb.loop = !!prefs.loop;
 
@@ -335,6 +336,7 @@ export class TimelinePanel extends Emitter {
   setPref(key, value) {
     if (key === 'loop') this.app.playback.loop = value;
     else this[key] = value;
+    if (key === 'autoKey') this.app.autoKey = value;
     this._savePrefs();
     this.transport.reflectPrefs();
     this.emit('prefs');

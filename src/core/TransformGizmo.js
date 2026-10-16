@@ -23,8 +23,10 @@ export class TransformGizmo {
     this._setHelperVisible(false);
 
     // 与 Orbit 互斥：拖 gizmo 时禁用环绕；拖拽结束是否恢复环绕服从视角状态（POV 下不得恢复）
+    this._onDrag = null;
     this.control.addEventListener('dragging-changed', (e) => {
       orbit.enabled = !e.value && orbitAllowed();
+      this._onDrag?.(e.value);
     });
 
     this._onObjectChange = null;
@@ -41,6 +43,9 @@ export class TransformGizmo {
 
   /** 拖动过程中对象变换改变（写回面板数值）。 */
   onObjectChange(fn) { this._onObjectChange = fn; }
+
+  /** 拖动开始（true）/ 松手（false）。 */
+  onDragState(fn) { this._onDrag = fn; }
 
   /** 手柄外观变化（需要重绘）。 */
   onChange(fn) { this._onChange = fn; }

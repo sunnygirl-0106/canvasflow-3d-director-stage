@@ -3,6 +3,8 @@ import { tripleRow, sliderRow, colorRow, dropdownRow, infoTip, shotCard, toHex }
 import { PoseSliders } from './PoseSliders.js';
 import { POSE_PRESETS } from '../entities/posePresets.js';
 import { downloadURL } from '../app/ShotManager.js';
+import { propState } from './timeline/animState.js';
+import { toastError } from './timeline/Transport.js';
 
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
@@ -26,12 +28,18 @@ export class Inspector {
 
     app.on('selection', (ent) => this.show(ent));
     app.on('transform', () => this._syncFn?.());
+    // 时间轴：播放头移动 / 动画数据变化 / 进出 active 时刷新数值与关键帧菱形（每帧至多一次）
+    app.playback.on('tick', () => this.scheduleAnimRefresh());
+    app.timeline.on('change', () => this.scheduleAnimRefresh());
+    app.timeline.on('active', () => this.scheduleAnimRefresh());
     app.on('entities', () => this.refreshName());
     app.on('shots', () => { if (this.entity?.type === 'camera') this.show(this.entity); });
   }
 
   _reset() {
     this._syncFn = null;
+    this._animRows = [];    // [{ ent, prop, row, dia }] 可打键的属性行
+    this._activeHint = null;
     this._nameInput = null;
     this.poseSliders = null;
     this._previewEnt = null;
@@ -45,6 +53,8 @@ export class Inspector {
     if (!entity) { this.container.replaceChildren(); return; }
 
     const root = el('div', { class: 'rp rp-pad' });
+    this._activeHint = el('div', { class: 'tl-active-hint', text: '时间轴激活中：修改会写入当前时刻的关键帧', hidden: true });
+    root.appendChild(this._activeHint);
     const title = { character: '角色', camera: '摄像机', crowd: `${entity.name} (${entity.children.length})` }[entity.type] || '道具';
     root.appendChild(el('h2', { text: title }));
 
@@ -67,6 +77,69 @@ export class Inspector {
 
     this.container.replaceChildren(root);
     if (this._previewEnt) this.refreshPreview();
+    this._refreshAnim();
+  }
+
+  // ---- 时间轴联动 ----
+  scheduleAnimRefresh() {
+    if (this._animPending) return;
+    this._animPending = true;
+    requestAnimationFrame(() => {
+      this._animPending = false;
+      if (!this.entity) return;
+      this._syncFn?.();
+      this._refreshAnim();
+    });
+  }
+
+  /** 关键帧菱形状态 + 被驱动属性灰字 + active 提示条。 */
+  _refreshAnim() {
+    const { app } = this;
+    if (this._activeHint) this._activeHint.hidden = !app.timeline.active;
+    if (!this._animRows.length) return;
+    const anim = app.timeline.toJSON();
+    const t = app.timeline.active ? app.playback.time : 0;
+    for (const r of this._animRows) {
+      const st = propState(app, anim, r.ent.id, r.prop, t);
+      const state = st.key ? 'key' : st.track ? 'track' : 'none';
+      r.dia.className = 'kf-dia ' + state;
+      r.dia.disabled = st.forced === '路径';
+      r.dia.title = st.forced === '路径' ? '由路径驱动，不能打键'
+        : st.key ? '删除当前时刻的关键帧' : app.timeline.active ? '在当前时刻打关键帧' : '在 0 秒打关键帧（进入时间轴）';
+      r.row.classList.toggle('driven', st.driven);
+    }
+  }
+
+  /** 给属性行的标题加一颗关键帧菱形。 */
+  _keyable(ent, pairs) {
+    for (const [prop, row] of pairs) {
+      const dia = el('button', { class: 'kf-dia none', onclick: (e) => { e.stopPropagation(); this._toggleKey(ent, prop); } });
+      const label = row.querySelector('label');
+      label.classList.add('kf-label');
+      label.appendChild(dia);
+      this._animRows.push({ ent, prop, row, dia });
+    }
+  }
+
+  /**
+   * 菱形点击：当前时刻无键 → 打键（无轨道先建）；有键 → 删键（轨道空了保留）。
+   * 时间轴 idle 时 = 在 0 秒打键并 seek(0) 进入 active（"第一次打键"的入口）。
+   */
+  _toggleKey(ent, prop) {
+    const { app } = this;
+    const tl = app.timeline, pb = app.playback;
+    const idle = !tl.active;
+    const t = idle ? 0 : pb.time;
+    const st = propState(app, tl.toJSON(), ent.id, prop, t);
+    try {
+      if (st.key) tl.removeKey(st.track.id, st.key.t);
+      else {
+        const value = tl.valueOf(ent, prop); // 此刻显示的值（idle = 手动值，active = 求值结果）
+        const track = st.track || tl.addTrack({ target: ent.id, property: prop });
+        tl.setKey(track.id, t, value);
+      }
+    } catch (err) { toastError(err); return; }
+    if (idle) pb.seek(0);
   }
 
   /** 标签页头（无标签页的类型返回 null）。 */
@@ -95,22 +168,25 @@ export class Inspector {
   // ---- 属性页（角色 / 道具 / 群众组通用）----
   _attr(root, ent) {
     const o = ent.root;
-    const invalidate = () => { this.app.edited(ent); this.app.stage.invalidate(); };
+    const invalidate = () => this.app.stage.invalidate();
+    const commit = (prop) => () => this.app.edited(ent, new Set([prop])); // 一次修改结束：按时间轴状态归属（3.3）
     root.appendChild(this._nameField(ent));
 
-    const pos = tripleRow({ label: '位置', step: 0.01, axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.position[k], set: (v) => { o.position[k] = v; invalidate(); } })) });
-    const rot = tripleRow({ label: '旋转', deg: true, axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.rotation[k] * R2D, set: (v) => { o.rotation[k] = v * D2R; invalidate(); } })) });
-    const scl = tripleRow({ label: '缩放', step: 0.01, axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.scale[k], set: (v) => { o.scale[k] = Math.max(0.05, v); invalidate(); } })) });
+    const pos = tripleRow({ label: '位置', step: 0.01, onCommit: commit('pos'), axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.position[k], set: (v) => { o.position[k] = v; invalidate(); } })) });
+    const rot = tripleRow({ label: '旋转', deg: true, onCommit: commit('rot'), axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.rotation[k] * R2D, set: (v) => { o.rotation[k] = v * D2R; invalidate(); } })) });
+    const scl = tripleRow({ label: '缩放', step: 0.01, onCommit: commit('scale'), axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.scale[k], set: (v) => { o.scale[k] = Math.max(0.05, v); invalidate(); } })) });
 
     const girth = ent._girth || 1; // 体型横向围度（胖瘦）；统一缩放时按 Y 为基准、保留 X/Z 比例
     const uni = sliderRow({
       label: '统一缩放', min: 0.2, max: 3, step: 0.01, value: o.scale.y / ent.baseScale,
       format: (v) => v.toFixed(1),
       onInput: (v) => { const s = ent.baseScale * v; o.scale.set(s * girth, s, s * girth); scl.syncAll(); invalidate(); },
+      onChange: commit('scale'),
     });
-    const col = colorRow({ label: '颜色', hex: toHex(ent.color), onChange: (h) => { ent.setColor(h); invalidate(); } });
+    const col = colorRow({ label: '颜色', hex: toHex(ent.color), onChange: (h) => { ent.setColor(h); this.app.edited(ent); invalidate(); } });
 
     root.append(pos.el, rot.el, scl.el, uni.el, col.el);
+    this._keyable(ent, [['pos', pos.el], ['rot', rot.el], ['scale', scl.el]]);
     this._syncFn = () => { pos.syncAll(); rot.syncAll(); scl.syncAll(); uni.set(o.scale.y / ent.baseScale); };
   }
 
@@ -118,7 +194,8 @@ export class Inspector {
   _cameraAttr(root, ent) {
     const app = this.app;
     const o = ent.root;
-    const changed = () => { app.edited(ent); ent.update(); app.stage.invalidate(); this.schedulePreview(); };
+    const changed = () => { ent.update(); app.stage.invalidate(); this.schedulePreview(); };
+    const commit = (prop) => () => app.edited(ent, new Set([prop])); // 一次修改结束：按时间轴状态归属（3.3）
 
     root.appendChild(this._buildPreview(ent));
     root.appendChild(this._nameField(ent));
@@ -133,7 +210,7 @@ export class Inspector {
     }
 
     const pos = tripleRow({
-      label: '位置', step: 0.01,
+      label: '位置', step: 0.01, onCommit: commit('pos'),
       axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.position[k], set: (v) => { o.position[k] = v; changed(); } })),
     });
     root.appendChild(pos.el);
@@ -152,7 +229,7 @@ export class Inspector {
     }).el);
 
     lookRow = tripleRow({
-      label: '注视坐标', step: 0.05,
+      label: '注视坐标', step: 0.05, onCommit: commit('rot'), // 注视坐标决定机位朝向：菱形 = 旋转关键帧
       axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => ent.lookTarget[k], set: (v) => { ent.lookTarget[k] = v; ent.aimAt(ent.lookTarget); changed(); } })),
     });
     root.appendChild(lookRow.el);
@@ -161,9 +238,11 @@ export class Inspector {
       label: '视野角度', min: 20, max: 90, step: 1, value: ent.cam.fov,
       format: (v) => Math.round(v) + '°',
       onInput: (v) => { ent.setFov(v); this._previewBadge.textContent = 'FOV ' + Math.round(v) + '°'; changed(); },
+      onChange: commit('fov'),
     });
     fovField.el.querySelector('label')?.appendChild(infoTip(FOV_TIP));
     root.appendChild(fovField.el);
+    this._keyable(ent, [['pos', pos.el], ['rot', lookRow.el], ['fov', fovField.el]]);
 
     const myShots = app.shots.shotsForCamera(ent.id);
     if (myShots.length) {
@@ -171,7 +250,12 @@ export class Inspector {
       root.appendChild(this._shotGrid(myShots, true));
     }
 
-    this._syncFn = () => { pos.syncAll(); lookRow.syncAll(); this.schedulePreview(); };
+    this._syncFn = () => {
+      pos.syncAll(); lookRow.syncAll();
+      fovField.set(ent.cam.fov);
+      this._previewBadge.textContent = 'FOV ' + Math.round(ent.cam.fov) + '°';
+      this.schedulePreview();
+    };
   }
 
   // ---- 摄像机：截图（按机位分组）----

@@ -18,6 +18,9 @@ import { History } from './History.js';
 import { Timeline } from '../anim/Timeline.js';
 import { Playback } from '../anim/Playback.js';
 
+const GIZMO_PROP = { translate: 'pos', rotate: 'rot', scale: 'scale' };
+const PROP_NAME = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视野' };
+
 /**
  * 应用状态：实体清单 / 选择 / 视角（导演 ↔ 机位 POV）/ 场景参数，统筹增删选改。
  * 不直接操作 UI —— 状态变化通过事件广播，UI 自行订阅：
@@ -61,13 +64,24 @@ export class App extends Emitter {
     this.docMeta = { name: '未命名场景', createdAt: new Date().toISOString() };
     this.timeline = new Timeline(this);
     this.playback = new Playback(this.timeline, { invalidate: () => stage.invalidate() });
+    this.autoKey = false;               // 自动打键（会话偏好，由时间轴面板写入）
     this._docChain = Promise.resolve(); // 文档加载串行化（连续撤销不会交错重建）
     this.loadingDocument = false;       // 加载期间为 true：history / 自动保存据此屏蔽
     this.history = new History(this);
 
     const dom = stage.renderer.domElement;
     this.gizmo = new TransformGizmo(stage.camera, dom, stage.scene, rig.controls, () => !this.cameraView);
-    this.gizmo.onObjectChange(() => { this.edited(this.selected); this.emit('transform'); });
+    // gizmo：拖动中只改 root（实时显示）；松手时按时间轴状态归属（idle 改手动值 / active 打键或改 base，见 edited）
+    this.gizmo.onObjectChange(() => { this._gizmoMoved = true; this.emit('transform'); });
+    this.gizmo.onDragState((dragging) => {
+      if (dragging) {
+        this._gizmoMoved = false;
+        this.playback.pause(); // 播放中拖动会被逐帧求值覆盖：先暂停
+      } else if (this._gizmoMoved && this.selected) {
+        this.edited(this.selected, new Set([GIZMO_PROP[this.gizmo.control.mode]]));
+        this.emit('transform');
+      }
+    });
     this.gizmo.onChange(() => stage.invalidate());
     this.selection = new Selection(stage.renderer, stage.camera, stage.scene, () => this.entities, (id) => this.select(id));
     this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis);
@@ -289,7 +303,7 @@ export class App extends Emitter {
     const box = worldBox(target.root, { useBones: target.type === 'character' });
     const center = box.isEmpty() ? target.root.getWorldPosition(new THREE.Vector3()) : box.getCenter(new THREE.Vector3());
     cam.aimAt(center);
-    this.edited(cam);
+    this.edited(cam, new Set(['rot']));
     this.stage.invalidate();
     return center;
   }
@@ -650,12 +664,32 @@ export class App extends Emitter {
   resetView() { this.rig.resetView(); toast('已重置视角'); }
 
   /**
-   * 实体被 gizmo / 面板修改后调用：时间轴 active 时把修改记进 base（视为改手动值，见 Timeline.refreshBase）。
-   * 群众组连同成员一起（组面板的姿势 / 颜色广播到全部成员）。
+   * 实体被 gizmo / 面板修改后（一次操作结束时）调用。时间轴 idle：什么都不做（root 就是手动值）。
+   * 时间轴 active（阶段 D 3.3）：
+   * - props 含 'pos' / 'rot' / 'scale' / 'fov' → Timeline.editAt：有轨道写当前时刻的键，无轨道按「自动打键」
+   *   新建轨道写键或改手动值；被路径 / 跟随 / 注视驱动的属性不记并提示；
+   * - props 省略（姿势 / 颜色等）→ refreshBase：改手动值。群众组连同成员一起（组面板的姿势广播到全部成员）。
+   * @param {Set<string>} [props]
    */
-  edited(ent) {
-    if (!ent || !this.timeline.active) return;
-    for (const e of [ent, ...ent.children]) this.timeline.refreshBase(e);
+  edited(ent, props) {
+    if (!ent || !this.timeline.active) return null;
+    if (!props) {
+      for (const e of [ent, ...ent.children]) this.timeline.refreshBase(e);
+      return null;
+    }
+    let res = null;
+    try { res = this.timeline.editAt(ent, props, this.playback.time, { autoKey: this.autoKey }); }
+    catch (err) {
+      console.warn(err);
+      toast(err?.errors?.[0] || err?.message || String(err));
+      this.timeline.evaluate(this.timeline.time); // 回到求值结果，不留未记录的修改
+      return null;
+    }
+    if (res.blocked.length) {
+      const by = [...new Set(res.blocked.map(([, src]) => src))].join(' / ');
+      toast(`${res.blocked.map(([p]) => PROP_NAME[p]).join('、')}由${by}驱动，修改未记录`);
+    }
+    return res;
   }
 
   // ---- 每帧 ----

@@ -148,3 +148,19 @@
 .tl-menu { min-width: 150px; }
 .tl-menu .ctx-item { padding: 8px 12px; font-size: 13px; }
 .tl-check { color: var(--accent); }
+
+/* ---- Inspector 联动：关键帧菱形 / 被驱动属性灰字 / active 提示条 ---- */
+.field > label.kf-label { display: flex; align-items: center; gap: 6px; }
+.kf-dia {
+  width: 9px; height: 9px; margin-left: 2px; padding: 0; flex: none; cursor: pointer;
+  transform: rotate(45deg); border: 1.5px solid var(--dim2); background: transparent; border-radius: 1px;
+}
+.kf-dia:hover { border-color: #fff; }
+.kf-dia.track { border-color: #d6d6dc; }
+.kf-dia.key { background: var(--accent); border-color: var(--accent); }
+.kf-dia:disabled { opacity: .3; cursor: not-allowed; }
+.field.driven input { color: var(--dim); }
+.tl-active-hint {
+  margin: 0 0 10px; padding: 6px 10px; border-radius: 7px; font-size: 11.5px; line-height: 1.4;
+  background: rgba(255,69,58,.1); color: #ff8a80; border: 1px solid rgba(255,69,58,.25);
+}

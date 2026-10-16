@@ -6,6 +6,7 @@ import { Track } from './Track.js';
 import { PathTrack } from './PathTrack.js';
 import { applyLocomotion } from './Locomotion.js';
 import { applyConstraint, constraintActive } from './Constraint.js';
+import { round6 } from '../util/round.js';
 
 const GOLDEN = 0.6180339887; // 群众成员步伐错开：第 i 个成员相位偏移 frac(i·φ)
 
@@ -248,8 +249,9 @@ export class Timeline extends Emitter {
   baseOf(ent) { return this._base.get(ent) || null; }
 
   /**
-   * active 期间实体被 gizmo / 面板修改：把它没被动画驱动的属性记进 base（视为改手动值），再按当前时刻重新求值。
-   * 被驱动的属性不记（否则会把动画瞬时值固化成手动值），修改会被下一次求值覆盖 —— 阶段 D 再改成打关键帧。
+   * active 期间实体被修改且不涉及可打键属性（姿势 / 颜色等）：把它没被动画驱动的属性记进 base（视为改手动值），
+   * 再按当前时刻重新求值。被驱动的属性不记（否则会把动画瞬时值固化成手动值）。
+   * 位置 / 旋转 / 缩放 / FOV 的修改走 editAt（打键或改手动值，见阶段 D 3.3）。
    */
   refreshBase(ent) {
     const base = ent && this._base.get(ent);
@@ -262,6 +264,90 @@ export class Timeline extends Emitter {
     if (base.fov !== undefined && !props.has('fov')) base.fov = cur.fov;
     if (base.values && !props.has('pose')) base.values = cur.values;
     this.evaluate(this.time);
+  }
+
+  /**
+   * 实体此刻（root 上）某属性的值，口径同文档 / setKey（复用 _transformJSON 的换算：角色 pos 相对站立基准、
+   * scale 相对素体自然尺寸、rot 为 XYZ 欧拉角度数）。fov 只对机位有意义。
+   */
+  valueOf(ent, prop) {
+    if (prop === 'fov') return ent.type === 'camera' ? round6(ent.cam.fov) : undefined;
+    return ent._transformJSON(ent.root)[prop];
+  }
+
+  /**
+   * t 时刻被路径 / 生效中的约束强制驱动的属性：prop → '路径' | '跟随' | '注视'。
+   * 这些属性在该时刻手动改了也会被求值覆盖，打键也不起作用。
+   */
+  forcedProps(entId, t) {
+    const out = new Map();
+    for (const p of this.paths) {
+      if (p.target !== entId) continue;
+      out.set('pos', '路径');
+      if (p.orient === 'tangent') out.set('rot', '路径');
+    }
+    for (const c of this.constraints) {
+      if (c.target !== entId || !constraintActive(c, t)) continue;
+      if (c.type === 'follow') { out.set('pos', '跟随'); out.set('rot', '跟随'); }
+      else if (!out.has('rot')) out.set('rot', '注视');
+    }
+    return out;
+  }
+
+  /**
+   * active 期间实体被 gizmo / 面板修改后的归属（阶段 D 任务说明 3.3）。props 为刚改过的属性：
+   * 'pos' | 'rot' | 'scale' | 'fov' 按下面规则处理；其它（'pose' / 'color' …）视为改手动值。
+   * - 被路径 / 生效中的约束驱动 → 不记（下一次求值覆盖），列入 blocked；
+   * - 有轨道（含空轨道）→ 在 t 写键：同刻已有键则覆盖，ease 沿用被覆盖键，否则 linear；
+   * - 无轨道 → autoKey ? 新建轨道并写键 : 记进 base（改手动值，同 refreshBase）。
+   * 所有键改动合成一次提交（一次撤销）；最后按当前时刻重新求值。
+   * @returns {{keyed:string[], blocked:[string,string][], manual:string[]}}
+   */
+  editAt(ent, props, t, { autoKey = false } = {}) {
+    const out = { keyed: [], blocked: [], manual: [] };
+    if (!ent) return out;
+    // 先取值：提交会按 t 重新求值并覆盖 root
+    const cur = this._capture(ent);
+    const forced = this.forcedProps(ent.id, t);
+    let tracks = this.tracks;
+    const used = this._allIds();
+    for (const p of props) {
+      const value = ['pos', 'rot', 'scale', 'fov'].includes(p) ? this.valueOf(ent, p) : undefined;
+      if (value === undefined) { out.manual.push(p); continue; }
+      if (forced.has(p)) { out.blocked.push([p, forced.get(p)]); continue; }
+      let tr = tracks.find((x) => x.target === ent.id && x.property === p);
+      if (!tr && !autoKey) { out.manual.push(p); continue; }
+      if (!tr) {
+        let id;
+        do id = genId(); while (used.has(id));
+        used.add(id);
+        tr = { id, target: ent.id, property: p, keys: [] };
+        tracks = [...tracks, tr];
+      }
+      const old = tr.keys.find((k) => Math.abs(k.t - t) <= T_EPS);
+      const keys = tr.keys.filter((k) => k !== old);
+      keys.push({ t, value: clone(value), ease: old?.ease ?? 'linear' });
+      keys.sort((a, b) => a.t - b.t);
+      const next = { ...tr, keys };
+      tracks = tracks.map((x) => (x === tr ? next : x));
+      out.keyed.push(p);
+    }
+
+    // 手动值：没被驱动、也不是这次打键的属性记进 base（未进 base 的实体，root 本身就是手动值）
+    const base = this._base.get(ent);
+    if (base) {
+      const driven = this._drivenProps().get(ent.id) || new Set();
+      const keep = (p) => driven.has(p) || out.keyed.includes(p);
+      if (!keep('pos')) base.position.copy(cur.position);
+      if (!keep('rot')) base.rotation.copy(cur.rotation);
+      if (!keep('scale')) base.scale.copy(cur.scale);
+      if (base.fov !== undefined && !keep('fov')) base.fov = cur.fov;
+      if (base.values && !keep('pose')) base.values = cur.values;
+    }
+
+    if (out.keyed.length) this._commit({ tracks }); // 校验 + 'change' + 撤销 + 重新求值
+    else this.evaluate(this.time);
+    return out;
   }
 
   // ---- 编辑 API（阶段 D 面板 / 阶段 H AI 调用）：全部返回文档形状的拷贝；每次变更记一步撤销 ----

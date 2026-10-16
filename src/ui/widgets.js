@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { el } from '../util/dom.js';
 
-// 滑条行：label 在上，[====蓝色填充滑条====] [数值框]
-export function sliderRow({ label, min, max, step = 1, value = 0, disabled = false, format = (v) => String(v), onInput }) {
+// 滑条行：label 在上，[====蓝色填充滑条====] [数值框]。onChange：松手时（一次操作结束）。
+export function sliderRow({ label, min, max, step = 1, value = 0, disabled = false, format = (v) => String(v), onInput, onChange }) {
   const valbox = el('span', { class: 'valbox', text: format(value) });
   const input = el('input', { type: 'range', class: 'filled', min, max, step, value });
   if (disabled) input.disabled = true;
@@ -14,6 +14,7 @@ export function sliderRow({ label, min, max, step = 1, value = 0, disabled = fal
     valbox.textContent = format(v);
     onInput && onInput(v);
   });
+  if (onChange) input.addEventListener('change', () => onChange(parseFloat(input.value)));
   const row = el('div', { class: 'field' }, [
     label != null ? el('label', { text: label }) : null,
     el('div', { class: 'slider-row' }, [input, valbox]),
@@ -22,7 +23,7 @@ export function sliderRow({ label, min, max, step = 1, value = 0, disabled = fal
 }
 
 // 轴标签 hover 左右拖动改值（scrubber）。
-function attachScrub(elm, { get, set, step, after }) {
+function attachScrub(elm, { get, set, step, after, end }) {
   let startX = 0, startV = 0, dragging = false;
   elm.classList.add('scrub');
   elm.addEventListener('pointerdown', (e) => {
@@ -35,23 +36,29 @@ function attachScrub(elm, { get, set, step, after }) {
     set(startV + (e.clientX - startX) * step);
     after && after();
   });
-  const end = (e) => { if (dragging) { dragging = false; try { elm.releasePointerCapture(e.pointerId); } catch { /* noop */ } } };
-  elm.addEventListener('pointerup', end);
-  elm.addEventListener('pointercancel', end);
+  const stop = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    try { elm.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+    if (e.clientX !== startX) end?.();
+  };
+  elm.addEventListener('pointerup', stop);
+  elm.addEventListener('pointercancel', stop);
 }
 
 // 三元 XYZ 行。axes: [{key:'x', get:()=>num, set:(v)=>{}, step?}]; deg=true 显示整数度；
-// 轴标签可左右拖动改值（每轴 step 可覆盖整体 step）。
-export function tripleRow({ label, axes, deg = false, step }) {
+// 轴标签可左右拖动改值（每轴 step 可覆盖整体 step）。onCommit：一次修改结束（输入框 change / 轴标签拖动松手）。
+export function tripleRow({ label, axes, deg = false, step, onCommit }) {
   const fx = (v) => (deg ? String(Math.round(v)) : (Math.round(v * 100) / 100).toFixed(2));
   const baseStep = step != null ? step : (deg ? 1 : 0.05);
   const inputs = {};
   const fields = axes.map(({ key, get, set, step: axStep }) => {
     const input = el('input', { value: fx(get()) });
     input.addEventListener('input', () => { const v = parseFloat(input.value); if (!isNaN(v)) set(v); });
+    if (onCommit) input.addEventListener('change', () => onCommit());
     inputs[key] = { input, get };
     const ax = el('span', { class: 'ax', text: key.toUpperCase() });
-    attachScrub(ax, { get, set, step: axStep != null ? axStep : baseStep, after: () => { input.value = fx(get()); } });
+    attachScrub(ax, { get, set, step: axStep != null ? axStep : baseStep, after: () => { input.value = fx(get()); }, end: onCommit });
     return el('div', { class: 'fld' }, [ax, input]);
   });
   const row = el('div', { class: 'field' }, [
