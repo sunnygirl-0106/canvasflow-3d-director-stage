@@ -6,6 +6,7 @@
   <title>3D 导演台</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0d12'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='%2334c759'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/src/styles/style.css" />
+  <link rel="stylesheet" href="/src/styles/timeline.css" />
 </head>
 <body>
   <div id="app">
@@ -50,6 +51,9 @@
         <div id="inspector" hidden></div>
       </aside>
     </main>
+
+    <!-- 底：时间轴（可折叠到只剩播放条） -->
+    <section id="timeline"></section>
   </div>
   <div id="toast"></div>
   <script type="module" src="/src/main.js"></script>

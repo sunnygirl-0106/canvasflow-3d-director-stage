@@ -6,6 +6,7 @@ import { Dock } from './ui/Dock.js';
 import { Outliner } from './ui/Outliner.js';
 import { Inspector } from './ui/Inspector.js';
 import { ScenePanel } from './ui/ScenePanel.js';
+import { TimelinePanel } from './ui/timeline/TimelinePanel.js';
 import { toast } from './util/dom.js';
 import { AutoSave } from './app/SceneFile.js';
 
@@ -24,7 +25,8 @@ const navGizmo = new NavGizmo($('navsvg'), stage.camera, () => app.resetView());
 new ScenePanel($('scenePanel'), app);
 new Inspector($('inspector'), app);
 new Outliner($('outliner'), app, $('search'));
-new Dock($('dock'), app);
+const timelinePanel = new TimelinePanel($('timeline'), app);
+new Dock($('dock'), app, { timelinePanel });
 
 // 右栏：未选中 → 3D场景面板；选中 → 属性面板
 app.on('selection', (ent) => {

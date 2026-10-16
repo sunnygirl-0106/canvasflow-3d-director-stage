@@ -28,6 +28,18 @@ const PATHS = {
   trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
   groupFrame: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="9" y="9" width="6" height="6" rx="1.2"/>',
   copy: '<rect x="3.5" y="8.5" width="11" height="12" rx="2"/><path d="M8.5 8.5V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2.5"/><path d="M19.2 13.6l.55 1.45 1.45.55-1.45.55-.55 1.45-.55-1.45-1.45-.55 1.45-.55z"/>',
+  // 时间轴
+  timeline: '<path d="M3 6h18M3 12h18M3 18h18"/><path d="M8 4v4M15 10v4M11 16v4"/>',
+  play: '<path d="M7 5l12 7-12 7z" fill="currentColor"/>',
+  pause: '<path d="M8 5v14M16 5v14"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>',
+  toStart: '<path d="M6 5v14"/><path d="M19 5l-10 7 10 7z" fill="currentColor"/>',
+  toEnd: '<path d="M18 5v14"/><path d="M5 5l10 7-10 7z" fill="currentColor"/>',
+  prevFrame: '<path d="M15 6l-6 6 6 6"/>',
+  nextFrame: '<path d="M9 6l6 6-6 6"/>',
+  loop: '<path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/>',
+  magnet: '<path d="M6 3v8a6 6 0 0 0 12 0V3"/><path d="M6 7h4M14 7h4"/>',
+  record: '<circle cx="12" cy="12" r="6" fill="currentColor"/>',
 };
 
 /** 返回 <svg> 字符串。size 为像素宽高，stroke 为描边宽度。 */

@@ -1,0 +1,78 @@
+/* ===== 底部时间轴面板（阶段 D）===== */
+#timeline {
+  --tl-purple: #a78bfa;
+  --tl-red: #ff453a;
+  --tl-row-h: 22px;
+  flex: 0 0 auto; height: 220px;
+  display: flex; flex-direction: column;
+  background: var(--panel); border-top: 1px solid var(--line);
+  user-select: none; position: relative; z-index: 4;
+}
+#timeline.collapsed { height: 36px; }
+#timeline.collapsed .tl-scroll { display: none; }
+
+/* ---- 播放条 ---- */
+.tl-transport {
+  flex: 0 0 35px; height: 35px;
+  display: flex; align-items: center; gap: 2px; padding: 0 10px;
+  border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden;
+}
+#timeline.collapsed .tl-transport { border-bottom: none; }
+.tl-btn {
+  width: 28px; height: 26px; flex: none; border: none; background: none; color: #c7c7cd;
+  border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.tl-btn:hover { background: #2a2a30; color: #fff; }
+.tl-btn.on { background: #2b2f3a; color: var(--accent); }
+.tl-btn.tl-play.on { color: #fff; background: #34343b; }
+.tl-btn.tl-autokey { color: var(--dim2); }
+.tl-btn.tl-autokey.on { color: var(--tl-red); background: rgba(255,69,58,.12); }
+.tl-btn.tl-fold svg { transform: rotate(90deg); transition: transform .15s; }
+.tl-btn.tl-fold.up svg { transform: rotate(-90deg); }
+.tl-clock { font-variant-numeric: tabular-nums; margin: 0 8px 0 10px; font-size: 12.5px; }
+.tl-time { color: #fff; }
+.tl-dur { color: var(--dim); margin-left: 4px; }
+.tl-vsep { width: 1px; height: 18px; background: var(--line2); margin: 0 8px; flex: none; }
+.tl-grow { flex: 1; }
+.tl-sel, .tl-num {
+  background: var(--panel2); color: var(--txt); border: 1px solid transparent; border-radius: 6px;
+  font-size: 12px; height: 24px; padding: 0 6px; outline: none; font-family: inherit;
+}
+.tl-sel:focus, .tl-num:focus { border-color: var(--line2); }
+.tl-num { width: 56px; }
+.tl-cam { max-width: 120px; }
+.tl-field { display: flex; align-items: center; gap: 5px; color: var(--dim); font-size: 12px; margin-left: 10px; }
+
+/* ---- 滚动区：名列 sticky left，标尺 sticky top ---- */
+.tl-scroll { flex: 1; min-height: 0; overflow: auto; position: relative; }
+.tl-content { position: relative; min-height: 100%; }
+.tl-ruler-row {
+  position: sticky; top: 0; z-index: 5; display: flex;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.tl-corner {
+  position: sticky; left: 0; z-index: 7; flex: none; background: var(--panel);
+  border-right: 1px solid var(--line);
+}
+.tl-ruler { position: sticky; left: var(--name-w); flex: none; display: block; cursor: ew-resize; }
+
+/* 播放头：顶部三角（在标尺行内）+ 红线（贯穿各行） */
+.tl-ph-head {
+  position: absolute; left: -6px; top: 0; width: 13px; height: 100%; z-index: 6; cursor: ew-resize;
+}
+.tl-ph-head::before {
+  content: ""; position: absolute; left: 1px; top: 3px; width: 11px; height: 10px;
+  background: var(--tl-red); border-radius: 2px 2px 0 0;
+  clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
+}
+.tl-ph-head::after {
+  content: ""; position: absolute; left: 6px; top: 12px; bottom: 0; width: 1px; background: var(--tl-red);
+}
+.tl-ph-line {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: var(--tl-red);
+  pointer-events: none; z-index: 3;
+}
+
+/* ---- 行 ---- */
+.tl-rows { position: relative; }
+.tl-empty { position: sticky; left: 0; width: max-content; padding: 18px 16px; color: var(--dim2); font-size: 12.5px; }

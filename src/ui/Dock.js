@@ -16,10 +16,11 @@ const KEY_UNDO = IS_MAC ? '⌘Z' : 'Ctrl+Z';
 const KEY_REDO = IS_MAC ? '⇧⌘Z' : 'Ctrl+Y';
 const TF_MODES = [['translate', 'move', '移动'], ['rotate', 'rotate', '旋转'], ['scale', 'scale', '缩放']];
 
-// 底部悬浮工具坞：变换 / 添加 / 全景图 / 机位 / 比例 / 截图 / 场景（撤销·重做·导出·导入）/ 全屏
+// 底部悬浮工具坞：变换 / 添加 / 全景图 / 机位 / 比例 / 截图 / 场景（撤销·重做·导出·导入）/ 时间轴 / 全屏
 export class Dock {
-  constructor(container, app) {
+  constructor(container, app, { timelinePanel } = {}) {
     this.app = app;
+    this.timelinePanel = timelinePanel;
     this.container = container;
     this.modeBtns = {};
     this._assets = [];
@@ -87,11 +88,20 @@ export class Dock {
     const scene = this._btn('scene', '场景（撤销 / 重做 / 导出 / 导入）', (e) => { e.stopPropagation(); this.sceneMenu.toggle(); });
     this.sceneBtn = scene;
 
-    // 8 全屏（发送按钮已移除，职能迁移到右侧「摄像机截图」面板）
+    // 8 时间轴（展开 / 折叠底部面板）
+    const tlp = this.timelinePanel;
+    const tlBtn = tlp ? this._btn('timeline', '时间轴（展开 / 折叠）', () => tlp.toggleCollapsed()) : null;
+    if (tlBtn) {
+      tlBtn.classList.toggle('on', !tlp.collapsed);
+      if (!this._tlBound) { this._tlBound = true; tlp.on('collapse', (v) => this.tlBtn?.classList.toggle('on', !v)); }
+    }
+    this.tlBtn = tlBtn;
+
+    // 9 全屏（发送按钮已移除，职能迁移到右侧「摄像机截图」面板）
     const full = this._btn('expand', '全屏', () => this._toggleFullscreen());
     this.fullBtn = full;
 
-    c.append(tf, addBtn, pano, camAdd, this._sep(), frame, shot, this._sep(), scene, full);
+    c.append(...[tf, addBtn, pano, camAdd, this._sep(), frame, shot, this._sep(), scene, tlBtn, full].filter(Boolean));
 
     // ---- 菜单（统一由 DockMenu 管理）----
     this.menu = new DockMenu(c);
