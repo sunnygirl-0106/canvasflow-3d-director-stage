@@ -34,20 +34,25 @@ let toastTimer = null;
 /**
  * 轻提示。msg 中的换行会保留（多条错误逐行显示）。
  * @param {string} msg
- * @param {{duration?:number, action?:{label:string, onClick:()=>void}}} [opts] action：带一个按钮（点了即关闭）
+ * @param {{duration?:number, action?:{label:string, onClick:()=>void},
+ *          actions?:{label:string, onClick?:()=>void, secondary?:boolean}[]}} [opts]
+ *   action：带一个按钮（点了即关闭）；actions：多个按钮（确认 / 取消类，secondary 为次要样式）。
+ *   没点按钮就消失（超时 / 被下一条提示顶掉）= 什么都不做，确认类提示据此等同"取消"。
  */
-export function toast(msg, { duration, action } = {}) {
+export function toast(msg, { duration, action, actions } = {}) {
   if (!toastEl) toastEl = document.getElementById('toast');
   if (!toastEl) return;
+  const btns = actions || (action ? [action] : []);
   toastEl.textContent = msg;
-  toastEl.classList.toggle('has-action', !!action);
-  if (action) {
+  toastEl.classList.toggle('has-action', btns.length > 0);
+  const close = () => { clearTimeout(toastTimer); toastEl.classList.remove('show'); };
+  for (const b of btns) {
     toastEl.appendChild(el('button', {
-      class: 'toast-action', text: action.label,
-      onclick: () => { toastEl.classList.remove('show'); action.onClick(); },
+      class: 'toast-action' + (b.secondary ? ' secondary' : ''), text: b.label,
+      onclick: () => { close(); b.onClick?.(); },
     }));
   }
   toastEl.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), duration ?? (action ? 10000 : 1700));
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), duration ?? (btns.length ? 10000 : 1700));
 }

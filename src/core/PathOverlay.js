@@ -54,6 +54,17 @@ export class PathOverlay {
     };
     this._lineMats = new Set();
 
+    // 绘制中的草稿（PathTool 写入）：曲线 + 已落的点；吸附目标的高亮环。不随 rebuild 清空。
+    this.draftGroup = new THREE.Group();
+    this.group.add(this.draftGroup);
+    this.snapRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.9, 1, 48).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false, side: THREE.DoubleSide, fog: false }),
+    );
+    this.snapRing.renderOrder = 12;
+    this.snapRing.visible = false;
+    this.group.add(this.snapRing);
+
     app.timeline.on('change', () => this.rebuild());
     app.playback.on('tick', () => this._placeDots());
     app.on('selection', () => this.rebuild());
@@ -65,8 +76,9 @@ export class PathOverlay {
   // ---- 构建 ----
   rebuild() {
     for (const o of [...this.group.children]) {
+      if (o === this.draftGroup || o === this.snapRing) continue;
       this.group.remove(o);
-      if (o.isLine2) { o.geometry.dispose(); this._lineMats.delete(o.material); o.material.dispose(); }
+      this._disposeLine(o);
     }
     this._items = [];
     const { paths } = this.app.timeline.toJSON();
@@ -101,11 +113,18 @@ export class PathOverlay {
     return out;
   }
 
-  _line(samples, selected) {
+  _disposeLine(o) {
+    if (!o.isLine2) return;
+    o.geometry.dispose();
+    this._lineMats.delete(o.material);
+    o.material.dispose();
+  }
+
+  _line(samples, selected, { color = ACCENT, opacity = selected ? 1 : 0.5 } = {}) {
     const geo = new LineGeometry();
     geo.setPositions(samples);
     const mat = new LineMaterial({
-      color: ACCENT, linewidth: selected ? 2 : 1, transparent: true, opacity: selected ? 1 : 0.5,
+      color, linewidth: selected ? 2 : 1, transparent: true, opacity,
       depthWrite: false,
     });
     this._lineMats.add(mat);
@@ -171,6 +190,30 @@ export class PathOverlay {
   _syncResolution(only) {
     const size = this.app.stage.renderer.getSize(new THREE.Vector2());
     for (const m of only ? [only] : this._lineMats) m.resolution.set(size.x, size.y);
+  }
+
+  // ---- 绘制草稿 / 吸附高亮（PathTool）----
+  /** 草稿：已落的点 + 按同一种曲线画出的预览（points 为 null 清空）。 */
+  setDraft(points, { closed = false } = {}) {
+    for (const o of [...this.draftGroup.children]) { this.draftGroup.remove(o); this._disposeLine(o); }
+    if (points?.length >= 2) {
+      const path = new Path({ points, closed, start: 0, duration: 1, speed: 'linear' });
+      if (path.length > 1e-6) this.draftGroup.add(this._line(this._sample(path), true, { color: COLOR.hover, opacity: 0.9 }));
+    }
+    for (const p of points || []) {
+      const m = this._screenMesh(this._sphereGeo, this._mats.vertex, VERTEX_PX - 1);
+      m.position.set(p[0], p[1] + LIFT, p[2]);
+      m.renderOrder = 13;
+      this.draftGroup.add(m);
+    }
+    this.app.stage.invalidate();
+  }
+
+  /** 吸附目标高亮环（局部坐标中心 + 半径；null 隐藏）。 */
+  setSnap(center, radius = 0.5) {
+    this.snapRing.visible = !!center;
+    if (center) { this.snapRing.position.set(center[0], center[1] + LIFT, center[2]); this.snapRing.scale.setScalar(radius); }
+    this.app.stage.invalidate();
   }
 
   // ---- 播放亮点 ----

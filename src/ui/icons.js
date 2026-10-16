@@ -16,6 +16,7 @@ const PATHS = {
   group: '<circle cx="7" cy="7" r="2.1"/><circle cx="17" cy="7" r="2.1"/><circle cx="7" cy="17" r="2.1"/><circle cx="17" cy="17" r="2.1"/>',
   history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4M12 7v5l3 2"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>',
+  path: '<path d="M5.5 18.5c2.5-1 3-4.5 6-5.5s4.5.5 6-6"/><circle cx="5" cy="19" r="1.8"/><circle cx="18" cy="6" r="1.8"/>',
   scene: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>',
   undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
   redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',

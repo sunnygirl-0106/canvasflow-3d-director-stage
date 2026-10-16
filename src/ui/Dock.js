@@ -6,6 +6,7 @@ import { listCanvasAssets } from '../util/assetLibrary.js';
 import { RATIO_OPTIONS, isPanoRatio, BODY_TYPES, PROP_KINDS } from '../config.js';
 import { icon } from './icons.js';
 import { exportScene, pickAndImportScene } from '../app/SceneFile.js';
+import { PATH_MODES } from '../app/PathTool.js';
 
 const svg = (name, w = 21) => icon(name, w);
 
@@ -77,6 +78,14 @@ export class Dock {
     const camAdd = this._btn('video', '添加机位（预设）', (e) => { e.stopPropagation(); this.camMenu.toggle(); });
     this.camAddBtn = camAdd;
 
+    // 4.5 路径（选中角色 / 道具 / 组时可用）：五种绘制方式
+    const pathBtn = this._btn('path', '路径（为选中对象绘制移动路径）', (e) => { e.stopPropagation(); this.pathMenu.toggle(); });
+    this.pathBtn = pathBtn;
+    if (!this._pathBound) {
+      this._pathBound = true;
+      app.pathTool.on('mode', (m) => this.pathBtn?.classList.toggle('on', !!m));
+    }
+
     // 5 取景比例
     const frame = this._btn('frame', '选择画幅比例', (e) => { e.stopPropagation(); this.ratioMenu.toggle(); });
     this.ratioBtn = frame;
@@ -101,7 +110,7 @@ export class Dock {
     const full = this._btn('expand', '全屏', () => this._toggleFullscreen());
     this.fullBtn = full;
 
-    c.append(...[tf, addBtn, pano, camAdd, this._sep(), frame, shot, this._sep(), scene, tlBtn, full].filter(Boolean));
+    c.append(...[tf, addBtn, pano, camAdd, pathBtn, this._sep(), frame, shot, this._sep(), scene, tlBtn, full].filter(Boolean));
 
     // ---- 菜单（统一由 DockMenu 管理）----
     this.menu = new DockMenu(c);
@@ -115,6 +124,7 @@ export class Dock {
     this.addMenu = this.menu.create({ anchor: addBtn, build: () => this._buildAddItems() });
     this.panoMenu = this.menu.create({ anchor: pano, build: () => this._buildPanoItems() });
     this.camMenu = this.menu.create({ anchor: camAdd, className: 'cammenu', build: () => this._buildCamItems() });
+    this.pathMenu = this.menu.create({ anchor: pathBtn, minWidth: '150px', build: () => this._buildPathItems() });
     this.sceneMenu = this.menu.create({ anchor: scene, minWidth: '170px', build: () => this._buildSceneItems() });
 
     this.ratioMenu = this.menu.create({
@@ -237,6 +247,17 @@ export class Dock {
       for (const p of g.items) {
         items.push(this._item('video', p.label, () => { app.addCamera(p.key); this.menu.close(); }, false, 16));
       }
+    }
+    return items;
+  }
+
+  // ---- 路径菜单 ----
+  _buildPathItems() {
+    const tool = this.app.pathTool;
+    const ok = tool.canDraw(this.app.selected);
+    const items = [el('div', { class: 'menu-group', text: ok ? '绘制路径' : '先选中角色 / 道具 / 组' })];
+    for (const [mode, label] of PATH_MODES) {
+      items.push(this._item(null, label, () => { this.menu.close(); tool.request(mode); }, tool.mode === mode, 17, { disabled: !ok }));
     }
     return items;
   }

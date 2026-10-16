@@ -7,6 +7,7 @@ import { CAMERA_PRESETS } from '../core/cameraPresets.js';
 import { TransformGizmo } from '../core/TransformGizmo.js';
 import { Selection } from '../core/Selection.js';
 import { PathOverlay } from '../core/PathOverlay.js';
+import { PathTool } from './PathTool.js';
 import { BODY_TYPES, bodySpec, PROP_LABEL, CROWD_PALETTE, RATIO_OPTIONS } from '../config.js';
 import { Emitter } from '../util/Emitter.js';
 import { toast } from '../util/dom.js';
@@ -85,9 +86,10 @@ export class App extends Emitter {
     });
     this.gizmo.onChange(() => stage.invalidate());
     this.selection = new Selection(stage.renderer, stage.camera, stage.scene, () => this.entities, (id) => this.select(id));
-    this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis);
     rig.controls.addEventListener('change', () => stage.invalidate());
     this.pathOverlay = new PathOverlay(this); // 视口路径可视化（阶段 E）
+    this.pathTool = new PathTool(this);       // 路径绘制
+    this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis || this.pathTool.busy);
 
     this.labels = new Labels(labelLayer);
     this.shots = new ShotManager(this);

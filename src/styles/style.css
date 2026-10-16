@@ -521,3 +521,14 @@ select.dropdown:focus { border-color: var(--line2); }
   flex: none; background: var(--accent); color: #fff; border: 0; border-radius: 7px;
   padding: 5px 12px; font-size: 12px; cursor: pointer;
 }
+#toast .toast-action + .toast-action { margin-left: -4px; }
+#toast .toast-action.secondary { background: var(--panel3); color: var(--txt); }
+
+/* 路径绘制态：顶部操作提示条 + 十字光标 */
+.path-hint {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 6;
+  background: rgba(20,20,24,.92); border: 1px solid var(--line2); color: var(--txt);
+  padding: 7px 14px; border-radius: 9px; font-size: 12.5px; white-space: nowrap; pointer-events: none;
+}
+.path-hint[hidden] { display: none; }
+#viewport.path-drawing canvas { cursor: crosshair; }
