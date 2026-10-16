@@ -112,11 +112,14 @@ docs/                   技术规划文档
 1. **放模型**：GLB 放到 `public/assets/figures/<id>.glb`。
 2. **复制档案**：`src/rig/profiles/bodykun_male.js` → `src/rig/profiles/<id>.js`，改 `id` / `label` / `file` / `heightM`；
    在 `src/rig/profiles/index.js` 登记。
-   - `joints`：语义关节 → `{ bone, axis, sign }`；骨名不同就改 `bone`。
-   - `neutralOffset`：T-Pose → 自然站立 的逐关节偏移（度），通常沿用 `{ lArmAbd: -80, rArmAbd: 80, lFore: -8, rFore: 8 }`。
+   - `joints`：语义关节 → `{ bone, axis, sign }`；骨名不同就改 `bone`。`axis` 是**身体坐标系**的轴
+     （X=角色左侧、Y=上、Z=前方，以 T-Pose 为准；`twist` = 沿骨头自转），加载时按骨头静止朝向换算成局部轴，
+     所以与骨头 roll / 局部朝向无关，标准 T-Pose 的 Mixamo 骨骼通常可直接复用现有档案。
+   - `sign` 保证「正值 = 标签动作」（前举 / 外展 / 外旋 / 弯曲 / 抬腿 为正，左右一致）。
+   - `neutralOffset`：T-Pose → 自然站立 的逐关节偏移（度），通常沿用 `{ lArmAbd: -80, rArmAbd: -80, lFore: 8, rFore: 8 }`。
 3. **跑校准页**：`npm run dev`，打开 `/calib.html?profile=<id>`（或 `node selftest.mjs calib <id>` 出图）。
    每格是该关节 +30°，灰色残影是站立参考；对照 `?profile=xbot` 的同一格看方向。
-4. **修方向**：某关节转反了 → 该关节加 `sign: -1`；转错了轴（如前臂不弯、抬腿变侧摆）→ 改 `axis`。
+4. **修方向**：某关节转反了 → 该关节改 `sign`；转错了轴（如前臂不弯、抬腿变侧摆）→ 改 `axis`（多半是 T-Pose 不标准）。
    格子灰掉并标「缺失」= 骨头没找到，检查 `bone` 名。重复 3–4 直到每格与 Xbot 同向。
 5. **注册体型**：在 `src/config.js` 的 `BODY_TYPES` 加一项 `{ profile: PROFILES.<id>, label, height, girth }`，
    底部「＋」菜单即出现该体型。加载时若仍有缺失关节，会 toast 提示并禁用对应滑条。

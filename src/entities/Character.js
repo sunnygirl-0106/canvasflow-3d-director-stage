@@ -27,8 +27,26 @@ function loadTemplate(url) {
 }
 
 // applyPose 复用的临时对象
-const _axis = new THREE.Vector3();
 const _q = new THREE.Quaternion();
+const _wq = new THREE.Quaternion();
+const _rootInv = new THREE.Quaternion();
+const BODY_AXES = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
+
+/**
+ * 档案里的轴（身体坐标系）→ 该骨头的局部旋转轴。
+ * 身体坐标系 = 角色 root：X 指向角色左侧，Y 向上，Z 指向角色前方。
+ * - 'x'/'y'/'z'：取骨头在文件静止位(T-pose)下的世界朝向 W，局部轴 = W⁻¹·身体轴。
+ *   于是 restQ × R(局部轴, a) 等价于"在身体坐标系里绕该轴转 a"，与骨头 roll / 局部朝向无关。
+ * - 'twist'：沿骨头自身方向（指向第一个子骨头）自转。
+ */
+function localAxis(bone, axis, rootInv) {
+  if (axis === 'twist') {
+    const child = bone.children.find((c) => c.isBone);
+    return child && child.position.lengthSq() > 0 ? child.position.clone().normalize() : new THREE.Vector3(0, 1, 0);
+  }
+  const w = bone.getWorldQuaternion(_wq).premultiply(rootInv);
+  return BODY_AXES[axis].clone().applyQuaternion(w.invert());
+}
 
 /**
  * 角色：带骨骼 GLB + 全身 FK 摆姿。
@@ -73,7 +91,10 @@ export class Character extends Entity {
     const rig = resolveRig(model, this.profile, this.bones);
     this.missingJoints = rig.missing;
 
-    // 涉及骨头的静止四元数（restQ），以及 bone → 该骨头上的 [{key, axis, sign}]（按 schema 顺序）
+    // 涉及骨头的静止四元数（restQ），以及 bone → 该骨头上的 [{key, local, sign}]（按 schema 顺序）
+    // local：档案身体轴换算到该骨头的局部轴（在文件静止位下计算一次）
+    root.updateMatrixWorld(true);
+    root.getWorldQuaternion(_rootInv).invert();
     this.restQ = new Map();
     this.bonesUsed = new Map();
     for (const { key } of JOINT_SCHEMA) {
@@ -82,7 +103,7 @@ export class Character extends Entity {
       const { axis, sign = 1 } = this.profile.joints[key];
       if (!this.restQ.has(bone)) this.restQ.set(bone, bone.quaternion.clone());
       if (!this.bonesUsed.has(bone)) this.bonesUsed.set(bone, []);
-      this.bonesUsed.get(bone).push({ key, axis, sign });
+      this.bonesUsed.get(bone).push({ key, local: localAxis(bone, axis, _rootInv), sign });
     }
 
     // 该角色独立的一份姿势（0 = 自然站立）；values 是 pose.values 的别名，滑条直接读写
@@ -122,9 +143,10 @@ export class Character extends Entity {
   }
 
   /**
-   * 全身 FK 摆姿：最终姿势 = restQ × Π 各轴旋转(setFromAxisAngle)，
+   * 全身 FK 摆姿：最终姿势 = restQ × Π 各轴旋转(setFromAxisAngle(local, a))，
    * 每轴角度 = sign × (neutralOffset[key] + values[key])，即站立偏移与姿势逐关节相加。
-   * 同一骨头多个轴按 JOINT_SCHEMA 顺序依次 multiply。
+   * 同一骨头多个轴按 JOINT_SCHEMA 顺序依次 multiply：靠前的轴在外层（身体坐标系里后施加），
+   * 例如肩 = 前举 × 外展 × 扭转 —— 先自转、再放下/抬起、最后前后摆。
    */
   applyPose() {
     const offset = this.profile.neutralOffset || {};
@@ -133,8 +155,7 @@ export class Character extends Entity {
       for (const j of joints) {
         const a = THREE.MathUtils.degToRad(j.sign * ((offset[j.key] || 0) + (this.values[j.key] || 0)));
         if (a === 0) continue;
-        _axis.set(j.axis === 'x' ? 1 : 0, j.axis === 'y' ? 1 : 0, j.axis === 'z' ? 1 : 0);
-        bone.quaternion.multiply(_q.setFromAxisAngle(_axis, a));
+        bone.quaternion.multiply(_q.setFromAxisAngle(j.local, a));
       }
     }
   }
