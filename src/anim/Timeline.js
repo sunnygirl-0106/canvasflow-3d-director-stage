@@ -3,6 +3,7 @@ import { Emitter } from '../util/Emitter.js';
 import { DEFAULT_TIMELINE, validate, DocumentError } from '../doc/schema.js';
 import { genId } from '../entities/Entity.js';
 import { Track } from './Track.js';
+import { PathTrack } from './PathTrack.js';
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const T_EPS = 1e-9; // 同一时刻判定（setKey 覆盖 / removeKey）
@@ -77,6 +78,10 @@ export class Timeline extends Emitter {
       for (const p of props) map.get(id).add(p);
     };
     for (const t of this.tracks) if (t.keys.length) add(t.target, t.property);
+    for (const p of this.paths) {
+      add(p.target, 'pos');
+      if (p.orient === 'tangent') add(p.target, 'rot');
+    }
     return map;
   }
 
@@ -171,6 +176,12 @@ export class Timeline extends Emitter {
       const st = states.get(json.target);
       if (!st || !json.keys.length) continue;
       this._rt(json, (j) => new Track(j)).apply(t, st);
+    }
+
+    // 2 路径轨道
+    for (const json of this.paths) {
+      const st = states.get(json.target);
+      if (st) this._rt(json, (j) => new PathTrack(j)).apply(t, st);
     }
 
     for (const st of states.values()) this._write(st);

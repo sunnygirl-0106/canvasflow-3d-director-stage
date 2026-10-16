@@ -422,6 +422,55 @@ async function animTest() {
   ok('关键帧：play / pause 推进时间', kf.playedTo > 0.2 && kf.playedTo < 3, `time=${kf.playedTo.toFixed(3)}`);
   ok('关键帧：stop() 后回到手动值、状态 idle', kf.restored && kf.state === 'idle');
   ok('关键帧：active / 播放中 toDocument() 导出 base', kf.exportBase);
+  // ---- 路径：道具 / 机位 / 角色沿 Catmull-Rom 移动，tangent 朝向，smooth 首尾速度为 0 ----
+  await buildAnimScene().then((v) => Object.assign(ids, v));
+  const pt = await page.evaluate(async (ids) => {
+    const { Path } = await import('/src/anim/Path.js');
+    const a = window.__app, tl = a.timeline, pb = a.playback;
+    const p = a.findEntity(ids.p), c2 = a.findEntity(ids.c2), m = a.findEntity(ids.m);
+    const R2D = 180 / Math.PI;
+    const pp = tl.addPath({ target: ids.p, points: [[0.2, 0, -1.4], [2, 0, -1.4], [2.5, 0, 1]], start: 1, duration: 3, speed: 'linear', orient: 'tangent' });
+    const cp = tl.addPath({ target: ids.c2, points: [[3, 1.6, 3], [0, 1.8, 4], [-3, 1.6, 3]], start: 0, duration: 4, speed: 'smooth', orient: 'tangent' });
+    const mp = tl.addPath({ target: ids.m, points: [[-1.2, 0, 0], [-1.2, 0, 3]], start: 0, duration: 4, speed: 'smooth', orient: 'tangent' });
+    const P = new Path(pp), C = new Path(cp), M = new Path(mp);
+    const out = {};
+    const near = (v, arr, eps = 1e-6) => arr.every((x, i) => Math.abs(v[i] - x) < eps);
+    pb.seek(0);
+    out.beforeStart = near(p.root.position.toArray(), [0.2, 0, -1.4]);
+    pb.seek(5);
+    out.afterEnd = near(p.root.position.toArray(), [2.5, 0, 1]);
+    pb.seek(2.5);
+    const s = P.distanceAt(2.5), tan = P.tangentAt(s);
+    out.onCurve = near(p.root.position.toArray(), P.positionAt(s).toArray());
+    out.halfway = Math.abs(s - P.length / 2) < 1e-9;
+    out.propYawErr = Math.abs(((p.root.rotation.y - Math.atan2(tan.x, tan.z)) * R2D + 540) % 360 - 180);
+    // 机位：镜头方向（−Z）的水平分量与切线一致
+    pb.seek(1.3);
+    const ct = C.tangentAt(C.distanceAt(1.3));
+    const dir = new (p.root.position.constructor)(0, 0, -1).applyQuaternion(c2.root.quaternion);
+    out.camDirErr = Math.acos(Math.min(1, (dir.x * ct.x + dir.z * ct.z) / Math.hypot(dir.x, dir.z) / Math.hypot(ct.x, ct.z))) * R2D;
+    out.camHeight = c2.root.position.y;
+    // 角色：沿 +Z 走，yaw = 0；脚底高度 = 路径 y；仍是原姿势（本步不切步态）
+    pb.seek(2);
+    out.charYaw = m.root.rotation.y * R2D;
+    out.charDocY = a.toDocument().entities.find((e) => e.id === ids.m).transform.pos[1];
+    out.charRootY = m.root.position.y - m._rootY0;
+    out.charZ = m.root.position.z;
+    // smooth：首尾速度为 0
+    out.speeds = [M.speedAt(0), M.speedAt(2), M.speedAt(4), C.speedAt(0), C.speedAt(4)];
+    out.startCreep = M.distanceAt(1 / 240); // 起步 1/240 s 内几乎不动（匀速会走 3/4/240 = 0.003125 m）
+    pb.stop();
+    out.stopped = near(p.root.position.toArray(), [0.2, 0, -1.4]) && Math.abs(m.root.position.z) < 1e-9;
+    return out;
+  }, ids);
+  ok('路径：start 前停在起点、结束后停在终点', pt.beforeStart && pt.afterEnd);
+  ok('路径：位置在曲线上，匀速时半程 = 半长', pt.onCurve && pt.halfway);
+  ok('路径：道具 orient=tangent 朝向切线', pt.propYawErr < 1e-4, `误差 ${pt.propYawErr.toExponential(2)}°`);
+  ok('路径：机位镜头方向沿切线、高度取路径 y', pt.camDirErr < 1e-3 && pt.camHeight > 1.6 && pt.camHeight < 1.81, `误差 ${pt.camDirErr.toExponential(2)}°，y=${pt.camHeight.toFixed(3)}`);
+  ok('路径：角色沿 +Z 朝向切线、贴路径高度（root.y − 站立基准 = 0）', Math.abs(pt.charYaw) < 1e-6 && Math.abs(pt.charRootY) < 1e-9 && Math.abs(pt.charZ - 1.5) < 1e-4, JSON.stringify({ yaw: pt.charYaw, z: pt.charZ }));
+  ok('路径：active 时导出的仍是手动位置', pt.charDocY === 0);
+  ok('路径：smooth 首尾速度为 0、中段最快', pt.speeds[0] === 0 && pt.speeds[2] === 0 && pt.speeds[3] === 0 && pt.speeds[4] === 0 && Math.abs(pt.speeds[1] - 1.125) < 1e-6 && pt.startCreep < 1e-4, JSON.stringify(pt.speeds.map((v) => +v.toFixed(4))) + ` 起步=${pt.startCreep.toExponential(2)}m`);
+  ok('路径：stop() 回到手动位置', pt.stopped);
   ok('文档：删除实体连带删除引用它的路径 / 约束', bad.pruned.paths === 0 && bad.pruned.constraints === 0 && bad.pruned.tracks === 2 && bad.pruned.valid, JSON.stringify(bad.pruned));
   ok('坏文档：基准文档（含 timeline / paths / constraints）合法', bad.good.ok, bad.good.errors.slice(0, 3).join(' | '));
   for (const b of bad.out) ok(`坏文档：${b.name}`, b.ok && b.located && b.rejected && b.unchanged, b.first);
