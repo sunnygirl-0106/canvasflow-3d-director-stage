@@ -247,6 +247,19 @@ ok('加载校验：缺关节 toast / 滑条禁用 / 仍可添加',
   rigCheck.missing === 'lHand,rHand' && rigCheck.toastTxt === '该模型缺少 2 个关节，相关姿势滑条已禁用'
   && rigCheck.disabled === 2 && rigCheck.added && warns.some((w) => w.includes('lHand, rHand')), JSON.stringify(rigCheck));
 
+// 4a'' 自动贴地：坐姿整体下沉（髋部降低、最低骨头仍在地面），root 位置不变；复位后回到站立高度
+const sit = await page.evaluate(() => {
+  const c = window.__app.entities.find((e) => e.type === 'character');
+  const hips = c.bones.get('mixamorighips');
+  const hipY = () => { c.root.updateMatrixWorld(true); return hips.getWorldPosition(hips.position.clone()).y; };
+  const rootY0 = c.root.position.y, h0 = hipY();
+  c.applyPosePreset('sit');
+  const h1 = hipY(), ground = Math.abs(c._lowestBoneY() - c._groundY) < 1e-4, rootKept = c.root.position.y === rootY0;
+  c.resetPose();
+  return { drop: +(h0 - h1).toFixed(3), ground, rootKept, restored: Math.abs(hipY() - h0) < 1e-4 };
+});
+ok('坐姿自动贴地：整体下沉 / 脚着地 / root 不动 / 复位还原', sit.drop > 0.25 && sit.ground && sit.rootKept && sit.restored, JSON.stringify(sit));
+
 // 4b 角色命名超过 26 个不溢出成标点
 const names = await page.evaluate(() => {
   const a = window.__app; const saved = a._charSeq;

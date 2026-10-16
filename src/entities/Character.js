@@ -30,6 +30,8 @@ function loadTemplate(url) {
 const _q = new THREE.Quaternion();
 const _wq = new THREE.Quaternion();
 const _rootInv = new THREE.Quaternion();
+const _v = new THREE.Vector3();
+const _m = new THREE.Matrix4();
 const BODY_AXES = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
 
 /**
@@ -112,6 +114,8 @@ export class Character extends Entity {
     this.currentPreset = null; // 当前静态姿势预设 key（null=未选/已手动微调）
 
     this._normalize(); // 在文件静止位(T-pose)下量身高 / 落地
+    this._modelBaseY = model.position.y;
+    this._groundY = this._lowestBoneY(); // 地面高度（root 局部坐标），自动贴地以此为准
     this.applyPose();  // 默认即站立
   }
 
@@ -158,6 +162,28 @@ export class Character extends Entity {
         bone.quaternion.multiply(_q.setFromAxisAngle(j.local, a));
       }
     }
+    this._ground();
+  }
+
+  /**
+   * 自动贴地：摆姿后最低的骨头回到地面高度（如坐姿时整体下沉）。
+   * 只平移 model（root 的子节点），root 的位置 / gizmo / 用户摆放不受影响。
+   */
+  _ground() {
+    this.model.position.y = this._modelBaseY;
+    const min = this._lowestBoneY();
+    if (Number.isFinite(min)) this.model.position.y += this._groundY - min;
+  }
+
+  /** 全部骨头在 root 局部坐标系里的最低 y（与 root 的位置 / 旋转无关）。 */
+  _lowestBoneY() {
+    this.root.updateMatrixWorld(true);
+    _m.copy(this.root.matrixWorld).invert();
+    let min = Infinity;
+    this.model.traverse((o) => {
+      if (o.isBone && (_v.setFromMatrixPosition(o.matrixWorld).applyMatrix4(_m).y < min)) min = _v.y;
+    });
+    return min;
   }
 
   /**

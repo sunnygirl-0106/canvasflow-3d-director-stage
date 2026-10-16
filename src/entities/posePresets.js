@@ -2,7 +2,7 @@
 // 零点 = 自然站立（手臂下垂），由各模型档案的 neutralOffset 提供；故"站立"为空，
 // 其余预设都是相对站立的增量。"T型"是特殊预设：values = -neutralOffset（由 Character 按档案计算），
 // 与 neutralOffset 相加后总角度为 0，即回到文件静止位。
-// 所有保留姿势都不需要位移根节点（双脚/单脚着地，纯骨骼旋转），故不引入 rootY 等下沉字段。
+// 预设只转骨头；整体高度由 Character 自动贴地处理（最低骨头落地，如坐姿自动下沉）。
 
 // 约定（见 jointSchema）：正值 = 标签动作，左右一致 —— 前举/外展/外旋/弯曲/抬腿 为正。
 export const POSE_PRESETS = [
@@ -30,6 +30,8 @@ export const POSE_PRESETS = [
                                              lFore: 15, rFore: 15, lHand: -70, rHand: -70 } },
   { key: 'wave',   label: '招手', values: { rArmAbd: 75, rArmTwist: 80, rFore: 70, headY: -10, headZ: 5 } },
   { key: 'reach',  label: '伸手', values: { spineX: 8, rArmFwd: 85, rArmAbd: 5, rFore: 5 } },
+  { key: 'sit',    label: '坐姿', values: { lLegFwd: 90, rLegFwd: 90, lKnee: 90, rKnee: 90, lLegAbd: 6, rLegAbd: 6,
+                                             spineX: 5, lArmFwd: 12, rArmFwd: 12, lArmTwist: -45, rArmTwist: -45, lFore: 38, rFore: 38 } },
   { key: 'cross',  label: '抱臂', values: { lArmFwd: 20, rArmFwd: 25, lArmAbd: 5, rArmAbd: 5,
                                              lArmTwist: -75, rArmTwist: -75, lFore: 115, rFore: 115 } },
 ];
