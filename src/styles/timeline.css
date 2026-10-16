@@ -139,3 +139,12 @@
 .tl-bar-path .tl-bar-end { background: var(--green); }
 .tl-bar-constraint .tl-bar-end { background: var(--tl-purple); }
 .tl-bar-end.open { opacity: .35; }
+.tl-key.ghost { opacity: .35; pointer-events: none; }
+.tl-dragtip {
+  position: fixed; z-index: 60; display: none; transform: translateX(-50%);
+  background: #2a2a30; color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 4px;
+  pointer-events: none; font-variant-numeric: tabular-nums;
+}
+.tl-menu { min-width: 150px; }
+.tl-menu .ctx-item { padding: 8px 12px; font-size: 13px; }
+.tl-check { color: var(--accent); }

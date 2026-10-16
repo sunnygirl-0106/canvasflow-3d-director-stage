@@ -2,7 +2,9 @@ import { el } from '../../util/dom.js';
 import { Emitter } from '../../util/Emitter.js';
 import { Transport } from './Transport.js';
 import { Ruler } from './Ruler.js';
-import { TrackRows, keyId } from './TrackRows.js';
+import { TrackRows, keyId, PROP_LABEL } from './TrackRows.js';
+import { dragKeys, dragBar, popupMenu } from './keyDrag.js';
+import { toastError } from './Transport.js';
 
 export const NAME_W = 184;   // 左侧行名列宽
 export const GUTTER = 12;    // 0 秒距名列的留白（t=0 的键不被名列遮住）
@@ -53,8 +55,12 @@ export class TimelinePanel extends Emitter {
     pb.on('tick', (t) => this._onTick(t));
     pb.on('state', () => this.transport.reflectState());
     app.on('entities', () => { this.transport.reflectCameras(); this.rebuild(); }); // 改名 / 删除
-    app.on('selection', () => this._applySelection());
+    app.on('selection', () => this.applySelection());
     window.addEventListener('keydown', (e) => this._onKey(e), true); // 捕获阶段：先于全局快捷键（Del 删键而非删实体）
+    // 点面板以外的地方 = 取消选键（之后 Del 删的是实体而不是键）
+    window.addEventListener('pointerdown', (e) => {
+      if (this.selKeys.size && !this.container.contains(e.target) && !e.target.closest?.('.tl-menu')) { this.selKeys.clear(); this.applySelection(); }
+    }, true);
     new ResizeObserver(() => this._layout()).observe(this.scroll);
   }
 
@@ -76,6 +82,10 @@ export class TimelinePanel extends Emitter {
     this.scroll.addEventListener('scroll', () => { this.scrollLeft = this.scroll.scrollLeft; this._drawRuler(); });
     this.scroll.addEventListener('wheel', (e) => this._onWheel(e), { passive: false });
     this.rows.addEventListener('pointerdown', (e) => this._onRowsPointer(e));
+    this.rows.addEventListener('dblclick', (e) => this._onRowsDblClick(e));
+    this.rows.addEventListener('contextmenu', (e) => this._onRowsContext(e));
+    this.dragTip = el('div', { class: 'tl-dragtip' });
+    document.body.appendChild(this.dragTip);
     this.container.replaceChildren(this.transport.el, this.scroll);
     this._rebuildNow();
   }
@@ -93,33 +103,119 @@ export class TimelinePanel extends Emitter {
     const alive = new Set();
     for (const g of this.trackRows.groups) for (const r of g.rows) if (r.kind === 'track') for (const k of r.data.keys) alive.add(keyId(r.data.id, k.t));
     for (const id of [...this.selKeys]) if (!alive.has(id)) this.selKeys.delete(id);
-    this._applySelection();
+    this.applySelection();
   }
 
   /** 选中联动：选中实体的行高亮；选中键高亮。 */
-  _applySelection() {
+  applySelection() {
     const sel = this.app.selectedIds;
     for (const row of this.rows.querySelectorAll('.tl-row')) row.classList.toggle('sel', sel.has(row.dataset.ent));
     for (const k of this.rows.querySelectorAll('.tl-key')) k.classList.toggle('sel', this.selKeys.has(keyId(k.dataset.track, k.dataset.t)));
   }
 
-  /** 行区点击：点键 = 选键（⇧ 多选）；点行其它位置 = 选中实体。 */
+  /** 行区按下：键 = 选键（⇧ 多选）并可拖动；区间条 = 拖动；行其它位置 = 选中实体。 */
   _onRowsPointer(e) {
     if (e.button !== 0) return;
     const key = e.target.closest('.tl-key');
-    if (key) {
+    if (key) { // 不 preventDefault：那会吞掉 mousedown，dblclick 就不再触发（user-select:none 已防选中文字）
       const id = keyId(key.dataset.track, key.dataset.t);
-      if (e.shiftKey) { if (this.selKeys.has(id)) this.selKeys.delete(id); else this.selKeys.add(id); }
-      else if (!this.selKeys.has(id)) { this.selKeys.clear(); this.selKeys.add(id); }
+      const wasSel = this.selKeys.has(id);
+      if (e.shiftKey) { if (wasSel) this.selKeys.delete(id); else this.selKeys.add(id); }
+      else if (!wasSel) { this.selKeys.clear(); this.selKeys.add(id); }
       this._selectEntityOf(key);
-      this._applySelection();
+      this.applySelection();
+      if (this.selKeys.has(id)) dragKeys(this, e, key, { collapseOnClick: wasSel && this.selKeys.size > 1 });
+      return;
+    }
+    const bar = e.target.closest('.tl-bar');
+    if (bar) {
+      this._selectEntityOf(bar);
+      dragBar(this, e, bar, e.target.dataset.edge || 'mid');
       return;
     }
     if (e.target.closest('.tl-op, .tl-caret')) return;
     const row = e.target.closest('.tl-row');
     if (!e.shiftKey) this.selKeys.clear();
     if (row) this._selectEntityOf(row);
-    this._applySelection();
+    this.applySelection();
+  }
+
+  /** 双击：键 = 选 ease；路径 / 约束条 = 打开 Inspector 对应段。 */
+  _onRowsDblClick(e) {
+    const key = e.target.closest('.tl-key');
+    if (key) {
+      const k = this._keyData(key);
+      if (!k) return;
+      const ease = (name, label) => ({
+        label, checked: k.ease === name,
+        onClick: () => { try { this.app.timeline.setKey(k.trackId, k.t, k.value, name); } catch (err) { toastError(err); } },
+      });
+      popupMenu(e.clientX, e.clientY, [ease('linear', '线性 linear'), ease('smooth', '缓入缓出 smooth'), ease('step', '阶跃 step')]);
+      return;
+    }
+    const bar = e.target.closest('.tl-bar');
+    if (bar) {
+      const ent = bar.closest('.tl-row').dataset.ent;
+      this.app.emit('inspect', { id: ent, section: bar.dataset.kind });
+    }
+  }
+
+  /** 右键：轨道行 → 删除轨道 / 清空键；路径 / 约束行 → 删除。 */
+  _onRowsContext(e) {
+    const row = e.target.closest('.tl-track');
+    if (!row) return;
+    e.preventDefault();
+    this._selectEntityOf(row);
+    const tl = this.app.timeline;
+    const run = (fn) => () => { try { fn(); } catch (err) { toastError(err); } };
+    const { track, path, constraint } = row.dataset;
+    let items;
+    if (track) {
+      const data = tl.toJSON().timeline.tracks.find((t) => t.id === track);
+      if (!data) return;
+      items = [
+        { label: `删除轨道（${PROP_LABEL[data.property]}）`, onClick: run(() => tl.removeTrack(track)) },
+        { label: '清空键', disabled: !data.keys.length, onClick: run(() => { for (const k of data.keys) tl.removeKey(track, k.t); }) },
+      ];
+    } else if (path) items = [{ label: '删除路径', onClick: run(() => tl.removePath(path)) }];
+    else if (constraint) items = [{ label: '删除约束', onClick: run(() => tl.removeConstraint(constraint)) }];
+    if (items) popupMenu(e.clientX, e.clientY, items);
+  }
+
+  /** 键元素 → 文档里的键 { trackId, t, value, ease }。 */
+  _keyData(node) {
+    const tr = this.app.timeline.toJSON().timeline.tracks.find((t) => t.id === node.dataset.track);
+    const k = tr?.keys.find((x) => String(x.t) === node.dataset.t);
+    return k ? { trackId: tr.id, ...k } : null;
+  }
+
+  /** 删除选中的键（一次撤销）。 */
+  deleteSelectedKeys() {
+    const tl = this.app.timeline;
+    const ids = [...this.selKeys];
+    this.selKeys.clear();
+    try {
+      for (const id of ids) {
+        const at = id.lastIndexOf('@');
+        tl.removeKey(id.slice(0, at), +id.slice(at + 1));
+      }
+    } catch (err) { toastError(err); }
+  }
+
+  /** 面板级快捷键（由 _onKey 在播放类快捷键之后调用），返回是否已处理。 */
+  handleKey(e) {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && this.selKeys.size) { this.deleteSelectedKeys(); return true; }
+    return false;
+  }
+
+  /** 拖动中的时刻提示（t = null 隐藏）。 */
+  showDragTime(t, clientX) {
+    if (t == null) { this.dragTip.style.display = 'none'; return; }
+    const r = this.scroll.getBoundingClientRect();
+    this.dragTip.textContent = t.toFixed(2) + 's';
+    this.dragTip.style.display = 'block';
+    this.dragTip.style.left = clientX + 'px';
+    this.dragTip.style.top = r.top + 2 + 'px';
   }
 
   _selectEntityOf(node) {
@@ -298,7 +394,7 @@ export class TimelinePanel extends Emitter {
       case 'Home': this.seek(0); break;
       case 'End': this.seek(this.app.timeline.duration); break;
       case 'Escape': if (this.app.timeline.active) pb.stop(); else handled = false; break;
-      default: handled = this.handleKey?.(e) || false;
+      default: handled = this.handleKey(e);
     }
     if (handled) { e.preventDefault(); e.stopImmediatePropagation(); }
   }
