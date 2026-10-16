@@ -194,13 +194,13 @@ export class PathOverlay {
 
   // ---- 绘制草稿 / 吸附高亮（PathTool）----
   /** 草稿：已落的点 + 按同一种曲线画出的预览（points 为 null 清空）。 */
-  setDraft(points, { closed = false } = {}) {
+  setDraft(points, { closed = false, dots = true } = {}) {
     for (const o of [...this.draftGroup.children]) { this.draftGroup.remove(o); this._disposeLine(o); }
     if (points?.length >= 2) {
       const path = new Path({ points, closed, start: 0, duration: 1, speed: 'linear' });
       if (path.length > 1e-6) this.draftGroup.add(this._line(this._sample(path), true, { color: COLOR.hover, opacity: 0.9 }));
     }
-    for (const p of points || []) {
+    for (const p of dots ? points || [] : []) {
       const m = this._screenMesh(this._sphereGeo, this._mats.vertex, VERTEX_PX - 1);
       m.position.set(p[0], p[1] + LIFT, p[2]);
       m.renderOrder = 13;

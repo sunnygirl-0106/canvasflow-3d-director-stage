@@ -89,6 +89,7 @@ export class App extends Emitter {
     rig.controls.addEventListener('change', () => stage.invalidate());
     this.pathOverlay = new PathOverlay(this); // 视口路径可视化（阶段 E）
     this.pathTool = new PathTool(this);       // 路径绘制
+    this.pathMeta = {};                       // 会话态：pathId → 生成器参数（环绕三参数），不进文档
     this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis || this.pathTool.busy);
 
     this.labels = new Labels(labelLayer);

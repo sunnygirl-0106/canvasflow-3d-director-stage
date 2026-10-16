@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { el, toast } from '../util/dom.js';
 import { Emitter } from '../util/Emitter.js';
 import { worldBox } from '../util/measure.js';
-import { line, toward, defaultDuration } from '../anim/pathGen.js';
+import { line, arc, polar, toward, simplify, defaultDuration } from '../anim/pathGen.js';
 import { toastError } from '../ui/timeline/Transport.js';
 
 /** 五种绘制方式：[key, 文案]。key 与 AI 词汇表一致（points / freehand / line / arc / toward）。 */
@@ -24,6 +24,16 @@ const HINTS = {
 };
 const CLICK_PX = 4;       // 按下到松开移动不超过它算点击
 const DBL_EPS = 0.05;     // 双击结束时，与上一点距离小于它的点视为双击的第二下，丢掉
+const STROKE_STEP = 0.02; // 手绘采样间隔（米）
+const SIMPLIFY_TOL = 0.05;
+const MIN_RADIUS = 0.1;   // 环绕：当前位置离中心太近时无法定半径
+export const ARC_SWEEP = 180; // 环绕默认扫过角度
+
+/** 环绕参数 → 生成结果（Inspector 改三参数时也用它）：每 22.5° 一段，180° = 8 段。 */
+export function arcPoints({ center, radius, startDeg, sweepDeg }, y) {
+  const segments = Math.max(2, Math.ceil(Math.min(360, Math.abs(sweepDeg)) / 22.5));
+  return arc({ center, radius, startDeg, sweepDeg, y, segments });
+}
 
 const isTyping = (t) => t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
 
@@ -193,12 +203,24 @@ export class PathTool extends Emitter {
     }
     if (e.button !== 0) return; // 右键平移 / 中键缩放照常
     this._down = { x: e.clientX, y: e.clientY };
-    this._downHook?.(e);
+    if (this.mode === 'freehand') {
+      const g = this.groundPoint(e);
+      this._stroke = g ? [g] : [];
+    }
   }
 
   _onMove(e) {
     if (!this.mode || this._orbiting) return;
-    this._moveHook?.(e);
+    if (this.mode === 'freehand') {
+      if (!this._stroke) return;
+      const g = this.groundPoint(e);
+      const last = this._stroke[this._stroke.length - 1];
+      if (g && (!last || dist2(g, last) >= STROKE_STEP)) {
+        this._stroke.push(g);
+        this.app.pathOverlay.setDraft(this._stroke, { dots: false });
+      }
+      return;
+    }
     this._hover(e);
   }
 
@@ -211,7 +233,7 @@ export class PathTool extends Emitter {
     if (!this.mode || !this._down || e.button !== 0) return;
     const moved = Math.hypot(e.clientX - this._down.x, e.clientY - this._down.y);
     this._down = null;
-    if (this._upHook?.(e)) return;
+    if (this.mode === 'freehand') { this._endStroke(); return; }
     if (moved <= CLICK_PX) this._click(e);
   }
 
@@ -253,17 +275,56 @@ export class PathTool extends Emitter {
         this._commit(pts);
         break;
       }
+      case 'arc': {
+        const target = this.pickEntity(e);
+        const center = target ? this.anchorOf(target).point : g;
+        if (!center) return;
+        const meta = this._arcMeta(center);
+        if (!meta) { toast('当前位置离中心太近，无法环绕（换个中心点）'); return; }
+        this._commit(arcPoints(meta, this.groundY).points, { meta });
+        break;
+      }
     }
+  }
+
+  /** 环绕：中心 → 默认参数（半径与起始角由当前位置得出，扫过 180°）。太近返回 null。 */
+  _arcMeta(center) {
+    const { radius, deg } = polar(center, this.start);
+    if (radius < MIN_RADIUS) return null;
+    return { kind: 'arc', center: [center[0], this.groundY, center[2]], radius: round4(radius), startDeg: round4(deg), sweepDeg: ARC_SWEEP };
+  }
+
+  /** 手绘松手：采样 → simplify；首点替换为当前位置。 */
+  _endStroke() {
+    const raw = this._stroke || [];
+    this._stroke = null;
+    const pts = simplify(raw, SIMPLIFY_TOL);
+    let len = 0;
+    for (let i = 1; i < raw.length; i++) len += dist2(raw[i], raw[i - 1]);
+    if (pts.length < 2 || len < 0.1) {
+      toast('路径太短，请按住左键在地面上拖动');
+      this.app.pathOverlay.setDraft([this.start]);
+      return;
+    }
+    pts[0] = this.start.slice();
+    this.lastStroke = raw; // selftest 用：原采样点
+    this._commit(pts);
   }
 
   /** 光标移动：草稿预览（橡皮筋）与吸附高亮。 */
   _hover(e) {
     const ov = this.app.pathOverlay;
     const g = this.groundPoint(e);
-    if (this.mode === 'toward') {
+    if (this.mode === 'toward' || this.mode === 'arc') {
       const target = this.pickEntity(e);
       const a = target ? this.anchorOf(target) : null;
       ov.setSnap(a?.point, a?.radius);
+      if (this.mode === 'arc') {
+        const meta = this._arcMeta(a ? a.point : g || this.start);
+        const r = meta && arcPoints(meta, this.groundY);
+        ov.setDraft(r ? r.points : [this.start], { dots: false });
+        return;
+      }
       const at = a ? a.point : e.shiftKey ? g : null;
       ov.setDraft((at && toward(this.start, at)) || [this.start]);
       return;
@@ -298,7 +359,7 @@ export class PathTool extends Emitter {
    * duration = defaultDuration、speed = smooth、orient = tangent。
    * @returns {string|null} 路径 id
    */
-  _commit(points, { closed = false } = {}) {
+  _commit(points, { closed = false, meta = null } = {}) {
     const { app } = this;
     const ent = this.ent;
     const tl = app.timeline;
@@ -317,6 +378,7 @@ export class PathTool extends Emitter {
         });
       }
     } catch (err) { toastError(err); return null; }
+    if (meta) app.pathMeta[path.id] = meta; else delete app.pathMeta[path.id];
     const over = path.start + path.duration > tl.duration ? `（结束于 ${fmt(path.start + path.duration)} s，超出时间轴时长）` : '';
     toast(`${old ? '已替换' : '已创建'}路径：${points.length} 个点，${fmt(path.duration)} s${over}`);
     this.emit('commit', path);

@@ -6,6 +6,7 @@ import { POSE_PRESETS } from '../entities/posePresets.js';
 import { downloadURL } from '../app/ShotManager.js';
 import { propState } from './timeline/animState.js';
 import { toastError } from './timeline/Transport.js';
+import { arcPoints } from '../app/PathTool.js';
 
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
@@ -147,9 +148,35 @@ export class Inspector {
         onChange: (v) => upd({ orient: v }),
       }).el,
       toggleRow({ label: '闭合路径', checked: p.closed, onChange: (v) => upd({ closed: v }) }).el,
+      ...this._arcRows(p),
       el('div', { class: 'anim-info', text: `点数：${p.points.length}（绘制与拖动顶点将在后续版本提供）` }),
       el('button', { class: 'minibtn', text: '删除路径', onclick: () => this._tl((tl) => tl.removePath(p.id)) }),
     ]);
+  }
+
+  /**
+   * 环绕方式创建的路径：半径 / 起始角 / 扫过角度（会话态 app.pathMeta，不进文档）。
+   * 只有 points 仍等于这组参数的生成结果时才显示（拖过顶点 / 重新加载后退化为普通点集）。改动即重算 points。
+   */
+  _arcRows(p) {
+    const meta = this.app.pathMeta[p.id];
+    if (meta?.kind !== 'arc') return [];
+    const y = p.points[0][1];
+    const gen = arcPoints(meta, y);
+    if (gen.closed !== p.closed || JSON.stringify(gen.points) !== JSON.stringify(p.points)) return [];
+    const set = (patch) => this._tl((tl) => {
+      const next = { ...meta, ...patch };
+      const r = arcPoints(next, y);
+      tl.updatePath(p.id, { points: r.points, closed: r.closed });
+      this.app.pathMeta[p.id] = next;
+    });
+    return [
+      numberRow({ label: '环绕半径', value: meta.radius, step: 0.1, min: 0.1, unit: 'm', onChange: (v) => set({ radius: v }) }).el,
+      el('div', { class: 'anim-pair' }, [
+        numberRow({ label: '起始角', value: meta.startDeg, step: 5, unit: '°', onChange: (v) => set({ startDeg: v }) }).el,
+        numberRow({ label: '扫过角度', value: meta.sweepDeg, step: 15, unit: '°', onChange: (v) => { if (v) set({ sweepDeg: v }); else this._renderAnimSections(); } }).el,
+      ]),
+    ];
   }
 
   /** 约束段（机位）：注视（无 / 实体 / 自定义点）、跟随（实体 + 偏移），各自生效区间。 */
