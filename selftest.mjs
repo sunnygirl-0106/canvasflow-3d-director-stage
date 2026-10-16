@@ -6,12 +6,41 @@
 //   node selftest.mjs poses [outDir] [bodyKey]
 //     对单个角色逐个套用全部姿势预设并截图到 outDir/<preset>.png（默认 test-output/poses，
 //     bodyKey 默认 xbot；不存在时取 BODY_TYPES 第一项）。用于重构前后逐像素对比。
+//   node selftest.mjs posediff <dirA> <dirB> [maxRatio]
+//     逐张像素对比两组截图（pixelmatch），差异像素占比 > maxRatio（默认 0.001）判失败，
+//     差异图写到 dirB/_diff/。不起浏览器。
 import fs from 'node:fs';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
 import { createServer } from 'vite';
+import pixelmatch from 'pixelmatch';
+import { PNG } from 'pngjs';
 
 const [CMD, ...ARGS] = process.argv.slice(2);
+
+if (CMD === 'posediff') process.exit(poseDiff(ARGS[0], ARGS[1], parseFloat(ARGS[2] ?? '0.001')));
+
+function poseDiff(dirA, dirB, maxRatio) {
+  const files = fs.readdirSync(dirA).filter((f) => f.endsWith('.png')).sort();
+  const diffDir = path.join(dirB, '_diff');
+  fs.mkdirSync(diffDir, { recursive: true });
+  let bad = 0;
+  for (const f of files) {
+    const pb = path.join(dirB, f);
+    if (!fs.existsSync(pb)) { console.log(`❌ ${f} — ${dirB} 中缺失`); bad++; continue; }
+    const a = PNG.sync.read(fs.readFileSync(path.join(dirA, f)));
+    const b = PNG.sync.read(fs.readFileSync(pb));
+    if (a.width !== b.width || a.height !== b.height) { console.log(`❌ ${f} — 尺寸不同`); bad++; continue; }
+    const diff = new PNG({ width: a.width, height: a.height });
+    const n = pixelmatch(a.data, b.data, diff.data, a.width, a.height, { threshold: 0.1 });
+    const ratio = n / (a.width * a.height);
+    const pass = ratio <= maxRatio;
+    if (!pass) { bad++; fs.writeFileSync(path.join(diffDir, f), PNG.sync.write(diff)); }
+    console.log(`${pass ? '✅' : '❌'} ${f} — 差异像素 ${n}（${(ratio * 100).toFixed(4)}%）`);
+  }
+  console.log(`\n=== ${files.length - bad}/${files.length} 一致（阈值 ${(maxRatio * 100).toFixed(2)}%）===`);
+  return bad ? 1 : 0;
+}
 
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
@@ -149,6 +178,21 @@ const posePreset = await page.evaluate(async () => {
   return res;
 });
 ok('静态姿势预设：应用/高亮/复位', posePreset.walk && posePreset.wave && posePreset.cross && posePreset.reset, JSON.stringify(posePreset));
+
+// 4a 零点 = 自然站立：新角色 values 全 0 且手臂已放下；T型 = -neutralOffset，总角度 0 回到文件静止位
+const neutral = await page.evaluate(() => {
+  const c = window.__app.entities.find((e) => e.type === 'character');
+  const arm = c.bones.get('mixamorigleftarm');
+  const rest = c.restQ.get(arm);
+  const standZero = c.pose.isZero() && arm.quaternion.angleTo(rest) * 180 / Math.PI > 60;
+  c.applyPosePreset('tpose');
+  let tposeAtRest = true;
+  for (const [bone, q] of c.restQ) if (bone.quaternion.angleTo(q) > 1e-4) tposeAtRest = false;
+  const tposeVals = c.values.lArmAbd === -c.profile.neutralOffset.lArmAbd;
+  c.resetPose();
+  return { standZero, tposeAtRest, tposeVals, resetStand: c.pose.isZero() && arm.quaternion.angleTo(rest) * 180 / Math.PI > 60 };
+});
+ok('零点=站立 / T型回静止位 / 复位回站立', Object.values(neutral).every(Boolean), JSON.stringify(neutral));
 
 // 4b 角色命名超过 26 个不溢出成标点
 const names = await page.evaluate(() => {

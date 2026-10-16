@@ -1,7 +1,7 @@
 import { el, clear } from '../util/dom.js';
-import { JOINTS, groupJoints } from '../entities/jointConfig.js';
+import { JOINT_SCHEMA, groupJoints } from '../rig/jointSchema.js';
 
-// 从 jointConfig 按 group/side 分组渲染滑条。
+// 从语义关节表 JOINT_SCHEMA 按 group/side 分组渲染滑条（0 = 自然站立）。
 // input → 写 character.values[key] → applyPose()。
 export class PoseSliders {
   constructor(container, character, onChange) {
@@ -18,7 +18,7 @@ export class PoseSliders {
     const ch = this.character;
     const wrap = el('div', { class: 'sliders' });
 
-    for (const g of groupJoints(JOINTS)) {
+    for (const g of groupJoints(JOINT_SCHEMA)) {
       wrap.appendChild(el('h4', { text: g.group }));
       for (const s of g.sides) {
         if (s.side) wrap.appendChild(el('div', { class: 'sideLab', text: s.side }));
@@ -51,7 +51,7 @@ export class PoseSliders {
   /** 外部（如套用预设/复位）改了 values 后，刷新滑条 UI 到当前值。 */
   syncFromValues() {
     const ch = this.character;
-    for (const j of JOINTS) {
+    for (const j of JOINT_SCHEMA) {
       const slot = this.sliderEls[j.key];
       if (!slot) continue;
       const v = ch.values[j.key] || 0;

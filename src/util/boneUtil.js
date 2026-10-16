@@ -1,6 +1,6 @@
 // 骨名归一化与骨骼表构建
 // 新版 GLTFLoader 对 `mixamorig:Head` 的处理不确定：可能保留冒号，也可能被清洗成
-// `mixamorigHead`。不要硬匹配字符串——统一用 norm() 归一化后再查表，jointConfig 里
+// `mixamorigHead`。不要硬匹配字符串——统一用 norm() 归一化后再查表，骨骼档案里
 // 写带冒号的 `mixamorig:LeftArm`，无论被怎么清洗都能命中。
 
 /** 归一化：去掉所有非字母数字字符并转小写。mixamorig:Head / mixamorigHead → mixamorighead */
@@ -28,7 +28,7 @@ export function buildBoneMap(model) {
   return map;
 }
 
-/** 在骨骼表里按 jointConfig 的 bone 名查找（自动归一化）。 */
+/** 在骨骼表里按骨骼档案的 bone 名查找（自动归一化）。 */
 export function findBone(boneMap, boneName) {
   return boneMap.get(norm(boneName)) || null;
 }
