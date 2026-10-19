@@ -1229,6 +1229,51 @@ async function tlTest() {
     JSON.stringify(keyed.tracks) === '[["pos",[0]]]' && keyed.head === false && keyed.posRow && keyed.key0 && keyed.sel, JSON.stringify(keyed));
   await page.evaluate(() => window.__app.playback.stop());
 
+  // ---- 收尾 1 · 播放中点进 Inspector 位置输入框 → 暂停；改完回车 → 键写在暂停时刻 ----
+  await page.evaluate((id) => {
+    const a = window.__app, tl = a.timeline;
+    const tr = tl.toJSON().timeline.tracks.find((t) => t.target === id && t.property === 'pos');
+    const v0 = tr.keys[0].value;
+    tl.setKey(tr.id, 4, [v0[0] + 2, v0[1], v0[2]]);
+    a.select(id);
+    a.playback.seek(0);
+    a.playback.play();
+  }, bare.f);
+  await sleep(500);
+  const posX = await page.evaluate(() => {
+    const f = [...document.querySelectorAll('#inspector .field')].find((n) => n.querySelector('label')?.textContent.startsWith('位置'));
+    const b = f.querySelector('.triple input').getBoundingClientRect();
+    return [b.x + b.width / 2, b.y + b.height / 2];
+  });
+  await page.mouse.click(...posX);
+  await sleep(100);
+  const focus8 = await page.evaluate(() => ({ state: window.__app.playback.state, t: window.__app.playback.time, focus: document.activeElement?.tagName }));
+  await page.evaluate(() => document.activeElement.select()); // headless 下 ⌘A 不全选
+  await page.keyboard.type('0.7');
+  await page.keyboard.press('Enter');
+  await settle(150);
+  const typed8 = await page.evaluate((id, t) => {
+    const a = window.__app;
+    const tr = a.timeline.toJSON().timeline.tracks.find((x) => x.target === id && x.property === 'pos');
+    const k = tr.keys.find((x) => Math.abs(x.t - t) < 1e-6);
+    return { keys: tr.keys.map((x) => +x.t.toFixed(3)), x: k?.value[0], state: a.playback.state };
+  }, bare.f, focus8.t);
+  ok('播放中点进位置输入框 → 暂停（state=paused）；改完回车 → 键写在暂停时刻、不自动恢复播放',
+    focus8.state === 'paused' && focus8.t > 0.2 && focus8.focus === 'INPUT' && Math.abs(typed8.x - 0.7) < 1e-9 && typed8.keys.length === 3 && typed8.state === 'paused',
+    `聚焦时 ${JSON.stringify(focus8)}；回车后 keys=${JSON.stringify(typed8.keys)} x=${typed8.x} state=${typed8.state}`);
+  await page.evaluate(() => { document.activeElement?.blur(); window.__app.playback.play(); });
+  await sleep(200);
+  const axXY = await page.evaluate(() => {
+    const f = [...document.querySelectorAll('#inspector .field')].find((n) => n.querySelector('label')?.textContent.startsWith('位置'));
+    const b = f.querySelector('.ax').getBoundingClientRect();
+    return [b.x + b.width / 2, b.y + b.height / 2];
+  });
+  await page.mouse.move(...axXY); await page.mouse.down();
+  const axState = await page.evaluate(() => window.__app.playback.state);
+  await page.mouse.up();
+  ok('播放中按下轴标签（拖动改值）同样先暂停', axState === 'paused', axState);
+  await page.evaluate(() => window.__app.playback.stop());
+
   // ---- 9 折叠：视口高 +184px，刷新保持 ----
   const vh0 = await page.evaluate(() => document.getElementById('viewport').clientHeight);
   await clickSel('#timeline .tl-fold');

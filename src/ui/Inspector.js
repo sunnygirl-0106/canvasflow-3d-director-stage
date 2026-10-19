@@ -45,6 +45,10 @@ export class Inspector {
     app.on('pathVertex', () => { this._sectionsDirty = true; this.scheduleAnimRefresh(); });
     app.on('entities', () => this.refreshName());
     app.on('shots', () => { if (this.entity?.type === 'camera') this.show(this.entity); });
+    // 播放中点进输入框 / 按下轴标签拖动：先暂停（同 gizmo），否则输入会被逐帧求值覆盖。失焦 / 回车后不自动恢复播放
+    const pauseIfPlaying = () => { if (app.playback.playing) app.playback.pause(); };
+    container.addEventListener('focusin', (e) => { if (e.target.matches('input:not([type=checkbox]):not([type=range]), textarea')) pauseIfPlaying(); });
+    container.addEventListener('pointerdown', (e) => { if (e.target.closest('.ax')) pauseIfPlaying(); }, true);
   }
 
   _reset() {
