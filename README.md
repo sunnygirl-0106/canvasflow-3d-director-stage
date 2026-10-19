@@ -28,6 +28,7 @@
 - **场景编排** — 左侧清单支持搜索、显隐、改名、多选，以及打组 / 副本 / 批量删除等右键操作。
 - **时间轴** — 底部面板按实体分组显示轨道 / 关键帧 / 路径与约束区间条，可拖播放头、拖键、改 ease、⌥ 复制、区间条拖动；右侧属性面板每个可动画属性旁一颗 ◇ 一键打键 / 删键，「自动打键」开启后在播放头处修改即记键；机位面板可设注视 / 跟随约束。
 - **角色路径** — 底部工具坞「路径」或属性面板「新建路径 ▾」为选中角色 / 道具 / 组画移动路径：点击落点 / 手绘 / 直线 / 环绕 / 走到五种方式；视口里蓝线 + 球形顶点，可拖顶点、⇧ 拖整条平移、点线插入、`Del` 删顶点；起点自动取对象当前位置，创建后画面不跳；直接播放即沿线走 / 跑。
+- **机位运镜** — 选中机位，属性面板「运镜」段选预设（推 / 拉 / 横移 / 升降 / 摇 / 半环绕 / 环绕）、主体（默认最近的角色）和参数，视口里虚线预览，点「应用」生成机位路径 + 注视约束；再点「追加」把下一个运镜接在后面（段列表可删最后一段）。机位也能用五种方式画路径（画在机位高度的水平面上）。时间轴「主机位」选好后，在机位视角下播放即透过主机位看成片。
 - **动画内核（供时间轴 / AI 调用）** — 角色 / 道具 / 组 / 机位的位置 · 旋转 · 缩放 · FOV 关键帧；沿 Catmull-Rom 路径移动（切线朝向、匀速 / 缓入缓出）；角色沿路径自动切程序化步行 / 跑步（脚踩点 + 腿部 IK，不悬空不打滑，停下恢复原姿势）；机位注视 / 刚性跟随约束。任意时刻状态 = `timeline.evaluate(t)`，播放与跳转结果逐数值一致；播放中导出 / 撤销记的是手动值。
 
 ## 🚀 快速开始
@@ -52,7 +53,8 @@ node selftest.mjs doc                        # 场景文档验收：往返一致
 node selftest.mjs anim                       # 动画内核验收：纯函数 / 跳转 / 导出不污染 / 往返 / 撤销 / 步态 / 约束 → test-output/anim/
 node selftest.mjs tl                         # 时间轴面板验收（真实点击 / 拖拽）：打键 / 自动打键 / 拖键 / 区间条 / 约束段 / 播放 / 快捷键 / 性能 / 折叠 → test-output/tl/
 node selftest.mjs path                       # 角色路径验收（真实点击 / 拖拽）：五种绘制 / 起点不跳 / 顶点编辑 / 冲突确认 / 可视化 / 播放 / 往返 → test-output/path/
-npm run test:unit                            # 路径生成器单元测试（node:test，不起浏览器）
+node selftest.mjs cam                        # 机位运镜验收（真实操作）：半环绕盯人 / 推拉 / 横移升降 / 摇 / 追加 + 删末段 / 机位路径 / 主机位播放 / 往返 → test-output/cam/
+npm run test:unit                            # 路径生成器 + 运镜生成器单元测试（node:test，不起浏览器）
 ```
 
 开发时校准页：`npm run dev` 后打开 `/calib.html?profile=bodykun_male`。
@@ -81,7 +83,29 @@ const { points, closed } = arc({ center: [0,0,0], radius: 2, startDeg: 0, sweepD
 tl.addPath({ target: a.id, points, closed, duration: defaultDuration(points, { closed }) }); // 长度 ÷ 1.3 m/s，向上取 0.5 s
 ```
 
-词汇表（AI 用，定了不改）：路径绘制方式 `points / freehand / line / arc / toward`（前两者 AI 不用）；property `pos / rot / scale / fov`；ease `linear / smooth / step`；路径 speed `linear / smooth`、orient `tangent / keep`；约束 `lookAt / follow`。文档形状见 `src/doc/schema.js` 顶部注释。
+运镜生成器 `src/anim/cameraMoves.js`（纯函数，调 pathGen）与写入入口 `__app.cameraMoves`：
+
+```js
+import { cameraMove, appendMove } from '/src/anim/cameraMoves.js';
+const m = cameraMove('half_orbit', { position: [0, 1.6, 5], aim: [0, 0.85, 0], params: { sweep: 180, dir: 'ccw' } });
+// → { points, closed, duration: 5, rotKeys: null }；pan 返回 points = null、rotKeys = [起, 止]（欧拉度数）
+const cm = __app.cameraMoves, cam = __app.cameras[0];
+Object.assign(cm.formOf(cam), { name: 'push_in', subject: a.id }); cm.request(cam);   // = Inspector「应用 / 追加」
+```
+
+| 运镜 | 含义 | 几何（距离 / 连线取水平分量） | 参数（默认） | 默认时长 |
+| --- | --- | --- | --- | --- |
+| `push_in` | 推 | 沿机位→主体连线靠近 | `amount` 当前距离 × 0.4（离主体至少留 0.3 m） | 3 s |
+| `pull_out` | 拉 | 沿连线远离 | `amount` 当前距离 × 0.6 | 3 s |
+| `truck` | 横移 | 垂直于连线水平平移 | `amount` 2 m，`dir` left / right（以机位视角为准） | 3 s |
+| `crane` | 升降 | 竖直平移 | `amount` 1 m，`dir` up / down | 3 s |
+| `pan` | 摇 | 机位不动，从当前朝向摇到对准主体（rot 轨道两键） | — | 2 s |
+| `half_orbit` | 半环绕 | 以主体为圆心、当前水平距离为半径、当前高度扫过 | `sweep` 180°，`dir` ccw / cw（俯视） | 5 s |
+| `circle` | 环绕 | 同上整圈，闭合 | `sweep` 360°，`dir` | 8 s |
+
+带路径的运镜：`speed = smooth`、`orient = keep`，并加 lookAt 约束指向主体（`subject`：实体 id 或 `[x,y,z]`），从该段开始一直注视到全程结束；`pan` 的注视从摇完那一刻开始。追加 = 新段从现有路径终点、结束时刻接上（同一主体的注视合并为一条，不同主体按段截断）；预设参数不进文档，文档只存生成的 points / keys / constraints。
+
+词汇表（AI 用，定了不改）：运镜 `push_in / pull_out / truck / crane / pan / half_orbit / circle`，参数 `amount / dir / sweep / subject / duration`；路径绘制方式 `points / freehand / line / arc / toward`（前两者 AI 不用）；property `pos / rot / scale / fov`；ease `linear / smooth / step`；路径 speed `linear / smooth`、orient `tangent / keep`；约束 `lookAt / follow`。文档形状见 `src/doc/schema.js` 顶部注释。
 
 ## ⌨️ 操作
 
@@ -98,7 +122,7 @@ tl.addPath({ target: a.id, points, closed, duration: defaultDuration(points, { c
 | 底部工具坞 `＋` | 添加角色 / 几何道具 / 本地上传 |
 | 底部工具坞「时间轴」/ 面板右端 ⌄ | 展开 / 折叠时间轴（记住选择；窗口高 < 900px 时默认折叠） |
 
-**路径**（选中角色 / 道具 / 组；底部工具坞「路径」或属性面板路径段「新建路径 ▾」）
+**路径**（选中角色 / 道具 / 组 / 机位；底部工具坞「路径」或属性面板路径段「新建路径 ▾」。机位的路径画在机位高度的水平面上，默认保持手动朝向，「走到」叫「推到」、停在 1.5 m 外）
 
 | 操作 | 效果 |
 | --- | --- |
@@ -113,6 +137,16 @@ tl.addPath({ target: a.id, points, closed, duration: defaultDuration(points, { c
 | 点顶点 + `Del` | 删除顶点（至少保留 2 个）；优先级：选中关键帧 > 选中顶点 > 选中对象 |
 
 已有位置关键帧的对象新建路径会先确认删除关键帧；已有路径会确认替换（保留开始时间 / 速度 / 朝向）。机位视角下不显示路径。
+
+**运镜 / 主机位**（选中机位）
+
+| 操作 | 效果 |
+| --- | --- |
+| 属性面板「运镜」段改预设 / 主体 / 参数 | 视口里虚线预览将要生成的路径（摇镜头没有路径） |
+| 「应用」/「追加」 | 写入路径 + 注视约束（摇 = 旋转关键帧），一次撤销；已有路径时接在后面 |
+| 段列表 × | 删除最后一段（中间段需「清除运镜」后重做） |
+| 「清除运镜」 | 删除该机位的路径、全部约束与旋转轨道 |
+| 播放条「主机位」+ 机位视角下播放 / 拖播放头 | 视口透过主机位（顶部显示「▶ 主机位 · 名字」，gizmo 隐藏）；停止后回到当前机位；未设主机位时用当前机位并提示 |
 
 **时间轴**（输入框聚焦时不触发）
 
@@ -147,6 +181,7 @@ src/
 │  ├─ SceneFile.js      导出 / 导入 .json + localStorage 自动保存与恢复
 │  ├─ PathTool.js       路径绘制：五种方式的状态机 / 冲突确认 / 起点规则 / 绘制态改键
 │  ├─ PathEditor.js     顶点编辑：拖动 / ⇧平移 / 插入 / 删除（松手一次写入）
+│  ├─ CameraMoveTool.js 机位运镜：表单 → cameraMoves → path + lookAt（+ rot 键），追加 / 删末段 / 清除
 │  ├─ ShotManager.js    截图（Blob + ObjectURL）与发送
 │  ├─ Panorama.js       全景背景载入 / 校验（资源 assetId + url|dataURL）
 │  └─ Labels.js         3D 名牌层
@@ -170,6 +205,7 @@ src/
 │  ├─ Locomotion.js     程序化步态（相位按路程；脚踩点 + 两段腿 IK；走跑混合）
 │  ├─ Constraint.js     lookAt / follow
 │  ├─ pathGen.js        路径生成器（纯函数）：line / arc / toward / simplify / defaultDuration
+│  ├─ cameraMoves.js    运镜生成器（纯函数）：7 种预设 / appendMove / lookAtWindows
 │  └─ ease.js           linear / smooth / step
 ├─ rig/                 姿势与模型解耦层
 │  ├─ jointSchema.js    语义关节表（与模型无关；min/max 相对站立）
@@ -185,7 +221,7 @@ src/
 └─ styles/             style.css · timeline.css
 public/assets/          Xbot.glb（中性素体，meshopt 压缩）
 public/assets/figures/  BodyKun / BodyChan 关节人偶 GLB + 交接文档
-tests/                  node 单元测试（pathGen）
+tests/                  node 单元测试（pathGen / cameraMoves）
 docs/                   交接文档 / 技术规划 / 任务说明（已完成的在 docs/done/）
 ```
 

@@ -26,7 +26,10 @@
 //   node selftest.mjs path
 //     角色路径验收（阶段 E）：puppeteer 真实点击 / 拖拽 —— 五种绘制、起点不跳、顶点拖动 / Esc / ⇧平移、插入 / 删除、
 //     pos 轨道冲突、绘制态不转相机、可视化、播放、往返。产物在 test-output/path/。
-//   pathGen 单元测试不起浏览器：npm run test:unit
+//   node selftest.mjs cam
+//     机位运镜验收（阶段 F）：Inspector 运镜段真实操作 —— 半环绕盯人 / 推拉 / 横移升降 / 摇、清除、追加 + 段列表 + 删末段 + ⌘Z、
+//     机位画路径、主机位播放（视口 ≡ 主机位 snapshot）、含运镜文档往返。产物在 test-output/cam/。
+//   pathGen / cameraMoves 单元测试不起浏览器：npm run test:unit
 import fs from 'node:fs';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
@@ -1863,6 +1866,46 @@ async function camTest() {
   await camShot(ids.c1, `${OUT}/12_circle.png`);
   await page.evaluate(() => window.__app.playback.stop());
   await moveBtn('清除运镜');
+
+  // ---- 10 往返：含追加运镜的文档 导出 → 导入 → 导出 ≡；导入后 seek(4) 画面 ≡ 导入前 ----
+  await moveField('预设', 'crane');
+  await moveBtn('应用');
+  await moveField('预设', 'half_orbit');
+  await moveBtn('追加');
+  await page.evaluate(() => window.__app.playback.seek(4));
+  await settle();
+  const rtA = await camShot(ids.c1, `${OUT}/10_before.png`);
+  const doc1 = await page.evaluate(() => { window.__app.playback.stop(); return window.__app.toDocument(); });
+  fs.writeFileSync(`${OUT}/10_doc1.json`, JSON.stringify(doc1, null, 2));
+  await page.evaluate(async (d) => {
+    const { createEmptyDocument } = await import('/src/doc/schema.js');
+    const a = window.__app;
+    await a.loadDocument(createEmptyDocument());
+    await a.loadDocument(d);
+  }, doc1);
+  await settle(150);
+  const doc2 = await page.evaluate(() => window.__app.toDocument());
+  const norm = (d) => JSON.stringify({ ...d, meta: { ...d.meta, updatedAt: null } });
+  const camPath = doc1.paths.find((p) => p.target === ids.c1);
+  ok('验收10 含运镜（升降 + 追加半环绕）的文档 导出 → 导入 → 导出 ≡', norm(doc1) === norm(doc2) && camPath?.duration === 8
+    && doc1.constraints.filter((c) => c.target === ids.c1).length === 1, `path d=${camPath?.duration} n=${camPath?.points.length}`);
+  await page.evaluate(() => window.__app.playback.seek(4));
+  await settle();
+  const rtB = await camShot(ids.c1, `${OUT}/10_after.png`);
+  const d10 = pixelDiff(rtA, rtB, `${OUT}/10_diff.png`);
+  ok('验收10 导入后 seek(4) 画面 ≡ 导入前', d10 === 0, `差异 ${(d10 * 100).toFixed(4)}%`);
+  await page.evaluate(() => window.__app.playback.stop());
+  await pickInOutliner(ids.c1n);
+  const kept = (await page.$$('#inspector [data-sec="move"] .move-seg')).length;
+  await page.evaluate(() => { const a = window.__app; a.moveMeta = {}; a.select(null); }); // = 刷新页面：会话态丢失
+  await pickInOutliner(ids.c1n);
+  const degraded = (await page.$$('#inspector [data-sec="move"] .move-seg')).length;
+  const lbl = await page.$eval('#inspector [data-sec="move"] .anim-btns .primary', (b) => b.textContent);
+  ok('同一会话导入同一文档段列表保留；会话态丢失（刷新）后段列表为空，文档里的路径仍可「追加」', kept === 2 && degraded === 0 && lbl === '追加', `kept=${kept} degraded=${degraded} btn=${lbl}`);
+
+  // ---- 12 第 0 节修正后的属性面板（角色 Y = 0.00、缩放 1.00）----
+  await pickInOutliner(ids.An);
+  await page.screenshot({ path: `${OUT}/12_panel_units.png`, clip: await panelClip() });
 }
 
 async function shootPoses(outDir, bodyKey) {
