@@ -6,12 +6,16 @@ import { POSE_PRESETS } from '../entities/posePresets.js';
 import { downloadURL } from '../app/ShotManager.js';
 import { propState } from './timeline/animState.js';
 import { toastError } from './timeline/Transport.js';
-import { arcPoints } from '../app/PathTool.js';
+import { arcPoints, PATH_MODES } from '../app/PathTool.js';
+import { pathLength, defaultDuration } from '../anim/pathGen.js';
+import { popupMenu } from './timeline/keyDrag.js';
 
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
 const FOV_TIP = '控制镜头视野范围。数值越小，画面越近、越聚焦；数值越大，画面越广、能看到更多环境。';
 const PREVIEW_W = 248, PREVIEW_H = 140;
+const RUN_SPEED = 2.6; // m/s：平均速度超过它标「跑」（步态 ≥ 2.6 纯跑）
+const PACES = [[0.8, '慢走'], [1.3, '走'], [1.8, '快走'], [3.5, '跑']];
 
 // 每种实体的标签页：[key, 文案]
 const TABS = {
@@ -118,7 +122,8 @@ export class Inspector {
     const anim = this.app.timeline.toJSON();
     const nodes = [];
     const path = anim.paths.find((p) => p.target === ent.id);
-    if (path) nodes.push(this._pathSection(path));
+    if (path) nodes.push(this._pathSection(path, ent));
+    else if (this.app.pathTool.canDraw(ent)) nodes.push(this._pathEmpty());
     if (ent.type === 'camera') nodes.push(this._constraintSection(ent, anim.constraints.filter((c) => c.target === ent.id)));
     host.replaceChildren(...nodes);
   }
@@ -128,29 +133,77 @@ export class Inspector {
     try { fn(this.app.timeline); } catch (err) { toastError(err); this._renderAnimSections(); }
   }
 
-  /** 路径段：start / duration / speed / orient / closed / 点数（只读）/ 删除。绘制与顶点拖动在阶段 E。 */
-  _pathSection(p) {
-    const upd = (patch) => this._tl((tl) => tl.updatePath(p.id, patch));
+  /** 「新建路径 ▾」：五种绘制方式（与 Dock「路径」按钮等价）。 */
+  _newPathBtn(label) {
+    const tool = this.app.pathTool;
+    return el('button', {
+      class: 'sec-btn', text: label + ' ▾',
+      onclick: (e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        popupMenu(r.left, r.bottom + 4, PATH_MODES.map(([mode, text]) => ({ label: text, onClick: () => tool.request(mode) })));
+      },
+    });
+  }
+
+  /** 没有路径的角色 / 道具 / 组：只有段头与入口。 */
+  _pathEmpty() {
     return el('div', { class: 'anim-sec', 'data-sec': 'path' }, [
-      el('div', { class: 'sec-title' }, [el('span', { text: '路径' }), el('span', { class: 'sec-tag path', text: `${p.points.length} 个点` })]),
+      el('div', { class: 'sec-title' }, [el('span', { text: '路径' }), el('span', { class: 'sec-spacer' }), this._newPathBtn('新建路径')]),
+      el('div', { class: 'anim-info', text: '未设置路径。新建后角色沿路径移动，播放时自动走 / 跑。' }),
+    ]);
+  }
+
+  /**
+   * 路径段：顶点数 / 总长 / 平均速度；start / duration / speed / orient / closed；环绕三参数；
+   * 反向 / 起点对齐到当前位置 / 按步速重算时长 / 删除路径。所有写操作走 timeline API（一次撤销）。
+   */
+  _pathSection(p, ent) {
+    const upd = (patch) => this._tl((tl) => tl.updatePath(p.id, patch));
+    const len = pathLength(p.points, p.closed);
+    const v = len / p.duration;
+    const tool = this.app.pathTool;
+    const pace = (e) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      popupMenu(r.left, r.bottom + 4, PACES.map(([speed, name]) => ({
+        label: `${name} ${speed} m/s`, onClick: () => upd({ duration: defaultDuration(p.points, { speed, closed: p.closed }) }),
+      })));
+    };
+    return el('div', { class: 'anim-sec', 'data-sec': 'path' }, [
+      el('div', { class: 'sec-title' }, [
+        el('span', { text: '路径' }), el('span', { class: 'sec-tag path', text: `${p.points.length} 个点` }),
+        el('span', { class: 'sec-spacer' }),
+        tool.canDraw(ent) ? this._newPathBtn('重新绘制') : null,
+      ]),
+      el('div', { class: 'anim-info path-stats' }, [
+        `顶点 ${p.points.length} · 总长 ${len.toFixed(2)} m · `,
+        el('span', { class: 'path-speed', text: `平均 ${v.toFixed(2)} m/s` }),
+        v > RUN_SPEED ? el('span', { class: 'path-run', text: '跑' }) : null,
+      ]),
       el('div', { class: 'anim-pair' }, [
-        numberRow({ label: '开始', value: p.start, step: 0.1, min: 0, unit: 's', onChange: (v) => upd({ start: v }) }).el,
-        numberRow({ label: '时长', value: p.duration, step: 0.1, min: 0.01, unit: 's', onChange: (v) => upd({ duration: v }) }).el,
+        numberRow({ label: '开始', value: p.start, step: 0.1, min: 0, unit: 's', onChange: (x) => upd({ start: x }) }).el,
+        numberRow({ label: '时长', value: p.duration, step: 0.1, min: 0.01, unit: 's', onChange: (x) => upd({ duration: x }) }).el,
       ]),
       dropdownRow({
         label: '速度', value: p.speed,
         options: [{ value: 'linear', label: '匀速' }, { value: 'smooth', label: '缓入缓出' }],
-        onChange: (v) => upd({ speed: v }),
+        onChange: (x) => upd({ speed: x }),
       }).el,
       dropdownRow({
         label: '朝向', value: p.orient,
         options: [{ value: 'tangent', label: '沿路径方向' }, { value: 'keep', label: '保持手动朝向' }],
-        onChange: (v) => upd({ orient: v }),
+        onChange: (x) => upd({ orient: x }),
       }).el,
-      toggleRow({ label: '闭合路径', checked: p.closed, onChange: (v) => upd({ closed: v }) }).el,
+      toggleRow({ label: '闭合路径', checked: p.closed, onChange: (x) => upd({ closed: x }) }).el,
       ...this._arcRows(p),
-      el('div', { class: 'anim-info', text: `点数：${p.points.length}（绘制与拖动顶点将在后续版本提供）` }),
-      el('button', { class: 'minibtn', text: '删除路径', onclick: () => this._tl((tl) => tl.removePath(p.id)) }),
+      el('div', { class: 'anim-btns' }, [
+        el('button', { class: 'minibtn', text: '反向', title: '顶点倒序（从终点走回起点）', onclick: () => upd({ points: p.points.slice().reverse() }) }),
+        tool.canDraw(ent) ? el('button', {
+          class: 'minibtn', text: '起点对齐当前位置', title: '把第一个顶点移到对象当前（手动）位置',
+          onclick: () => upd({ points: [tool.startPoint(ent), ...p.points.slice(1)] }),
+        }) : null,
+        el('button', { class: 'minibtn', text: '按步速重算时长 ▾', onclick: pace }),
+        el('button', { class: 'minibtn danger', text: '删除路径', onclick: () => this._tl((tl) => tl.removePath(p.id)) }),
+      ]),
     ]);
   }
 

@@ -180,4 +180,16 @@
 .num-input::placeholder { color: var(--dim2); }
 .num-unit { color: var(--dim2); font-size: 12px; }
 .anim-info { font-size: 12px; color: var(--dim); margin: -4px 0 12px; }
+.anim-sec .sec-spacer { flex: 1; }
+.anim-sec .sec-btn {
+  background: var(--panel2); border: 1px solid transparent; color: var(--txt); border-radius: 7px;
+  padding: 3px 9px; font-size: 11.5px; font-weight: 500; cursor: pointer;
+}
+.anim-sec .sec-btn:hover { border-color: var(--line2); }
+.path-stats { margin: -6px 0 12px; }
+.path-speed { color: var(--dim2); }
+.path-run { margin-left: 6px; font-size: 11px; padding: 0 6px; border-radius: 8px; background: rgba(255,159,10,.18); color: #ffb340; }
+.anim-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+.anim-btns .minibtn { margin: 0; padding: 7px 6px; font-size: 12px; white-space: nowrap; }
+.anim-btns .minibtn.danger:hover { color: #ff8a80; }
 .anim-sub { font-size: 12.5px; color: var(--txt); font-weight: 600; margin: 4px 0 10px; }

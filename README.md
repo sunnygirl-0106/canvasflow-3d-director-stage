@@ -27,6 +27,7 @@
 - **全景背景** — 载入 2:1 等距柱状全景图作为环境，或自定义天空颜色。
 - **场景编排** — 左侧清单支持搜索、显隐、改名、多选，以及打组 / 副本 / 批量删除等右键操作。
 - **时间轴** — 底部面板按实体分组显示轨道 / 关键帧 / 路径与约束区间条，可拖播放头、拖键、改 ease、⌥ 复制、区间条拖动；右侧属性面板每个可动画属性旁一颗 ◇ 一键打键 / 删键，「自动打键」开启后在播放头处修改即记键；机位面板可设注视 / 跟随约束。
+- **角色路径** — 底部工具坞「路径」或属性面板「新建路径 ▾」为选中角色 / 道具 / 组画移动路径：点击落点 / 手绘 / 直线 / 环绕 / 走到五种方式；视口里蓝线 + 球形顶点，可拖顶点、⇧ 拖整条平移、点线插入、`Del` 删顶点；起点自动取对象当前位置，创建后画面不跳；直接播放即沿线走 / 跑。
 - **动画内核（供时间轴 / AI 调用）** — 角色 / 道具 / 组 / 机位的位置 · 旋转 · 缩放 · FOV 关键帧；沿 Catmull-Rom 路径移动（切线朝向、匀速 / 缓入缓出）；角色沿路径自动切程序化步行 / 跑步（脚踩点 + 腿部 IK，不悬空不打滑，停下恢复原姿势）；机位注视 / 刚性跟随约束。任意时刻状态 = `timeline.evaluate(t)`，播放与跳转结果逐数值一致；播放中导出 / 撤销记的是手动值。
 
 ## 🚀 快速开始
@@ -50,6 +51,8 @@ node selftest.mjs collide [preset,...]       # 姿势预设 + 步态（gait：�
 node selftest.mjs doc                        # 场景文档验收：往返一致 / 坏文档拒绝 / 撤销重做 → test-output/doc/
 node selftest.mjs anim                       # 动画内核验收：纯函数 / 跳转 / 导出不污染 / 往返 / 撤销 / 步态 / 约束 → test-output/anim/
 node selftest.mjs tl                         # 时间轴面板验收（真实点击 / 拖拽）：打键 / 自动打键 / 拖键 / 区间条 / 约束段 / 播放 / 快捷键 / 性能 / 折叠 → test-output/tl/
+node selftest.mjs path                       # 角色路径验收（真实点击 / 拖拽）：五种绘制 / 起点不跳 / 顶点编辑 / 冲突确认 / 可视化 / 播放 / 往返 → test-output/path/
+npm run test:unit                            # 路径生成器单元测试（node:test，不起浏览器）
 ```
 
 开发时校准页：`npm run dev` 后打开 `/calib.html?profile=bodykun_male`。
@@ -69,7 +72,16 @@ tl.setKey(fov.id, 0, 40); tl.setKey(fov.id, 4, 25, 'smooth');
 pb.play();            // pause() / seek(t) / stop()（回到手动值）/ loop = true
 ```
 
-词汇表（AI 用，定了不改）：property `pos / rot / scale / fov`；ease `linear / smooth / step`；路径 speed `linear / smooth`、orient `tangent / keep`；约束 `lookAt / follow`。文档形状见 `src/doc/schema.js` 顶部注释。
+路径生成器 `src/anim/pathGen.js`（纯函数，输出文档口径的点，阶段 F 运镜 / 阶段 H AI 共用）：
+
+```js
+import { line, arc, toward, simplify, defaultDuration } from '/src/anim/pathGen.js';
+const pts = toward([0,0,0], [3,0,4]);                          // 停在目标前 0.8 m（水平距离）；太近返回 null
+const { points, closed } = arc({ center: [0,0,0], radius: 2, startDeg: 0, sweepDeg: 180, y: 0 }); // 角度从 +X 起、俯视逆时针为正
+tl.addPath({ target: a.id, points, closed, duration: defaultDuration(points, { closed }) }); // 长度 ÷ 1.3 m/s，向上取 0.5 s
+```
+
+词汇表（AI 用，定了不改）：路径绘制方式 `points / freehand / line / arc / toward`（前两者 AI 不用）；property `pos / rot / scale / fov`；ease `linear / smooth / step`；路径 speed `linear / smooth`、orient `tangent / keep`；约束 `lookAt / follow`。文档形状见 `src/doc/schema.js` 顶部注释。
 
 ## ⌨️ 操作
 
@@ -85,6 +97,22 @@ pb.play();            // pause() / seek(t) / stop()（回到手动值）/ loop =
 | 底部工具坞「场景」 | 撤销 / 重做 / 导出场景（.json）/ 导入场景 |
 | 底部工具坞 `＋` | 添加角色 / 几何道具 / 本地上传 |
 | 底部工具坞「时间轴」/ 面板右端 ⌄ | 展开 / 折叠时间轴（记住选择；窗口高 < 900px 时默认折叠） |
+
+**路径**（选中角色 / 道具 / 组；底部工具坞「路径」或属性面板路径段「新建路径 ▾」）
+
+| 操作 | 效果 |
+| --- | --- |
+| 点击落点 | 逐次点击地面落点；`Enter` / 双击结束，`Backspace` 退一点 |
+| 手绘 | 按住左键在地面上拖，松手结束（自动简化） |
+| 直线 | 点一下终点 |
+| 环绕 | 点一下中心（地面或对象），属性面板里改半径 / 起始角 / 扫过角度（≥ 360° 自动闭合） |
+| 走到 | 点目标对象，停在 0.8 m 外；`⇧` + 点地面取任意点 |
+| 绘制中 `⌥` + 拖动 / 右键拖 / 滚轮 | 环绕 / 平移 / 缩放视角（左键归绘制）；`Esc` 取消 |
+| 拖顶点 / `⇧` 拖顶点 | 移动该顶点 / 整条路径平移（松手才写入，一次撤销；拖动中 `Esc` 回原位） |
+| 点路径线 | 选中实体的路径：在该处插入顶点；其它实体的路径：选中该实体 |
+| 点顶点 + `Del` | 删除顶点（至少保留 2 个）；优先级：选中关键帧 > 选中顶点 > 选中对象 |
+
+已有位置关键帧的对象新建路径会先确认删除关键帧；已有路径会确认替换（保留开始时间 / 速度 / 朝向）。机位视角下不显示路径。
 
 **时间轴**（输入框聚焦时不触发）
 
@@ -117,6 +145,8 @@ src/
 │  ├─ App.js            应用状态：实体清单 / 选择 / 视角切换 / 场景参数；变化以事件广播
 │  ├─ History.js        撤销 / 重做（场景文档快照栈）
 │  ├─ SceneFile.js      导出 / 导入 .json + localStorage 自动保存与恢复
+│  ├─ PathTool.js       路径绘制：五种方式的状态机 / 冲突确认 / 起点规则 / 绘制态改键
+│  ├─ PathEditor.js     顶点编辑：拖动 / ⇧平移 / 插入 / 删除（松手一次写入）
 │  ├─ ShotManager.js    截图（Blob + ObjectURL）与发送
 │  ├─ Panorama.js       全景背景载入 / 校验（资源 assetId + url|dataURL）
 │  └─ Labels.js         3D 名牌层
@@ -124,6 +154,7 @@ src/
 │  ├─ Stage.js          场景 / 渲染器 / 光照 / 地面 / 按需渲染循环 / 离屏快照
 │  ├─ CameraRig.js      OrbitControls + 自动取景 + 取景框 + 重置视角
 │  ├─ Selection.js      Raycaster 拾取 + 地面选中环
+│  ├─ PathOverlay.js    视口路径可视化：等宽曲线 / 顶点球 / 起止标记 / 方向箭头 / 播放亮点 / 命中测试
 │  ├─ TransformGizmo.js TransformControls 封装（模式切换 / 与环绕互斥）
 │  ├─ NavGizmo.js       右上角坐标指示器
 │  └─ cameraPresets.js  机位景别预设
@@ -138,6 +169,7 @@ src/
 │  ├─ Path.js           Catmull-Rom + 弧长表 + 速度曲线 · PathTrack.js 沿路径移动 / 切线朝向
 │  ├─ Locomotion.js     程序化步态（相位按路程；脚踩点 + 两段腿 IK；走跑混合）
 │  ├─ Constraint.js     lookAt / follow
+│  ├─ pathGen.js        路径生成器（纯函数）：line / arc / toward / simplify / defaultDuration
 │  └─ ease.js           linear / smooth / step
 ├─ rig/                 姿势与模型解耦层
 │  ├─ jointSchema.js    语义关节表（与模型无关；min/max 相对站立）
@@ -153,6 +185,7 @@ src/
 └─ styles/             style.css · timeline.css
 public/assets/          Xbot.glb（中性素体，meshopt 压缩）
 public/assets/figures/  BodyKun / BodyChan 关节人偶 GLB + 交接文档
+tests/                  node 单元测试（pathGen）
 docs/                   交接文档 / 技术规划 / 任务说明（已完成的在 docs/done/）
 ```
 
