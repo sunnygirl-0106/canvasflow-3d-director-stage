@@ -10,7 +10,8 @@ import { TimelinePanel } from './ui/timeline/TimelinePanel.js';
 import { ExportModal } from './ui/ExportModal.js';
 import { toast } from './util/dom.js';
 import { AutoSave } from './app/SceneFile.js';
-import { applyOps, summarize } from './ai/apply.js';
+import { AiAgent } from './ai/agent.js';
+import { OpenAICompatProvider, loadSettings } from './ai/provider.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -91,8 +92,9 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'Delete' || e.key === 'Backspace') { if (app.selectedId) app.remove(app.selectedId); }
 });
 
-// AI 操作（阶段 H）：控制台可 __app.ai.applyOps([...], { mode })；失败场景不变，成功 = 一步撤销
-app.ai = { applyOps: (ops, opts) => applyOps(app, ops, opts), summarize: () => summarize(app) };
+// AI 操作者（阶段 H）：__app.ai.run({ input, mode }) 走模型 + 重试回路；__app.ai.applyOps([...], { mode }) 直接应用 ops。
+// 失败场景不变，成功 = 一步撤销。模型接口设置只存本机 localStorage。
+app.ai = new AiAgent(app, { provider: new OpenAICompatProvider(loadSettings()) });
 
 // 调试句柄（selftest 也通过它驱动）
 window.__app = app;

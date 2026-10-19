@@ -1,9 +1,13 @@
-// ops 编译 / 场景摘要单元测试（阶段 H 第 3 步）：node 直接跑，不起浏览器。
+// ops 编译 / 场景摘要 / 提示词范例单元测试（阶段 H 第 3–4 步）：node 直接跑，不起浏览器。
 // 运行：npm run test:unit
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { compileOps, summarize, docAimPoint } from '../src/ai/apply.js';
 import { validateOps, sceneIndex } from '../src/ai/ops.js';
+import { EXAMPLES, systemPrompt, userMessage, retryMessage } from '../src/ai/prompt.js';
+import { parseReply } from '../src/ai/agent.js';
+import { VOCAB, MOVE_PARAM_KEYS } from '../src/ai/vocab.js';
+import { OP_NAMES } from '../src/ai/ops.js';
 import { createEmptyDocument, validate } from '../src/doc/schema.js';
 import { BODY_TYPES } from '../src/config.js';
 
@@ -141,4 +145,26 @@ test('摘要：每实体一行、含路径 / 注视 / 时间轴', () => {
   assert.ok(s.includes('- 小红 · 角色 female · pos (-0.8, 0, 0) · yaw 90 · 姿势 wave'));
   assert.ok(/机位1 · 机位 .* 路径 \d+ 点 .* 注视 小红 0–全程/.test(s), s);
   assert.ok(summarize(createEmptyDocument()).includes('空场景'));
+});
+
+test('提示词：范例全部合法、包含每一个词、用户消息与重试消息格式', () => {
+  for (const e of EXAMPLES) {
+    const r = validateOps(e.output.ops, e.scene.map((x) => ({ parent: null, ...x })), { mode: e.mode });
+    assert.deepEqual(r.errors, [], e.input);
+  }
+  const p = systemPrompt();
+  const words = [...Object.values(VOCAB).flat(), ...MOVE_PARAM_KEYS, ...OP_NAMES];
+  assert.deepEqual(words.filter((w) => !p.includes(w)), []);
+  assert.ok(p.length < 16000, `系统提示 ${p.length} 字`);
+  const m = userMessage({ mode: 'image', summary: 'S', input: 'I', image: 'data:image/png;base64,AA' });
+  assert.equal(m.content[1].image_url.url, 'data:image/png;base64,AA');
+  assert.ok(retryMessage(['ops[0].preset 未知运镜 "orbit"']).content.includes('- ops[0].preset 未知运镜 "orbit"'));
+});
+
+test('parseReply：围栏 / 前后杂字 / 顶层数组 / 坏 JSON', () => {
+  assert.deepEqual(parseReply('```json\n{"ops":[{"op":"clear"}],"note":"n"}\n```'), { ops: [{ op: 'clear' }], note: 'n' });
+  assert.deepEqual(parseReply('好的：{"ops":[]} 完成').ops, []);
+  assert.deepEqual(parseReply('[{"op":"clear"}]').ops, [{ op: 'clear' }]);
+  assert.ok(parseReply('{ops:').error.startsWith('输出不是合法 JSON'));
+  assert.ok(parseReply('{"x":1}').error.includes('缺少 ops'));
 });
