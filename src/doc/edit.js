@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { genId, hexColor } from '../entities/Entity.js';
 import { BODY_TYPES, CROWD_PALETTE, CHARACTER_COLOR } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
-import { defaultDuration } from '../anim/pathGen.js';
+import { defaultDuration, fitStops } from '../anim/pathGen.js';
 import { cameraMove, appendMove, lookAtWindows, pathEnd, MoveError } from '../anim/cameraMoves.js';
 import { round6 } from '../util/round.js';
 
@@ -233,15 +233,15 @@ export function setPath(doc, target, points, { closed = false, start = 0, set = 
   const old = doc.paths.find((p) => p.target === target);
   const duration = set.duration ?? defaultDuration(points, { closed });
   let path;
-  if (old) {
-    path = { ...old, points: clone(points), closed, duration, ...clone(set) };
+  if (old) { // 重新绘制：旧停顿作废（set.stops 给出时用新的）
+    path = fitStops(null, { ...old, points: clone(points), closed, duration, stops: undefined, stopTimes: undefined, ...clone(set) });
     doc.paths = doc.paths.map((p) => (p === old ? path : p));
   } else {
     doc.timeline.tracks = doc.timeline.tracks.filter((t) => !(t.target === target && t.property === 'pos'));
-    path = {
+    path = fitStops(null, {
       id: newId(doc), target, points: clone(points), closed, start, duration,
       speed: PATH_DEFAULTS.speed, orient: PATH_DEFAULTS.orient(ent.type), ...clone(set),
-    };
+    });
     doc.paths = [...doc.paths, path];
   }
   return { path, replaced: !!old };
@@ -319,7 +319,8 @@ export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, t
   // 1 路径 / 摇镜头的 rot 键
   if (move.points) {
     if (before.path) {
-      undo.path = { points: before.path.points, closed: before.path.closed, duration: before.path.duration };
+      const bp = before.path;
+      undo.path = { points: bp.points, closed: bp.closed, duration: bp.duration, stops: bp.stops || [], stopTimes: bp.stopTimes };
       const next = { ...before.path, ...appendMove(before.path, move) };
       doc.paths = doc.paths.map((p) => (p === before.path ? next : p));
     } else {

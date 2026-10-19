@@ -276,6 +276,7 @@ export class PathOverlay {
     if (sameVertex(v, this.selVertex)) return;
     this.selVertex = v;
     this._recolor();
+    this.app.emit('pathVertex', v); // Inspector 路径段的「在选中顶点处停顿」
   }
 
   _recolor() {

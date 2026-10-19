@@ -170,3 +170,48 @@ test('lookAtWindows：pan 的空档不合并、起点在 cut 之后的旧约束�
   assert.deepEqual(d.remove, ['k2']);
   assert.deepEqual(d.add, { subject: 'A', start: 6, end: null });
 });
+
+// ---- 收尾 1 · 停顿 stops / stopTimes ----
+test('appendMove 停顿：推 3 s + 半环绕 5 s —— 接缝加 stop、stopTimes = [3]；t=3 速度 < 0.05、0–3 s 在推的线段上、总 8 s', () => {
+  const a = cameraMove('push_in', { position: CAM, aim: AIM });
+  const pathA = { id: 'p1', target: 'c1', points: a.points, closed: false, start: 0, duration: a.duration, speed: 'smooth', orient: 'keep' };
+  const ab = appendMove(pathA, cameraMove('half_orbit', { position: pathEnd(pathA), aim: AIM }));
+  assert.deepEqual(ab.stops, [a.points.length - 1]);
+  assert.deepEqual(ab.stopTimes, [3]);
+  const P = new Path(ab);
+  assert.ok(P.speedAt(3) < 0.05, `t=3 速度 ${P.speedAt(3)}`);
+  assert.equal(ab.duration, 8);
+  const [p0, p1] = [a.points[0], last(a.points)];
+  const L = hd(p0, p1), ux = (p1[0] - p0[0]) / L, uz = (p1[2] - p0[2]) / L;
+  let maxOff = 0;
+  for (let i = 0; i <= 90; i++) {
+    const q = P.positionAt(P.distanceAt(i / 30));
+    const along = (q.x - p0[0]) * ux + (q.z - p0[2]) * uz;
+    const off = Math.hypot(q.x - (p0[0] + ux * along), q.y - p0[1], q.z - (p0[2] + uz * along));
+    maxOff = Math.max(maxOff, off, along < -1e-9 ? -along : 0, along > L + 1e-9 ? along - L : 0);
+  }
+  assert.ok(maxOff < 0.02, `偏离推的线段 ${maxOff} m`);
+  assert.ok(close(P.positionAt(P.distanceAt(3)).distanceTo(new THREE.Vector3(...p1)), 0, 1e-6));
+  assert.ok(P.speedAt(1.5) > 0.1 && P.speedAt(5.5) > 0.1); // 两段中间都在动
+  // 再追加一段：已有停顿沿用、时刻按名义时长
+  const abc = appendMove(ab, cameraMove('push_in', { position: pathEnd(ab), aim: AIM, params: { duration: 2 } }));
+  assert.deepEqual(abc.stopTimes, [3, 8]);
+  assert.equal(abc.stops.length, 2);
+  assert.equal(abc.duration, 10);
+});
+
+test('Path 停顿：无 stops 的数值与之前逐项相同；stops 无 stopTimes 时按弧长比例分时长', () => {
+  const pts = [[0, 0, 0], [2, 0, 0], [2, 0, 3], [5, 0, 3]];
+  const base = { points: pts, closed: false, start: 1, duration: 6, speed: 'smooth' };
+  const P0 = new Path(base), P1 = new Path({ ...base, stops: [] });
+  for (let t = 0; t <= 8; t += 0.25) {
+    assert.equal(P0.distanceAt(t), P1.distanceAt(t));
+    assert.equal(P0.speedAt(t), P1.speedAt(t));
+  }
+  const S = new Path({ ...base, stops: [1, 2] });
+  const T = S.segmentTimes; // 2 m / 3 m / 3 m → 6 s 按 2:3:3
+  assert.ok(close(T[0], 1.5, 1e-3) && close(T[1], 3.75, 1e-3) && T[2] === 6, JSON.stringify(T));
+  assert.ok(S.speedAt(1 + T[0]) < 1e-9 && S.speedAt(1 + T[1]) < 1e-9);
+  assert.ok(close(S.positionAt(S.distanceAt(1 + T[1])).distanceTo(new THREE.Vector3(2, 0, 3)), 0, 1e-6));
+  assert.ok(close(S.vertexDistance(2), 5, 1e-3));
+});

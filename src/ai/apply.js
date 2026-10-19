@@ -191,6 +191,7 @@ export function compileOps(base, ops, { mode = 'modify', charSeq = 0 } = {}) {
       if (pathLength(points, closed) < 0.05) throw new OpError('.path 路径太短（< 5 cm）');
       const set = {};
       for (const k of ['start', 'duration', 'speed', 'orient']) if (o[k] !== undefined) set[k] = o[k];
+      if (pa.kind === 'points' && pa.stops?.length) set.stops = pa.stops.map((i) => i + 1); // points[i] 是路径第 i+1 个顶点（首点 = 当前位置）
       edit.setPath(doc, e.id, points, { closed, start: 0, set });
     },
     clear_path(o) {

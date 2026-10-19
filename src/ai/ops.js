@@ -133,6 +133,14 @@ export const PATH_FIELDS = {
   points: { points: req({ doc: '[[x,y,z],…]', check: (v, p, err) => {
     if (!Array.isArray(v) || !v.length) { err(p, `应为至少 1 个点的数组，实际为 ${fmt(v)}`); return; }
     v.forEach((q, i) => vec3Check(q, `${p}[${i}]`, err));
+  } }),
+  // 停顿：在 points 的哪几个点停一下再走（下标从 0、升序、不能是最后一个点；范围在 validateOps 里按 points 查）
+  stops: opt({ doc: '[下标,…]', check: (v, p, err) => {
+    if (!Array.isArray(v)) { err(p, `应为 points 下标数组，实际为 ${fmt(v)}`); return; }
+    v.forEach((i, j) => {
+      if (!Number.isInteger(i) || i < 0) err(`${p}[${j}]`, `应为非负整数下标，实际为 ${fmt(i)}`);
+      else if (j > 0 && !(i > v[j - 1])) err(`${p}[${j}]`, `应大于前一项 ${v[j - 1]}，实际为 ${i}`);
+    });
   } }) },
   line: { to: req(T.refOrPoint) },
   arc: { center: req(T.refOrPoint), sweep: opt(T.sweep), dir: opt(enumType(VOCAB.arcDir, '环绕方向', '环绕 dir')) },
@@ -177,7 +185,7 @@ export const OP_SPECS = {
   remove: { fields: { target: req(T.ref) }, note: '删除实体（连同引用它的路径 / 约束 / 关键帧；删组连成员一起删）' },
   move: { fields: { target: req(T.ref), pos: opt(T.pos), yaw: opt(T.yaw), scale: opt(T.scale) }, note: '改手动位置 / 朝向 / 缩放（机位只能改 pos，并保持对准原注视点）' },
   set_pose: { fields: { target: req(T.ref), preset: req(E.pose) }, note: '换姿势（对组 = 全部成员）' },
-  set_path: { fields: { target: req(T.ref), path: req(T.path), start: opt(T.time), duration: opt(T.duration), speed: opt(E.speed), orient: opt(E.orient) }, note: '沿路径移动（替换已有路径）；duration 默认按步速 1.3 m/s 估算' },
+  set_path: { fields: { target: req(T.ref), path: req(T.path), start: opt(T.time), duration: opt(T.duration), speed: opt(E.speed), orient: opt(E.orient) }, note: '沿路径移动（替换已有路径）；duration 默认按步速 1.3 m/s 估算；points 写法可加 stops = 在哪几个点停一下（各段时长按路程比例分）' },
   clear_path: { fields: { target: req(T.ref) }, note: '删除路径' },
   camera_move: { fields: { target: req(T.ref), preset: req(E.move), subject: opt(T.refOrPoint), amount: opt(T.amount), dir: opt(T.dir), sweep: opt(T.sweep), duration: opt(T.duration), append: opt(T.bool) }, note: '运镜：生成机位路径并注视主体（subject 默认最近的角色）；append=true 接在已有运镜之后，否则替换已有运镜' },
   clear_moves: { fields: { target: req(T.ref) }, note: '清除机位的运镜（路径 + 约束 + 旋转关键帧）' },
@@ -342,6 +350,9 @@ export function validateOps(ops, scene = [], { mode = 'modify' } = {}) {
         if (pa.kind === 'line') refOrPoint(`${p}.path.to`, pa.to, { not: o.target });
         if (pa.kind === 'arc') refOrPoint(`${p}.path.center`, pa.center, { not: o.target });
         if (pa.kind === 'toward') need(`${p}.path.target`, pa.target, null, { not: o.target });
+        if (pa.kind === 'points' && Array.isArray(pa.stops) && Array.isArray(pa.points)) {
+          pa.stops.forEach((i, j) => { if (Number.isInteger(i) && i > pa.points.length - 2) err(`${p}.path.stops[${j}]`, `应在 0–${pa.points.length - 2} 之间（最后一个点是终点，不用停顿），实际为 ${i}`); });
+        }
         break;
       }
       case 'clear_path':

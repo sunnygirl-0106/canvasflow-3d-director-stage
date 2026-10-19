@@ -7,7 +7,7 @@ import { downloadURL } from '../app/ShotManager.js';
 import { propState } from './timeline/animState.js';
 import { toastError } from './timeline/Transport.js';
 import { arcPoints, pathModes } from '../app/PathTool.js';
-import { pathLength, defaultDuration } from '../anim/pathGen.js';
+import { pathLength, defaultDuration, stopsAfterReverse, toggleStop } from '../anim/pathGen.js';
 import { popupMenu } from './timeline/keyDrag.js';
 import { CAMERA_MOVES, MOVE_PARAMS, MOVE_DIRS, MOVE_LABEL } from '../anim/cameraMoves.js';
 
@@ -42,6 +42,7 @@ export class Inspector {
     app.timeline.on('change', () => { this._sectionsDirty = true; this.scheduleAnimRefresh(); });
     app.timeline.on('active', () => this.scheduleAnimRefresh());
     app.on('inspect', (req) => this.inspect(req));
+    app.on('pathVertex', () => { this._sectionsDirty = true; this.scheduleAnimRefresh(); });
     app.on('entities', () => this.refreshName());
     app.on('shots', () => { if (this.entity?.type === 'camera') this.show(this.entity); });
   }
@@ -167,7 +168,7 @@ export class Inspector {
    */
   _pathSection(p, ent) {
     const upd = (patch) => this._tl((tl) => tl.updatePath(p.id, patch));
-    const len = pathLength(p.points, p.closed);
+    const len = pathLength(p.points, p.closed, p.stops);
     const v = len / p.duration;
     const tool = this.app.pathTool;
     const pace = (e) => {
@@ -196,6 +197,7 @@ export class Inspector {
         options: [{ value: 'linear', label: '匀速' }, { value: 'smooth', label: '缓入缓出' }],
         onChange: (x) => upd({ speed: x }),
       }).el,
+      this._stopRow(p, upd),
       dropdownRow({
         label: '朝向', value: p.orient,
         options: [{ value: 'tangent', label: '沿路径方向' }, { value: 'keep', label: '保持手动朝向' }],
@@ -204,7 +206,10 @@ export class Inspector {
       toggleRow({ label: '闭合路径', checked: p.closed, onChange: (x) => upd({ closed: x }) }).el,
       ...this._arcRows(p),
       el('div', { class: 'anim-btns' }, [
-        el('button', { class: 'minibtn', text: '反向', title: '顶点倒序（从终点走回起点）', onclick: () => upd({ points: p.points.slice().reverse() }) }),
+        el('button', {
+          class: 'minibtn', text: '反向', title: '顶点倒序（从终点走回起点）',
+          onclick: () => upd({ points: p.points.slice().reverse(), ...stopsAfterReverse(p) }),
+        }),
         tool.canDraw(ent) ? el('button', {
           class: 'minibtn', text: '起点对齐当前位置', title: '把第一个顶点移到对象当前（手动）位置',
           onclick: () => upd({ points: [tool.startPoint(ent), ...p.points.slice(1)] }),
@@ -213,6 +218,28 @@ export class Inspector {
         el('button', { class: 'minibtn danger', text: '删除路径', onclick: () => this._tl((tl) => tl.removePath(p.id)) }),
       ]),
     ]);
+  }
+
+  /**
+   * 停顿（stops）：选中路径中间的顶点时显示「在顶点 N 处停顿」勾选；否则提示怎么设、列出已有停顿。
+   * 有停顿时各段各自缓入缓出（停顿处速度 0），速度下拉只作用于没有停顿的路径。
+   */
+  _stopRow(p, upd) {
+    const sv = this.app.pathOverlay.selVertex;
+    const n = p.points.length;
+    const last = p.closed ? n - 1 : n - 2;
+    const idx = sv?.pathId === p.id ? sv.index : -1;
+    const stops = p.stops || [];
+    const list = stops.length
+      ? `停顿 ${stops.length} 处：${stops.map((i, j) => `顶点 ${i + 1}${p.stopTimes ? ` @${fmtS(p.start + p.stopTimes[j])} s` : ''}`).join('、')}（各段缓入缓出）`
+      : '';
+    if (idx >= 1 && idx <= last) {
+      return el('div', { 'data-row': 'stop' }, [
+        toggleRow({ label: `在选中顶点（${idx + 1}）处停顿`, checked: stops.includes(idx), onChange: (x) => upd(toggleStop(p, idx, x)) }).el,
+        list ? el('div', { class: 'anim-info', text: list }) : null,
+      ]);
+    }
+    return el('div', { class: 'anim-info', 'data-row': 'stop', text: list || '点选路径中间的顶点，可设为停顿点（走到那里停一下再走）。' });
   }
 
   /**

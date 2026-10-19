@@ -44,7 +44,9 @@
 //   start: 0, duration: 4,   // 秒；start ≥ 0，duration > 0
 //   speed: 'linear' | 'smooth',      // 弧长随时间的曲线：匀速 / 缓入缓出
 //   orient: 'tangent' | 'keep',      // 朝向跟随切线（只改 yaw）/ 保持手动朝向
-// }
+//   stops: [i, ...],                 // 可选（收尾 1）：停顿的顶点索引，升序、不含首尾（闭合路径可到 n−1）；缺省 = 无停顿
+//   stopTimes: [秒, ...],            // 可选：到达各停顿顶点的时刻（相对 start），与 stops 等长、递增、在 (0, duration) 内；
+// }                                  //   缺省 = 各段按弧长比例分配时长。有 stops 时每段各自缓入缓出（停顿处速度 0）
 // Constraint = {
 //   id, type: 'lookAt' | 'follow',
 //   target: cameraId,                 // 被约束的机位（本阶段只约束机位）
@@ -124,6 +126,7 @@ const TIMELINE_KEYS = ['duration', 'fps', 'mainCameraId', 'tracks'];
 const TRACK_KEYS = ['id', 'target', 'property', 'keys'];
 const KEY_KEYS = ['t', 'value', 'ease'];
 const PATH_KEYS = ['id', 'target', 'points', 'closed', 'start', 'duration', 'speed', 'orient'];
+const PATH_OPTIONAL = ['stops', 'stopTimes'];
 const CONSTRAINT_KEYS = ['id', 'type', 'target', 'subject', 'offset', 'start', 'end'];
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -146,12 +149,12 @@ export function validate(doc) {
   const err = (path, msg) => errors.push(`${path} ${msg}`);
   // 约定：字段缺失（undefined）由上一级 checkKeys 报"缺少字段"，下面各值检查遇到 undefined 直接跳过，避免重复报错。
 
-  /** 必须是对象且键集合恰好为 keys（缺键 / 多余键都报）。返回是否为对象。 */
-  const checkKeys = (v, path, keys) => {
+  /** 必须是对象且键集合恰好为 keys（缺键 / 多余键都报；optional 里的可缺省）。返回是否为对象。 */
+  const checkKeys = (v, path, keys, optional = []) => {
     if (v === undefined) return false;
     if (!isObj(v)) { err(path, `应为对象，实际为 ${fmt(v)}`); return false; }
     for (const k of keys) if (!(k in v)) err(path, `缺少字段 ${k}`);
-    for (const k of Object.keys(v)) if (!keys.includes(k)) err(`${path}.${k}`, '是未知字段');
+    for (const k of Object.keys(v)) if (!keys.includes(k) && !optional.includes(k)) err(`${path}.${k}`, '是未知字段');
     return true;
   };
   const vec3 = (v, path) => {
@@ -382,11 +385,33 @@ export function validate(doc) {
     });
   }
 
+  /** 路径停顿：stops 为升序顶点索引（不含首尾），stopTimes 与之等长、递增、在 (0, duration) 内。 */
+  const checkStops = (pa, p) => {
+    const { stops, stopTimes } = pa;
+    if (stops === undefined) {
+      if (stopTimes !== undefined) err(`${p}.stopTimes`, '需要同时给出 stops');
+      return;
+    }
+    if (!Array.isArray(stops)) { err(`${p}.stops`, `应为顶点索引数组，实际为 ${fmt(stops)}`); return; }
+    const n = Array.isArray(pa.points) ? pa.points.length : 0;
+    const last = pa.closed ? n - 1 : n - 2;
+    stops.forEach((i, j) => {
+      if (!Number.isInteger(i) || i < 1 || i > last) err(`${p}.stops[${j}]`, `应为 1–${last} 之间的顶点索引（不含首尾），实际为 ${fmt(i)}`);
+      else if (j > 0 && !(i > stops[j - 1])) err(`${p}.stops[${j}]`, `应大于前一项 ${stops[j - 1]}，实际为 ${i}`);
+    });
+    if (stopTimes === undefined) return;
+    if (!Array.isArray(stopTimes) || stopTimes.length !== stops.length) { err(`${p}.stopTimes`, `应为与 stops 等长（${stops.length}）的时刻数组，实际为 ${fmt(stopTimes)}`); return; }
+    stopTimes.forEach((t, j) => {
+      if (!isNum(t) || !(t > 0) || (isNum(pa.duration) && !(t < pa.duration))) err(`${p}.stopTimes[${j}]`, `应在 (0, ${pa.duration}) 内，实际为 ${fmt(t)}`);
+      else if (j > 0 && !(t > stopTimes[j - 1])) err(`${p}.stopTimes[${j}]`, `应大于前一项 ${stopTimes[j - 1]}，实际为 ${t}`);
+    });
+  };
+
   arr(doc.paths, 'paths');
   const pathOf = new Map(); // targetId → 路径路径
   (Array.isArray(doc.paths) ? doc.paths : []).forEach((pa, i) => {
     const p = `paths[${i}]`;
-    if (!checkKeys(pa, p, PATH_KEYS)) return;
+    if (!checkKeys(pa, p, PATH_KEYS, PATH_OPTIONAL)) return;
     claimId(pa.id, p);
     const hit = animRef(pa.target, `${p}.target`, PATH_TARGETS);
     if (hit) {
@@ -404,6 +429,7 @@ export function validate(doc) {
     num(pa.duration, `${p}.duration`, { gt: 0 });
     oneOf(pa.speed, `${p}.speed`, PATH_SPEEDS, '速度曲线');
     oneOf(pa.orient, `${p}.orient`, PATH_ORIENTS, '朝向方式');
+    checkStops(pa, p);
   });
 
   arr(doc.constraints, 'constraints');

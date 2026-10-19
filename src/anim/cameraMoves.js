@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { line, arc, polar } from './pathGen.js';
+import { Path } from './Path.js';
 
 // 运镜预设（阶段 F）：纯函数，不依赖 DOM / App。输入机位当前位姿 + 主体注视点 + 参数，输出文档口径的
 // 路径点 / 旋转关键帧，由调用方写成 path + lookAt 约束（+ pan 的 rot 轨道）。
@@ -175,15 +176,22 @@ const openPoints = (points, closed) => (closed ? [...points, points[0]] : points
 
 /**
  * 追加拼接：next 接在 path 后面。next 的首点必须与 path 的终点重合（运镜从路径终点生成）。
- * → 新的 path 字段：points 接续（去掉 next 首点；闭合的两边先展开）、duration 累加、closed = false。
+ * → 新的 path 字段：points 接续（去掉 next 首点；闭合的两边先展开）、duration 累加、closed = false，
+ *   接缝顶点加一个停顿（stops），各段时长按名义时长分配（stopTimes：推 3 s + 半环绕 5 s → 接缝在 3 s）。
  * start / speed / orient 等其余字段保持。
  */
 export function appendMove(path, next) {
   const end = pathEnd(path);
   const head = next.points[0];
   if (Math.hypot(head[0] - end[0], head[1] - end[1], head[2] - end[2]) > 1e-4) throw new MoveError('追加的运镜必须从现有路径的终点开始');
-  const points = [...openPoints(path.points, path.closed), ...openPoints(next.points, next.closed).slice(1)];
-  return { ...path, points, closed: false, duration: r6(path.duration + next.duration) };
+  const prev = openPoints(path.points, path.closed);
+  const points = [...prev, ...openPoints(next.points, next.closed).slice(1)];
+  // 已有停顿沿用（闭合路径展开后索引不变）；没有 stopTimes 的按当前（弧长比例）分配取到达时刻
+  const stops = [...(path.stops || [])];
+  const times = path.stops?.length ? (path.stopTimes?.length ? path.stopTimes.slice() : new Path(path).segmentTimes.slice(0, -1).map(r6)) : [];
+  stops.push(prev.length - 1);
+  times.push(r6(path.duration));
+  return { ...path, points, closed: false, duration: r6(path.duration + next.duration), stops, stopTimes: times };
 }
 
 const sameSubject = (a, b) => JSON.stringify(a) === JSON.stringify(b);

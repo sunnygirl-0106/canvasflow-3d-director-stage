@@ -86,7 +86,7 @@ export class CameraMoveTool {
   /** 签名：机位路径 + rot 轨道键（判断会话态的段是否仍与文档一致）。 */
   _sig({ path, rotTrack }) {
     return JSON.stringify({
-      path: path && { points: path.points, closed: path.closed, start: path.start, duration: path.duration },
+      path: path && { points: path.points, closed: path.closed, start: path.start, duration: path.duration, stops: path.stops, stopTimes: path.stopTimes },
       rot: rotTrack?.keys || null,
     });
   }

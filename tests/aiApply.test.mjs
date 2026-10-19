@@ -175,3 +175,15 @@ test('README「AI 生成」的词汇表块与代码生成结果一致（不一�
   const [a, b] = README_MARKERS;
   assert.equal(text.slice(text.indexOf(a) + a.length, text.indexOf(b)).trim(), aiVocabMarkdown().trim());
 });
+
+test('set_path 的 stops（收尾 1）：points 下标 → 路径顶点索引 +1；越界被定位', () => {
+  const g = run(createEmptyDocument(), GEN, 'generate').doc;
+  const { doc } = run(g, [{ op: 'set_path', target: '小王', path: { kind: 'points', points: [[0.8, 0, 2], [2, 0, 2], [2, 0, 0]], stops: [0, 1] } }]);
+  const p = doc.paths.find((x) => x.target === byName(doc, '小王').id);
+  assert.deepEqual(p.stops, [1, 2]);
+  assert.ok(!('stopTimes' in p));
+  const v = validateOps([{ op: 'set_path', target: '小王', path: { kind: 'points', points: [[1, 0, 1], [2, 0, 2]], stops: [1] } }], sceneIndex(g));
+  assert.ok(v.errors.some((e) => e.includes('ops[0].path.stops[0]')), JSON.stringify(v.errors));
+  const v2 = validateOps([{ op: 'set_path', target: '小王', path: { kind: 'line', to: [1, 0, 1], stops: [0] } }], sceneIndex(g));
+  assert.ok(v2.errors.some((e) => e.includes('ops[0].path.stops')), JSON.stringify(v2.errors));
+});

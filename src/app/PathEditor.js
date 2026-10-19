@@ -1,5 +1,6 @@
 import { toast } from '../util/dom.js';
 import { toastError } from '../ui/timeline/Transport.js';
+import { stopsAfterInsert, stopsAfterDelete } from '../anim/pathGen.js';
 
 const CLICK_PX = 4;  // 按下到松开移动不超过它算点击（与 Selection 一致）
 const isTyping = (t) => t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
@@ -153,14 +154,11 @@ export class PathEditor {
     const json = this.app.timeline.toJSON().paths.find((p) => p.id === pathId);
     const path = this.app.pathOverlay.pathOf(pathId);
     if (!json || !path) return;
-    const n = json.points.length;
-    const segs = json.closed ? n : n - 1;
-    const u = path.uAt(s);
-    const seg = Math.min(segs - 1, Math.floor(u * segs + 1e-9));
+    const seg = path.edgeAt(s);
     const p = path.positionAt(s);
     const pts = json.points.slice();
     pts.splice(seg + 1, 0, [r4(p.x), json.points[seg][1], r4(p.z)]);
-    if (this._write(pathId, { points: pts })) this.app.pathOverlay.setSelectedVertex({ pathId, index: seg + 1 });
+    if (this._write(pathId, { points: pts, ...stopsAfterInsert(json, seg + 1) })) this.app.pathOverlay.setSelectedVertex({ pathId, index: seg + 1 });
   }
 
   deleteVertex(pathId, index) {
@@ -169,7 +167,7 @@ export class PathEditor {
     if (json.points.length <= 2) { toast('路径至少需要 2 个顶点（可在属性面板删除整条路径）'); return; }
     const pts = json.points.filter((_, i) => i !== index);
     this.app.pathOverlay.setSelectedVertex(null);
-    this._write(pathId, { points: pts });
+    this._write(pathId, { points: pts, ...stopsAfterDelete(json, index) });
   }
 
   _write(pathId, patch) {

@@ -620,6 +620,47 @@ async function animTest() {
   ok('步态：压到 1.5 s（4 m/s）t=0.75 为跑步（膝屈 > 45°）', gait.runKnee > 45, `膝 ${gait.runKnee.toFixed(1)}°`);
   ok('步态：stop() 后恢复原姿势', gait.restored);
   ok('步态：组沿路径时成员一起走、步伐错开，停下恢复', gait.crowdWalk && gait.crowdRestored);
+  // ---- 收尾 1 · 路径停顿 stops：角色走到中间顶点停下（速度 0、原姿势）再走；含 stops 的文档往返 ≡ ----
+  await buildAnimScene().then((v) => Object.assign(ids, v));
+  const stopRes = await page.evaluate(async (ids) => {
+    const { Path } = await import('/src/anim/Path.js');
+    const a = window.__app, tl = a.timeline, pb = a.playback;
+    const m = a.findEntity(ids.m);
+    const x = m.root.position.x, z = m.root.position.z;
+    const json = tl.addPath({ target: ids.m, points: [[x, 0, z], [x, 0, z + 2], [x + 2, 0, z + 2], [x + 2, 0, z + 4]], start: 0, duration: 6, speed: 'smooth', orient: 'tangent' });
+    const p1 = tl.updatePath(json.id, { stops: [1] });
+    const P = new Path(p1);
+    const T1 = P.segmentTimes[0];
+    const base = { ...m.values };
+    pb.seek(T1);
+    const pos = m.toJSON().transform.pos;
+    const out = {
+      T1, stops: p1.stops, hasTimes: 'stopTimes' in p1,
+      atVertex: Math.hypot(pos[0] - x, pos[2] - (z + 2)),
+      still: Object.keys(base).every((k) => Math.abs((m.values[k] || 0) - (base[k] || 0)) < 1e-9),
+      v: P.speedAt(T1),
+    };
+    pb.seek(T1 / 2); out.walkMid = Math.abs(m.values.lLegFwd - m.values.rLegFwd) > 5;
+    pb.stop();
+    const d1 = a.toDocument();
+    await a.loadDocument(JSON.parse(JSON.stringify(d1)));
+    const d2 = a.toDocument();
+    d1.meta.updatedAt = d2.meta.updatedAt = null;
+    out.roundTrip = JSON.stringify(d1) === JSON.stringify(d2) && JSON.stringify(d2.paths[0].stops) === '[1]';
+    // 插入 / 删除顶点后停顿索引跟着走；顶点数被整体替换时停顿去掉
+    const id = d2.paths[0].id;
+    a.pathEditor.insertAt(id, 0.5);
+    out.afterInsert = tl.toJSON().paths[0].stops;
+    a.pathEditor.deleteVertex(id, 1);
+    out.afterDelete = tl.toJSON().paths[0].stops;
+    tl.updatePath(id, { points: [[x, 0, z], [x + 3, 0, z]] });
+    out.afterReplace = 'stops' in tl.toJSON().paths[0];
+    return out;
+  }, ids);
+  ok('停顿：角色走到停顿顶点时 速度 0、在顶点上（< 1 cm）、姿势 ≡ 原姿势；段中在走', stopRes.v < 1e-9 && stopRes.atVertex < 0.01 && stopRes.still && stopRes.walkMid && !stopRes.hasTimes,
+    `stops=${JSON.stringify(stopRes.stops)} T1=${stopRes.T1.toFixed(3)}s 离顶点 ${(stopRes.atVertex * 100).toFixed(4)} cm`);
+  ok('停顿：含 stops 的文档往返 ≡；插入 / 删除顶点后索引跟着走，顶点数整体改变时去掉', stopRes.roundTrip && JSON.stringify(stopRes.afterInsert) === '[2]' && JSON.stringify(stopRes.afterDelete) === '[1]' && !stopRes.afterReplace,
+    JSON.stringify({ rt: stopRes.roundTrip, ins: stopRes.afterInsert, del: stopRes.afterDelete, replaced: stopRes.afterReplace }));
   // ---- 收尾 1 · 起步平滑转身：手动朝向 −100°、路径朝 +X（90°），差 170° ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
   const turn = await page.evaluate(async (ids) => {
@@ -1548,6 +1589,26 @@ async function pathTest() {
   }, p10.id, ids.B);
   ok('起步转身（界面画的直线）：t=start ≡ 手动朝向、走过 0.6 m ≡ 切线（< 0.5°），每帧 < 15°', turn10.s0 < 0.5 && turn10.s1 < 0.5 && turn10.maxStep < 15 && turn10.manual !== turn10.tanYaw,
     JSON.stringify(Object.fromEntries(Object.entries(turn10).map(([k, v]) => [k, +v.toFixed(3)]))));
+  // 收尾 1 · 停顿：点线插入一个中间顶点（自动选中）→ Inspector「在选中顶点处停顿」真实点击 → stops = [1]；该顶点处速度 0
+  await page.evaluate((pid) => { const a = window.__app; const P = a.pathOverlay.pathOf(pid); a.pathEditor.insertAt(pid, P.length / 2); }, p10.id);
+  await settle(200);
+  const stopUI0 = await page.evaluate(() => document.querySelector('#inspector [data-row="stop"] .t-label')?.textContent || '');
+  await clickSel('#inspector [data-row="stop"] .switch');
+  await settle(150);
+  const stopUI = await page.evaluate(async (pid) => {
+    const a = window.__app;
+    const { Path } = await import('/src/anim/Path.js');
+    const json = a.timeline.toJSON().paths.find((p) => p.id === pid);
+    const P = new Path(json);
+    return { stops: json.stops, v: P.speedAt(json.start + P.segmentTimes[0]), info: document.querySelector('#inspector [data-row="stop"]').innerText, hist: a.history.entries.length };
+  }, p10.id);
+  await page.screenshot({ path: `${OUT}/14_stop_inspector.png`, clip: await panelClip() });
+  await page.keyboard.down('Meta'); await page.keyboard.press('z'); await page.keyboard.up('Meta');
+  await settle(200);
+  const stopUndo = await pathOf(ids.B);
+  ok('停顿（Inspector）：选中中间顶点 → 勾「在选中顶点处停顿」→ stops=[1]、该顶点处速度 0；⌘Z 撤掉',
+    stopUI0.includes('停顿') && JSON.stringify(stopUI.stops) === '[1]' && stopUI.v < 1e-9 && !('stops' in stopUndo) && stopUndo.points.length === 3,
+    `「${stopUI0}」 stops=${JSON.stringify(stopUI.stops)} v=${stopUI.v} 撤销后 ${JSON.stringify(stopUndo.stops)} | ${stopUI.info.replace(/\s+/g, ' ')}`);
 
   console.log(`📁 产物：${OUT}/`);
 }
@@ -1767,8 +1828,7 @@ async function camTest() {
   ok('验收6 段列表：推 0–3 / 半环绕 3–8', segs6.length === 2 && segs6[0].includes('推') && segs6[0].includes('0.0–3.0') && segs6[1].includes('半环绕') && segs6[1].includes('3.0–8.0'), JSON.stringify(segs6));
   await page.evaluate(() => document.querySelector('#inspector [data-sec="move"]').scrollIntoView());
   await page.screenshot({ path: `${OUT}/12_segments.png`, clip: await panelClip() });
-  // 拼接后是一条 smooth 速度曲线，t=3 附近机位正以 ~1.6 m/s 运动：0.02 s 本身就走 ~3 cm。
-  // 判"无跳变"：跨接缝的一步与前后相邻两步的平均相差 < 2 mm（原始距离一并打印）
+  // 判"无跳变"：跨接缝的一步与前后相邻两步的平均相差 < 2 mm（原始距离一并打印；收尾 1 起接缝处停顿，三步都接近 0）
   const at = async (t) => { await page.evaluate((t) => window.__app.playback.seek(t), t); return (await camPose(ids.c1)).pos; };
   const ts = [2.97, 2.99, 3.01, 3.03];
   const ps = [];
@@ -1777,6 +1837,31 @@ async function camTest() {
   const jump = Math.abs(step(1) - (step(0) + step(2)) / 2);
   ok('验收6 播放 t=3 附近位置连续（跨接缝一步与相邻步之差 < 2 mm）', jump < 0.002,
     `2.99→3.01 相距 ${(step(1) * 100).toFixed(3)} cm（相邻 ${(step(0) * 100).toFixed(3)} / ${(step(2) * 100).toFixed(3)} cm），差 ${(jump * 1000).toFixed(3)} mm`);
+  // 收尾 1 · 接缝停顿：stops = [接缝]、stopTimes = [3]；t=3 速度 < 0.05 m/s；0–3 s 始终在推的线段上（< 2 cm）
+  const stop6 = await page.evaluate(async (id, push) => {
+    const a = window.__app, pb = a.playback;
+    const c = a.findEntity(id);
+    const P0 = push[0], P1 = push[push.length - 1];
+    const L = Math.hypot(P1[0] - P0[0], P1[1] - P0[1], P1[2] - P0[2]);
+    const u = P1.map((v, i) => (v - P0[i]) / L);
+    const pos = (t) => { pb.seek(t); return c.toJSON().transform.pos; }; // 文档口径 = 路径点口径
+    let off = 0;
+    for (let i = 0; i <= 90; i++) {
+      const q = pos(i / 30);
+      const along = q.reduce((s, v, k) => s + (v - P0[k]) * u[k], 0);
+      const cl = Math.min(Math.max(along, 0), L);
+      off = Math.max(off, Math.hypot(...q.map((v, k) => v - (P0[k] + u[k] * cl))) + Math.max(0, -along, along - L));
+    }
+    const a3 = pos(2.995), b3 = pos(3.005);
+    const v3 = Math.hypot(...a3.map((v, k) => v - b3[k])) / 0.01;
+    const vMid = Math.hypot(...pos(1.495).map((v, k, q) => v - pos(1.505)[k])) / 0.01;
+    pb.stop();
+    const p = a.timeline.toJSON().paths.find((x) => x.target === id);
+    return { stops: p.stops, stopTimes: p.stopTimes, n1: push.length, v3, vMid, off, duration: p.duration };
+  }, ids.c1, pushOnly.path.points);
+  ok('验收4（收尾 1）推 3 s + 半环绕 5 s：接缝停顿 stops/stopTimes、t=3.0 速度 < 0.05 m/s、0–3 s 在推的线段上（< 2 cm）、总 8 s',
+    JSON.stringify(stop6.stops) === JSON.stringify([stop6.n1 - 1]) && JSON.stringify(stop6.stopTimes) === '[3]' && stop6.v3 < 0.05 && stop6.vMid > 0.3 && stop6.off < 0.02 && stop6.duration === 8,
+    `stops=${JSON.stringify(stop6.stops)} stopTimes=${JSON.stringify(stop6.stopTimes)} v(3.0)=${stop6.v3.toFixed(4)} m/s v(1.5)=${stop6.vMid.toFixed(3)} m/s 偏离 ${(stop6.off * 100).toFixed(3)} cm`);
   await page.evaluate(() => window.__app.playback.stop());
 
   // 摇镜头不能接在路径后

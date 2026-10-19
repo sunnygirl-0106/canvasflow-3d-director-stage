@@ -5,6 +5,7 @@ import { genId } from '../entities/Entity.js';
 import { dropTransformAnim, pruneAnim } from '../doc/edit.js';
 import { Track } from './Track.js';
 import { PathTrack } from './PathTrack.js';
+import { fitStops } from './pathGen.js';
 import { applyLocomotion } from './Locomotion.js';
 import { applyConstraint, constraintActive } from './Constraint.js';
 import { round6 } from '../util/round.js';
@@ -442,7 +443,7 @@ export class Timeline extends Emitter {
   /** 修改路径字段（id 不可改）。 */
   updatePath(id, patch) {
     const old = this._find(this.paths, id, '路径');
-    const path = { ...old, ...clone(patch), id };
+    const path = fitStops(old, { ...old, ...clone(patch), id }, patch); // 停顿随顶点数 / 时长调整
     this._commit({ paths: this.paths.map((x) => (x === old ? path : x)) });
     return clone(path);
   }
