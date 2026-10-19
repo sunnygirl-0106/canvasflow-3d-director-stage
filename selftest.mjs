@@ -1660,6 +1660,75 @@ async function camTest() {
   await moveBtn('清除运镜');
   await page.evaluate((id) => { const c = window.__app.findEntity(id); c.root.rotation.y -= 0.7; c.root.updateMatrixWorld(true); }, ids.c1);
 
+  // ---- 6 追加：推 → 半环绕（同主体合并注视）----
+  await moveField('预设', 'push_in');
+  await moveBtn('应用');
+  const pushOnly = await camAnim(ids.c1);
+  const label6 = await page.$eval('#inspector [data-sec="move"] .anim-btns .primary', (b) => b.textContent);
+  await moveField('预设', 'half_orbit');
+  await moveBtn('追加');
+  const ap = await camAnim(ids.c1);
+  const n1 = pushOnly.path.points.length;
+  const seamOk = JSON.stringify(ap.path.points.slice(0, n1)) === JSON.stringify(pushOnly.path.points);
+  ok('验收6 已有路径时按钮为「追加」；追加后仍一条路径、前段点不变（接缝 = 推的终点）、duration = 3 + 5',
+    label6 === '追加' && seamOk && ap.path.duration === 8 && ap.path.closed === false && ap.path.id === pushOnly.path.id,
+    `label=${label6} n=${n1}→${ap.path.points.length} d=${ap.path.duration}`);
+  ok('验收6 同主体：两段注视合并为一条 [0, 全程]', ap.cns.length === 1 && ap.cns[0].start === 0 && ap.cns[0].end === null, JSON.stringify(ap.cns));
+  const segs6 = await page.$$eval('#inspector [data-sec="move"] .move-seg', (ns) => ns.map((n) => n.innerText.replace(/\s+/g, ' ')));
+  ok('验收6 段列表：推 0–3 / 半环绕 3–8', segs6.length === 2 && segs6[0].includes('推') && segs6[0].includes('0.0–3.0') && segs6[1].includes('半环绕') && segs6[1].includes('3.0–8.0'), JSON.stringify(segs6));
+  await page.evaluate(() => document.querySelector('#inspector [data-sec="move"]').scrollIntoView());
+  await page.screenshot({ path: `${OUT}/12_segments.png`, clip: await panelClip() });
+  // 拼接后是一条 smooth 速度曲线，t=3 附近机位正以 ~1.6 m/s 运动：0.02 s 本身就走 ~3 cm。
+  // 判"无跳变"：跨接缝的一步与前后相邻两步的平均相差 < 2 mm（原始距离一并打印）
+  const at = async (t) => { await page.evaluate((t) => window.__app.playback.seek(t), t); return (await camPose(ids.c1)).pos; };
+  const ts = [2.97, 2.99, 3.01, 3.03];
+  const ps = [];
+  for (const t of ts) ps.push(await at(t));
+  const step = (i) => Math.hypot(...ps[i].map((v, k) => v - ps[i + 1][k]));
+  const jump = Math.abs(step(1) - (step(0) + step(2)) / 2);
+  ok('验收6 播放 t=3 附近位置连续（跨接缝一步与相邻步之差 < 2 mm）', jump < 0.002,
+    `2.99→3.01 相距 ${(step(1) * 100).toFixed(3)} cm（相邻 ${(step(0) * 100).toFixed(3)} / ${(step(2) * 100).toFixed(3)} cm），差 ${(jump * 1000).toFixed(3)} mm`);
+  await page.evaluate(() => window.__app.playback.stop());
+
+  // 摇镜头不能接在路径后
+  await moveField('预设', 'pan');
+  await moveBtn('追加');
+  ok('摇镜头接在路径后：拒绝并提示', (await toastText()).includes('摇镜头请单独使用或放在最前') && (await camAnim(ids.c1)).path.duration === 8, await toastText());
+
+  // ---- 7 删末段 + ⌘Z ----
+  await page.evaluate(() => [...document.querySelectorAll('#inspector [data-sec="move"] .move-seg-del')][0].click());
+  await settle();
+  const midTxt = await toastText();
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#inspector [data-sec="move"] .move-seg-del')]; b[b.length - 1].click(); });
+  await settle(150);
+  const del = await camAnim(ids.c1);
+  ok('验收7 删中间段提示「请清除后重做」；删末段：points / duration / 约束回到追加前',
+    midTxt.includes('请清除后重做') && JSON.stringify(del.path) === JSON.stringify(pushOnly.path) && JSON.stringify(del.cns) === JSON.stringify(pushOnly.cns)
+    && (await page.$$('#inspector [data-sec="move"] .move-seg')).length === 1, JSON.stringify({ midTxt, d: del.path.duration, cns: del.cns }));
+  await page.keyboard.down('Meta'); await page.keyboard.press('z'); await page.keyboard.up('Meta');
+  await settle(300);
+  const undo7 = await camAnim(ids.c1);
+  ok('验收7 ⌘Z 恢复追加后的状态（段列表回到 2 段）', JSON.stringify(undo7.path) === JSON.stringify(ap.path) && JSON.stringify(undo7.cns) === JSON.stringify(ap.cns)
+    && (await page.$$('#inspector [data-sec="move"] .move-seg')).length === 2, `d=${undo7.path?.duration}`);
+
+  // 异主体：推 A → 追加半环绕 B：两条注视 [0,3] / [3,全程]
+  await moveBtn('清除运镜');
+  await moveField('预设', 'push_in');
+  await moveField('主体', ids.A);
+  await moveBtn('应用');
+  await moveField('预设', 'half_orbit');
+  await moveField('主体', ids.B);
+  await moveBtn('追加');
+  const ab = await camAnim(ids.c1);
+  const win = ab.cns.map((c) => [c.subject === ids.A ? 'A' : c.subject === ids.B ? 'B' : '?', c.start, c.end]);
+  ok('验收6 异主体：两条注视窗口 A [0,3] / B [3,全程]，不重叠', JSON.stringify(win) === JSON.stringify([['A', 0, 3], ['B', 3, null]]), JSON.stringify(win));
+  await page.evaluate(() => window.__app.playback.seek(5));
+  await settle();
+  await camShot(ids.c1, `${OUT}/6_append_t5.png`);
+  await page.evaluate(() => window.__app.playback.stop());
+  await moveBtn('清除运镜');
+  await moveField('主体', '');
+
   // ---- 其余预设截图（t = duration / 2）----
   await moveField('预设', 'circle');
   await moveBtn('应用');

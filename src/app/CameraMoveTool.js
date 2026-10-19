@@ -244,7 +244,7 @@ export class CameraMoveTool {
       for (const p of u.patched) if (cur.lookAts.some((c) => c.id === p.id)) tl.updateConstraint(p.id, { end: p.end });
       for (const c of u.removed) tl.addConstraint(c);
     } catch (err) { toastError(err); return false; }
-    this.meta[cam.id] = { segments: segs.slice(0, -1) };
+    // 不截断 meta：签名回到上一段，段列表自然少一段；⌘Z 后签名又等于这一段，列表恢复
     toast(`已删除运镜段：${MOVE_LABEL[seg.name]}`);
     return true;
   }

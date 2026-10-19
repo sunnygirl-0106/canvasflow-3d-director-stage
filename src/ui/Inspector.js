@@ -291,7 +291,8 @@ export class Inspector {
     }
     nodes.push(el('div', { class: 'anim-info move-info' + (built.error ? ' err' : ''), text: built.error || `${fmtS(ctx.time)}–${fmtS(ctx.time + built.move.duration)} s · 注视 ${this._subjectName(built.subject)}` }));
     nodes.push(el('div', { class: 'anim-btns' }, [
-      el('button', { class: 'minibtn primary', text: ctx.append ? '追加' : '应用', disabled: built.error ? '' : null, onclick: () => tool.request(cam) }),
+      // 有错误时也可点：点击 = toast 原因（如「摇镜头请单独使用或放在最前」）
+      el('button', { class: 'minibtn primary', text: ctx.append ? '追加' : '应用', onclick: () => tool.request(cam) }),
       tool.hasMoves(cam) ? el('button', { class: 'minibtn danger', text: '清除运镜', title: '删除路径、该机位全部约束与旋转轨道', onclick: () => tool.clear(cam) }) : null,
     ]));
     if (segs.length) {
