@@ -1510,6 +1510,30 @@ const compat = await page.evaluate(() => window.__app.entities.filter((e) => e.t
   .map((c) => `${c.profile.id}:${c.missingJoints.length}`).sort().join(' ')); // 并行加载，入列顺序不定
 ok('默认男/女人偶：档案关节全部命中', compat === 'bodychan_female:0 bodykun_male:0', compat);
 
+// 1a' Inspector 位置 / 旋转 / 缩放 = 文档口径（落地 Y=0、素体缩放 1）；面板输入 Y=0 不改 root
+const panelUnits = await page.evaluate(async () => {
+  const a = window.__app;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const row = (label) => [...document.querySelectorAll('#inspector .field')].find((f) => f.querySelector(':scope > label')?.textContent === label);
+  const vals = (label) => [...row(label).querySelectorAll('.triple input')].map((i) => +i.value);
+  const out = [];
+  for (const c of a.entities.filter((e) => e.type === 'character')) {
+    a.select(c.id); await wait(80);
+    const tr = a.toDocument().entities.find((e) => e.id === c.id).transform;
+    const shown = { pos: vals('位置'), rot: vals('旋转'), scale: vals('缩放') };
+    const same = ['pos', 'scale'].every((k) => shown[k].every((v, i) => Math.abs(v - tr[k][i]) <= 0.005))
+      && shown.rot.every((v, i) => Math.abs(v - tr.rot[i]) <= 0.5);
+    const y0 = c.root.position.y;
+    const yIn = row('位置').querySelectorAll('.triple input')[1];
+    yIn.value = '0'; yIn.dispatchEvent(new Event('input')); yIn.dispatchEvent(new Event('change'));
+    out.push({ name: c.name, y: shown.pos[1], scale: shown.scale, same, rootKept: Math.abs(c.root.position.y - y0) < 1e-9 });
+  }
+  a.select(null);
+  return out;
+});
+ok('Inspector 位置/缩放 = 文档口径（Y=0.00、缩放 1）、输入 Y=0 不改 root',
+  panelUnits.length >= 2 && panelUnits.every((p) => p.y === 0 && p.scale.every((s) => s === 1) && p.same && p.rootKept), JSON.stringify(panelUnits));
+
 // 1b 模板缓存：同源角色共享几何体（只下载/上传一次）
 const shared = await page.evaluate(async () => {
   const app = window.__app;
