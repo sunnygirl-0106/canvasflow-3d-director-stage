@@ -48,7 +48,7 @@ export class Transport {
       try { tl.setDuration(Math.round(v * 1000) / 1000); } catch (e) { toastError(e); this.reflectTimeline(); }
     });
 
-    this.camSel = el('select', { class: 'tl-sel tl-cam', title: '主机位（阶段 F 起播放时使用）' });
+    this.camSel = el('select', { class: 'tl-sel tl-cam', title: '主机位：机位视角下播放 / 拖播放头时透过它看（成片预览）' });
     this.camSel.addEventListener('change', () => { try { tl.setMainCamera(this.camSel.value || null); } catch (e) { toastError(e); this.reflectCameras(); } });
 
     this.foldBtn = btn('chevron', '折叠 / 展开时间轴', () => panel.toggleCollapsed(), 'tl-fold');

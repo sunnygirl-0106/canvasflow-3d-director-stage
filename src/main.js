@@ -43,6 +43,18 @@ app.on('view', (on) => {
   $('navg').style.display = on ? 'none' : 'block';
   for (const b of $('viewtabs').querySelectorAll('button')) b.classList.toggle('on', (b.dataset.v === 'camera') === on);
 });
+// 机位视角旁的机位名：idle 灰字 = 当前机位；时间轴 active 透过主机位 = 强调色「▶ 主机位 · 名字」（阶段 F）
+const renderPov = () => {
+  const camera = app.findCamera(app.povCameraId);
+  const main = app._mainPreview;
+  const label = $('povLabel');
+  label.hidden = !camera;
+  label.classList.toggle('main', main);
+  label.textContent = camera ? (main ? `▶ 主机位 · ${camera.name}` : camera.name) : '';
+  $('povHint').hidden = !app._povUnset;
+};
+app.on('pov', renderPov);
+app.on('entities', renderPov); // 改名
 $('helpBtn').onclick = () =>
   toast('空白拖动=环绕视角 · 拖三色 gizmo=变换选中 · 底部「＋」加角色/模型 · 右侧「姿势」摆全身');
 $('closeBtn').onclick = () => toast('（演示）关闭');

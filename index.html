@@ -15,6 +15,7 @@
       <div class="viewtabs" id="viewtabs">
         <button data-v="director" class="on">导演视角</button>
         <button data-v="camera">机位视角</button>
+        <span class="pov-label" id="povLabel" hidden></span>
       </div>
       <div class="right">
         <button class="ic" id="helpBtn" title="操作说明">?</button>
@@ -38,6 +39,7 @@
       <div id="viewport">
         <div id="frame"></div>
         <div id="labelLayer"></div>
+        <div class="pov-hint" id="povHint" hidden>未设主机位 · 播放时使用当前机位</div>
         <div id="navg" title="重置视角">
           <svg width="74" height="74" viewBox="0 0 74 74" id="navsvg"></svg>
           <div class="lab">重置视角</div>

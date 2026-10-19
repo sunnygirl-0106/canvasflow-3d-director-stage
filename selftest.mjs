@@ -1776,6 +1776,85 @@ async function camTest() {
   await page.evaluate(() => [...document.querySelectorAll('#inspector [data-sec="path"] .minibtn')].find((b) => b.textContent === '删除路径').click());
   await settle();
 
+  // ---- 9 主机位播放 ----
+  const c2 = await page.evaluate((ids) => {
+    const a = window.__app;
+    const c = a.addCamera('front_mid');
+    c.root.position.set(4, 1.4, 4); c.aimAt(a.findEntity(ids.A).root.position.clone().setY(0.9));
+    const t = a.cameraMoves;
+    t.formOf(c).name = 'truck';
+    t.commit(c, t.build(c)); // 机位2 自己也在动：横移 3 s
+    return { id: c.id, name: c.name };
+  }, ids);
+  await settle();
+  await page.select('#timeline .tl-cam', c2.id);
+  await settle();
+  await page.evaluate((id) => { const a = window.__app; a.select(id); a.setCameraView(true); }, ids.c1);
+  await settle(150);
+  const idleLabel = await page.$eval('#povLabel', (n) => ({ text: n.textContent, main: n.classList.contains('main'), hidden: n.hidden }));
+  // 视口画布 vs 指定机位的 snapshot（同一帧、同尺寸）
+  const canvasVs = (camId) => page.evaluate((camId) => {
+    const a = window.__app;
+    const cv = a.stage.renderer.domElement;
+    a.stage.render();
+    const view = cv.toDataURL('image/png');
+    const snap = a.withCleanRender(() => a.stage.snapshot(a.findEntity(camId).cam)).toDataURL('image/png');
+    return { view, snap, pov: a.povCameraId, t: a.playback.time };
+  }, camId);
+  const writePair = (r, name) => {
+    fs.writeFileSync(`${OUT}/${name}_view.png`, Buffer.from(r.view.split(',')[1], 'base64'));
+    fs.writeFileSync(`${OUT}/${name}_snap.png`, Buffer.from(r.snap.split(',')[1], 'base64'));
+    return pixelDiff(`${OUT}/${name}_view.png`, `${OUT}/${name}_snap.png`, `${OUT}/${name}_diff.png`);
+  };
+  await page.keyboard.press('Space');
+  await sleep(700);
+  await page.keyboard.press('Space'); // 暂停：仍 active
+  await settle(150);
+  const playing = await canvasVs(c2.id);
+  const d9 = writePair(playing, '9_main');
+  const mainLabel = await page.$eval('#povLabel', (n) => ({ text: n.textContent, main: n.classList.contains('main') }));
+  await page.screenshot({ path: `${OUT}/12_main_playing.png` });
+  ok('验收9 机位视角选中机位1、主机位 = 机位2，Space 播放：视口 ≡ 机位2 同一 t 的 snapshot（< 0.5%）、标签「▶ 主机位 · 机位2」',
+    playing.pov === c2.id && playing.t > 0 && d9 < 0.005 && mainLabel.main && mainLabel.text.includes(c2.name) && !idleLabel.main && idleLabel.text === ids.c1n,
+    `t=${playing.t.toFixed(2)} 差异 ${(d9 * 100).toFixed(4)}% idle=${JSON.stringify(idleLabel)} active=${JSON.stringify(mainLabel)}`);
+  await pickInOutliner(ids.An);
+  const giz = await page.evaluate(() => ({ sel: window.__app.selected?.name, giz: window.__app.gizmo._helper.visible }));
+  ok('验收9 透过主机位时可选中其他实体、gizmo 隐藏', giz.sel === ids.An && !giz.giz, JSON.stringify(giz));
+  await pickInOutliner(ids.c1n); // 回到选中机位1（idle 后选中角色会显示 gizmo / 选中环，不是这里要比的）
+  const still9 = await page.evaluate(() => window.__app.povCameraId);
+  await page.keyboard.press('Escape');
+  await settle(150);
+  const back = await canvasVs(ids.c1);
+  const d9b = writePair(back, '9_back');
+  ok('验收9 播放中在大纲点机位1 仍透过主机位；Esc 后视口回到机位1（像素 0%）', still9 === c2.id && back.pov === ids.c1 && d9b === 0,
+    `pov=${back.pov === ids.c1 ? '机位1' : back.pov} 差异 ${(d9b * 100).toFixed(4)}%`);
+
+  // 未设主机位：用当前机位并提示
+  await page.select('#timeline .tl-cam', '');
+  await page.evaluate((id) => window.__app.setActiveCamera(id), ids.c1);
+  await settle();
+  const hintIdle = await page.$eval('#povHint', (n) => n.hidden);
+  await page.evaluate(() => window.__app.playback.seek(1));
+  await settle(150);
+  const unset = await page.evaluate(() => ({ pov: window.__app.povCameraId, hint: !document.getElementById('povHint').hidden, text: document.getElementById('povHint').textContent }));
+  await page.screenshot({ path: `${OUT}/9_unset.png` });
+  await page.keyboard.press('Escape');
+  await settle();
+  ok('验收9 未设主机位：active 时仍透过当前机位、视口左上角提示「未设主机位」（idle 不显示）', hintIdle && unset.pov === ids.c1 && unset.hint && unset.text.includes('未设主机位'), JSON.stringify(unset));
+  await page.evaluate(() => window.__app.setCameraView(false));
+  await settle();
+  const directorPlay = await page.evaluate(async (id) => {
+    const a = window.__app;
+    a.timeline.setMainCamera(id);
+    a.playback.seek(1);
+    const r = { active: a.stage.activeCamera, label: document.getElementById('povLabel').hidden };
+    a.playback.stop();
+    return { director: r.active === null, labelHidden: r.label };
+  }, c2.id);
+  ok('验收9 导演视角下播放不切换（仍是导演相机）', directorPlay.director && directorPlay.labelHidden, JSON.stringify(directorPlay));
+  await page.evaluate((id) => { const a = window.__app; a.timeline.setMainCamera(null); a.remove(id); }, c2.id);
+  await pickInOutliner(ids.c1n);
+
   // ---- 其余预设截图（t = duration / 2）----
   await moveField('预设', 'circle');
   await moveBtn('应用');

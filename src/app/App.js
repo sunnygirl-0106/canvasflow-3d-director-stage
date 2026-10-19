@@ -33,6 +33,7 @@ const PROP_NAME = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视野'
  *   'transform' gizmo 拖动导致选中对象变换
  *   'mode'      变换模式（移动/旋转/缩放）
  *   'view'      导演视角 / 机位视角切换
+ *   'pov'       机位视角下出画机位变化（{ camera, main, unset }：时间轴 active 时透过主机位，见 _syncPov）
  *   'scene'     场景级参数（全景等）变化
  *   'shots'     截图增删、勾选
  *   'document'  整份场景文档被加载（导入 / 撤销 / 恢复）
@@ -49,7 +50,10 @@ export class App extends Emitter {
     this.selectedIds = new Set();  // 多选集合（Shift 点击；恒包含 selectedId）
     this.transformMode = 'translate';
     this.cameraView = false;
-    this.activeCameraId = null;    // 机位视角 POV 渲染的相机
+    this.activeCameraId = null;    // 机位视角的当前机位（idle 时出画；active 时出画的是主机位，见 _syncPov）
+    this.povCameraId = null;       // 机位视角下此刻实际出画的机位
+    this._mainPreview = false;     // 正透过主机位看成片（gizmo 隐藏）
+    this._povUnset = false;        // 机位视角 active 但没设主机位（视口提示）
     this.ratio = 'auto';           // 取景比例（默认自由）
 
     this._charSeq = 0;
@@ -72,6 +76,9 @@ export class App extends Emitter {
     this._docChain = Promise.resolve(); // 文档加载串行化（连续撤销不会交错重建）
     this.loadingDocument = false;       // 加载期间为 true：history / 自动保存据此屏蔽
     this.history = new History(this);
+    // 主机位播放（阶段 F）：机位视角下时间轴 active ↔ idle、主机位变化时切换出画机位
+    this.timeline.on('active', () => this._syncPov());
+    this.timeline.on('change', () => this._syncPov());
 
     const dom = stage.renderer.domElement;
     this.gizmo = new TransformGizmo(stage.camera, dom, stage.scene, rig.controls, () => !this.cameraView);
@@ -340,8 +347,8 @@ export class App extends Emitter {
   /** gizmo 是否应显示：有可见的主选实体，且不是「POV 下正在透过它看的出画机位」。 */
   _gizmoShouldShow() {
     const ent = this.selected;
-    if (!ent || !ent.visible) return false;
-    return !(this.cameraView && ent.id === this.activeCameraId);
+    if (!ent || !ent.visible || this._mainPreview) return false; // 透过主机位 = 成片预览，不显示 gizmo
+    return !(this.cameraView && ent.id === this.povCameraId);
   }
 
   /** 把 gizmo / 高亮环同步到主选实体，并广播选择变化。 */
@@ -489,10 +496,32 @@ export class App extends Emitter {
 
   _usePovCamera(ent) {
     this.activeCameraId = ent.id;
-    ent.cam.aspect = this.viewportAspect();
-    ent.cam.updateProjectionMatrix();
-    this.stage.activeCamera = ent.cam;
-    this._syncEditCamera();
+    this._syncPov();
+  }
+
+  /**
+   * 机位视角下实际出画的机位（阶段 F 主机位播放）：时间轴 active（播放或拖播放头）→ 主机位，
+   * 未设主机位则用当前机位并提示；idle → 当前机位（activeCameraId）。导演视角不切换。
+   * 透过主机位时 gizmo 隐藏（画面是成片预览），仍可选中其他实体。
+   */
+  _syncPov() {
+    const tl = this.timeline;
+    const main = this.cameraView && tl.active ? this.findCamera(tl.mainCameraId) : null;
+    const ent = this.cameraView ? main || this.findCamera(this.activeCameraId) : null;
+    if (ent && this.stage.activeCamera !== ent.cam) {
+      ent.cam.aspect = this.viewportAspect();
+      ent.cam.updateProjectionMatrix();
+      this.stage.activeCamera = ent.cam;
+      this._syncEditCamera();
+    }
+    const unset = this.cameraView && tl.active && !main;
+    const id = ent?.id ?? null;
+    if (this.povCameraId === id && this._mainPreview === !!main && this._povUnset === unset) return;
+    this.povCameraId = id;
+    this._mainPreview = !!main;
+    this._povUnset = unset;
+    this.gizmo.setVisible(this._gizmoShouldShow()); // 只在出画状态变化时同步（绘制 / 顶点拖动期间工具自己藏 gizmo）
+    this.emit('pov', { camera: ent, main: !!main, unset });
   }
 
   /** 设置 POV 渲染相机（机位视角下立即生效）。 */
@@ -527,7 +556,7 @@ export class App extends Emitter {
       this.setCameraHelpersVisible(true);
       this._syncEditCamera();
       this._applyFrame();
-      this.gizmo.setVisible(this._gizmoShouldShow());
+      this._syncPov();
     }
     this.emit('view', this.cameraView);
   }
