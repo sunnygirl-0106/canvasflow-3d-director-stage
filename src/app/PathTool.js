@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { el, toast } from '../util/dom.js';
 import { Emitter } from '../util/Emitter.js';
 import { worldBox } from '../util/measure.js';
-import { line, arc, polar, toward, simplify, defaultDuration } from '../anim/pathGen.js';
+import { line, arc, polar, toward, simplify } from '../anim/pathGen.js';
+import { pathStartPoint, setPath } from '../doc/edit.js';
 import { toastError } from '../ui/timeline/Transport.js';
 
 /** 五种绘制方式：[key, 文案]。key 与 AI 词汇表一致（points / freehand / line / arc / toward）。 */
@@ -148,8 +149,7 @@ export class PathTool extends Emitter {
 
   /** 实体当前手动值的位置投到绘制平面（文档口径）：机位保留自身高度，其余落到地面。 */
   startPoint(ent) {
-    const pos = ent._transformJSON(this.app.timeline.baseOf(ent) || ent.root).pos;
-    return [pos[0], ent.type === 'camera' ? pos[1] : this.groundY, pos[2]];
+    return pathStartPoint(ent.type, ent._transformJSON(this.app.timeline.baseOf(ent) || ent.root).pos, this.groundY);
   }
 
   _setRay(e) {
@@ -369,9 +369,9 @@ export class PathTool extends Emitter {
   }
 
   /**
-   * 写入文档（一次撤销）：已有路径 → 替换 points / closed，按新长度重算时长，保留 start / speed / orient；
-   * 否则删掉该实体的 pos 轨道（若有，request 时已确认）并新建路径：start = 当前时刻（idle 为 0）、
-   * duration = defaultDuration、speed = smooth、orient = tangent（机位 keep）。
+   * 写入文档（一次撤销），数据由 edit.setPath 生成（与 AI 同一份）：已有路径 → 替换 points / closed，按新长度重算时长，
+   * 保留 start / speed / orient；否则删掉该实体的 pos 轨道（若有，request 时已确认）并新建路径：
+   * start = 当前时刻（idle 为 0）、duration = defaultDuration、speed = smooth、orient = tangent（机位 keep）。
    * @returns {string|null} 路径 id
    */
   _commit(points, { closed = false, meta = null } = {}) {
@@ -379,19 +379,11 @@ export class PathTool extends Emitter {
     const ent = this.ent;
     const tl = app.timeline;
     this._end();
-    const anim = tl.toJSON();
-    const old = anim.paths.find((p) => p.target === ent.id);
-    const duration = defaultDuration(points, { closed });
-    let path;
+    let path, old;
     try {
-      if (old) path = tl.updatePath(old.id, { points, closed, duration });
-      else {
-        for (const t of anim.timeline.tracks) if (t.target === ent.id && t.property === 'pos') tl.removeTrack(t.id);
-        path = tl.addPath({
-          target: ent.id, points, closed, duration,
-          start: tl.active ? app.playback.time : 0, speed: 'smooth', orient: ent.type === 'camera' ? 'keep' : 'tangent',
-        });
-      }
+      const doc = app.toDocument({ view: false });
+      ({ path, replaced: old } = setPath(doc, ent.id, points, { closed, start: tl.active ? app.playback.time : 0 }));
+      tl.commitAnim(doc);
     } catch (err) { toastError(err); return null; }
     if (meta) app.pathMeta[path.id] = meta; else delete app.pathMeta[path.id];
     const over = path.start + path.duration > tl.duration ? `（结束于 ${fmt(path.start + path.duration)} s，超出时间轴时长）` : '';

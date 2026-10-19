@@ -10,7 +10,7 @@ import { PathOverlay } from '../core/PathOverlay.js';
 import { PathTool } from './PathTool.js';
 import { PathEditor } from './PathEditor.js';
 import { CameraMoveTool } from './CameraMoveTool.js';
-import { BODY_TYPES, bodySpec, PROP_LABEL, CROWD_PALETTE, RATIO_OPTIONS } from '../config.js';
+import { BODY_TYPES, PROP_LABEL, RATIO_OPTIONS } from '../config.js';
 import { Emitter } from '../util/Emitter.js';
 import { toast } from '../util/dom.js';
 import { worldBox } from '../util/measure.js';
@@ -19,6 +19,8 @@ import { Panorama } from './Panorama.js';
 import { Labels } from './Labels.js';
 import { LabelSprites } from './LabelSprites.js';
 import { toDocument, loadDocument } from '../doc/serialize.js';
+import * as edit from '../doc/edit.js';
+import { xyz } from '../util/round.js';
 import { History } from './History.js';
 import { Timeline } from '../anim/Timeline.js';
 import { Playback } from '../anim/Playback.js';
@@ -165,12 +167,11 @@ export class App extends Emitter {
     return `该模型缺少 ${miss.length} 个关节，相关姿势滑条已禁用`;
   }
 
+  /** 默认落点（edit.spawnPoint）：只改水平位置，y 保留站立基准偏移。入场时按当时的实体数算（并发添加不重叠）。 */
   _placeNew(root) {
-    const n = this.entities.length;
-    const a = n * 0.95;
-    const r = Math.min(0.9 + n * 0.4, 3.2);
-    root.position.x = Math.cos(a) * r;
-    root.position.z = Math.sin(a) * r;
+    const [x, , z] = edit.spawnPoint(this.entities.length);
+    root.position.x = x;
+    root.position.z = z;
   }
 
   /** 入场登记：（可选）放置 → 加入场景 → 名牌 → 入列 → 选中 → 提示。 */
@@ -184,12 +185,13 @@ export class App extends Emitter {
     if (msg) toast(msg);
   }
 
+  /** 新建角色：数据由 edit.addCharacter 生成（与 AI 同一份），再按条目建场景对象。 */
   async addCharacter(key) {
-    const spec = bodySpec(key);
-    if (!spec) { toast('未知素体：' + key); return null; }
+    if (!BODY_TYPES[key]) { toast('未知素体：' + key); return null; }
     toast('加载中：' + BODY_TYPES[key].label + ' …');
+    const json = edit.addCharacter(this.toDocument({ view: false }), { name: this._nextCharName(), body: key });
     let c;
-    try { c = await this._loadCharacter(spec); }
+    try { c = await Character.fromJSON(json); }
     catch (err) { console.error(err); toast('角色加载失败：' + (err?.message || err)); return null; }
     this._registerEntity(c, { msg: this._rigWarning(c) || '已添加：' + c.name });
     return c;
@@ -203,34 +205,20 @@ export class App extends Emitter {
   }
 
   // ---- 群众阵列（组）----
-  /** 行×列网格生成 N 个男性素体（并行加载，模板只下载一次），挂在一个轴心组下。 */
-  async addCrowd(rows = 3, cols = 3, spacing = 1.2) {
-    rows = Math.max(1, Math.min(6, Math.round(rows)));
-    cols = Math.max(1, Math.min(6, Math.round(cols)));
-    spacing = Math.max(0.5, Math.min(5, spacing));
-    toast(`加载群众阵列 ${rows}×${cols} …`);
-
-    const spec = bodySpec('male');
-    const cells = [];
-    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cells.push([r, c]);
-    const results = await Promise.allSettled(cells.map(() => this._loadCharacter(spec)));
-
-    const group = new THREE.Group();
-    const members = [];
-    const w = (cols - 1) * spacing, d = (rows - 1) * spacing;
-    results.forEach((res, i) => {
-      if (res.status !== 'fulfilled') { console.error(res.reason); return; }
-      const ch = res.value;
-      const [r, c] = cells[i];
-      ch.setColor(CROWD_PALETTE[i % CROWD_PALETTE.length]);
-      ch.root.position.x = c * spacing - w / 2; // y 保留站立基准偏移（_rootY0）
-      ch.root.position.z = r * spacing - d / 2;
-      group.add(ch.root);
-      members.push(ch);
-    });
-    if (!members.length) { toast('群众加载失败'); return null; }
-    const crowd = new Crowd(`群众 (${rows}x${cols})`, group, members, { rows, cols });
-    this._registerEntity(crowd, { msg: this._rigWarning(members[0]) || `已添加群众阵列（共 ${members.length} 人）` });
+  /**
+   * 行×列网格生成 N 个男性素体（并行加载，模板只下载一次），挂在一个轴心组下。
+   * 数据（夹取 / 网格 / 配色 / 起名）由 edit.addCrowd 生成（与 AI 同一份），再按条目建场景对象。
+   */
+  async addCrowd(rows = 3, cols = 3, spacing = edit.CROWD_SPACING) {
+    const doc = this.toDocument({ view: false });
+    const res = edit.addCrowd(doc, { rows, cols, spacing, memberName: () => this._nextCharName() });
+    toast(`加载群众阵列 ${res.rows}×${res.cols} …`);
+    const byId = new Map(doc.entities.map((e) => [e.id, e]));
+    let crowd;
+    try { crowd = await Crowd.fromJSON(res.group, { app: this, assets: {}, entity: (id) => byId.get(id) }); }
+    catch (err) { console.error(err); toast('群众加载失败'); return null; }
+    Object.assign(crowd, { rows: res.rows, cols: res.cols }); // 阵列规格（会话态，文档里不存）
+    this._registerEntity(crowd, { msg: this._rigWarning(crowd.members[0]) || `已添加群众阵列（共 ${crowd.members.length} 人）` });
     return crowd;
   }
 
@@ -242,19 +230,20 @@ export class App extends Emitter {
     if (members.length < 2) { toast('请至少选择 2 个角色再打组'); return null; }
 
     this.timeline.release(members.map((m) => m.id)); // 先写回手动值，再改父节点
-    // 轴心置于成员世界中心，再用 attach 保留各成员世界变换地挂入组
+    // 轴心 = 成员 root 的世界中心换算到场景根坐标（场景被整体变换时也能对齐；含素体站立基准偏移，与以往一致）
     const centroid = new THREE.Vector3();
     for (const m of members) centroid.add(m.root.getWorldPosition(new THREE.Vector3()));
     centroid.divideScalar(members.length);
-    const group = new THREE.Group();
     this.stage.world.updateMatrixWorld(true);
-    group.position.copy(this.stage.world.worldToLocal(centroid)); // 场景被整体变换时也能对齐
+    const pivot = xyz(this.stage.world.worldToLocal(centroid));
+    // 数据（组条目 / 成员相对轴心的 transform）由 edit.groupCharacters 生成（与 AI 同一份），再按条目改父子关系
+    const res = edit.groupCharacters(this.toDocument({ view: false }), members.map((m) => m.id), { name: '组' + (++this._groupCount), pivot });
+    const group = new THREE.Group();
+    const crowd = new Crowd(res.group.name, group, members, {}, res.group.id);
+    crowd._applyTransform(res.group.transform);
     this.stage.add(group);
-    group.updateMatrixWorld(true);
-    for (const m of members) group.attach(m.root);
-
-    const crowd = new Crowd('组' + (++this._groupCount), group, members);
-    this.timeline.dropTransformAnimation(members.map((m) => m.id)); // 成员改为相对组轴心的坐标系
+    members.forEach((m, i) => { group.add(m.root); m._applyTransform(res.members[i].transform); });
+    this.timeline.dropTransformAnimation(members.map((m) => m.id)); // 成员改为相对组轴心的坐标系（同 edit.dropTransformAnim）
     this.entities = this.entities.filter((e) => !members.includes(e));
     this._registerEntity(crowd, { place: false });
     toast(`已打组：${members.length} 个角色 → ${crowd.name}`);

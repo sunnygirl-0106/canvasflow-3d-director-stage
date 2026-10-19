@@ -25,6 +25,9 @@ export function bodySpec(key) {
 export const PROP_KINDS = [['box', '方块'], ['cylinder', '圆柱'], ['sphere', '球体'], ['mannequin', '人体素模']];
 export const PROP_LABEL = Object.fromEntries(PROP_KINDS);
 
+// 角色默认颜色（截图同款素体绿）
+export const CHARACTER_COLOR = 0x34c759;
+
 // 群众阵列成员配色
 export const CROWD_PALETTE = [0x4f8ef7, 0xff9f43, 0xee5253, 0x10ac84, 0xfeca57, 0xa55eea, 0x00d2d3, 0xff6b9d, 0x9b59b6];
 

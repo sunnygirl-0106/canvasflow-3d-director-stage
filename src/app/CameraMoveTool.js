@@ -1,11 +1,10 @@
-import * as THREE from 'three';
 import { toast } from '../util/dom.js';
 import { aimPoint } from '../anim/Constraint.js';
-import { cameraMove, defaultParams, appendMove, lookAtWindows, pathEnd, MoveError, MOVE_LABEL } from '../anim/cameraMoves.js';
+import { cameraMove, defaultParams, MoveError, MOVE_LABEL } from '../anim/cameraMoves.js';
+import { moveContext, aheadPoint, nearestSubject, applyCameraMove, clearCameraMoves } from '../doc/edit.js';
 import { toastError } from '../ui/timeline/Transport.js';
 import { confirmToast } from './PathTool.js';
 
-const SUBJECT_AHEAD = 3; // 场景里没有可注视的实体时：主体 = 机位前方 3 m
 const r4 = (x) => Math.round(x * 1e4) / 1e4;
 const fmt = (s) => (Math.round(s * 10) / 10).toString();
 
@@ -51,26 +50,17 @@ export class CameraMoveTool {
 
   /** 默认主体：离机位最近的角色（含群众成员）；没有角色取最近的其他实体；什么都没有 = 机位前方 3 m 的点。 */
   nearestSubject(cam) {
-    const pos = new THREE.Vector3(...this.context(cam).position);
-    const all = [];
-    for (const e of this.app.entities) {
-      if (e === cam) continue;
-      all.push(e, ...e.children);
-    }
-    const pool = all.filter((e) => e.type === 'character');
-    let best = null, bd = Infinity;
-    for (const e of pool.length ? pool : all) {
-      const p = aimPoint(this.app, e.id);
-      const d = p ? p.distanceTo(pos) : Infinity;
-      if (d < bd) { bd = d; best = e.id; }
-    }
-    return best ?? this._aheadPoint(cam);
+    const doc = this.app.toDocument({ view: false });
+    const aimOf = (id) => aimPoint(this.app, id)?.toArray() ?? null; // 场景实测注视点
+    return nearestSubject(doc, cam.id, this.context(cam).position, aimOf) ?? this._aheadPoint(cam);
   }
 
-  _aheadPoint(cam) {
-    const r = this.app.timeline.baseOf(cam) || cam.root;
-    const dir = new THREE.Vector3(0, 0, -1).applyEuler(r.rotation);
-    return r.position.clone().addScaledVector(dir, SUBJECT_AHEAD).toArray().map(r4);
+  _aheadPoint(cam) { return aheadPoint(cam._transformJSON(this.app.timeline.baseOf(cam) || cam.root)); }
+
+  /** 只含本机位条目 + 动画字段的文档视图（edit.moveContext 用；不必整份 toDocument）。 */
+  _camDoc(cam) {
+    const anim = this.app.timeline.toJSON();
+    return { entities: [cam.toJSON({ base: this.app.timeline.baseOf(cam) })], ...anim };
   }
 
   /** 表单里的主体 → 约束 subject（实体 id 或 [x,y,z]）。 */
@@ -117,14 +107,8 @@ export class CameraMoveTool {
    */
   context(cam) {
     const { app } = this;
-    const tr = cam._transformJSON(app.timeline.baseOf(cam) || cam.root);
-    const roll = cam._roll * 180 / Math.PI;
-    const { path } = this._anim(cam);
     const segs = this.segments(cam);
-    if (path) return { position: pathEnd(path), rot: tr.rot, roll, time: r4(path.start + path.duration), append: true, path };
-    const lastPan = segs[segs.length - 1];
-    if (lastPan) return { position: tr.pos, rot: lastPan.rotEnd, roll, time: r4(lastPan.start + lastPan.duration), append: true, path: null };
-    return { position: tr.pos, rot: tr.rot, roll, time: app.timeline.active ? r4(app.playback.time) : 0, append: false, path: null };
+    return moveContext(this._camDoc(cam), cam.id, { time: app.timeline.active ? r4(app.playback.time) : 0, lastPan: segs[segs.length - 1] || null });
   }
 
   /** 表单参数（缺省项 = 默认值，按当前起点与主体计算）。 */
@@ -174,47 +158,29 @@ export class CameraMoveTool {
   }
 
   /**
-   * 写入一段运镜（同一同步流程 = 一次撤销）。b = build() 的结果。
+   * 写入一段运镜（一次撤销）。b = build() 的结果。数据由 edit.applyCameraMove 生成（与 AI 同一份）。
    * @returns {object|null} 新段（会话态），失败 null
    */
   commit(cam, b) {
     const { app } = this;
     const tl = app.timeline;
-    const { move, ctx, subject, name } = b;
-    const start = ctx.time;
+    const { ctx, subject, name } = b;
     const before = this._anim(cam);
-    const seg = { name, params: this.params(cam), subject, start, duration: move.duration, kind: move.points ? 'path' : 'pan', undo: {} };
+    const segs = this.segments(cam);
+    const params = this.params(cam);
+    let res;
     try {
-      // 1 路径 / 摇镜头的 rot 键
-      if (move.points) {
-        if (before.path) {
-          seg.undo.path = { points: before.path.points, closed: before.path.closed, duration: before.path.duration };
-          tl.updatePath(before.path.id, appendMove(before.path, move));
-        } else {
-          if (before.posTrack) tl.removeTrack(before.posTrack.id);
-          tl.addPath({ target: cam.id, points: move.points, closed: move.closed, start, duration: move.duration, speed: 'smooth', orient: 'keep' });
-          seg.undo.path = null;
-        }
-      } else {
-        const own = this.segments(cam).some((s) => s.kind === 'pan');
-        let track = before.rotTrack;
-        if (track && !own) { tl.removeTrack(track.id); track = null; }
-        if (!track) { track = tl.addTrack({ target: cam.id, property: 'rot' }); seg.undo.track = track.id; }
-        const end = r4(start + move.duration);
-        tl.setKey(track.id, start, move.rotKeys[0], 'smooth');
-        tl.setKey(track.id, end, move.rotKeys[1], 'smooth');
-        seg.undo.keys = { track: track.id, times: [start, end] };
-        seg.rotEnd = move.rotKeys[1];
-      }
-      // 2 注视窗口：带路径的段从 start 开始注视，摇镜头摇完（start + duration）才开始
-      const lookStart = move.points ? start : r4(start + move.duration);
-      const w = lookAtWindows(before.lookAts, { subject, cut: start, start: lookStart });
-      seg.undo.removed = before.lookAts.filter((c) => w.remove.includes(c.id));
-      seg.undo.patched = w.patch.map((p) => ({ id: p.id, end: before.lookAts.find((c) => c.id === p.id).end }));
-      for (const id of w.remove) tl.removeConstraint(id);
-      for (const p of w.patch) tl.updateConstraint(p.id, { end: p.end });
-      if (w.add) seg.undo.added = tl.addConstraint({ type: 'lookAt', target: cam.id, ...w.add }).id;
+      const doc = app.toDocument({ view: false });
+      res = applyCameraMove(doc, cam.id, {
+        name, subject, aim: this._aim(subject), params, time: ctx.time,
+        lastPan: segs[segs.length - 1] || null, ownPan: segs.some((s) => s.kind === 'pan'),
+      });
+      tl.commitAnim(doc);
     } catch (err) { toastError(err); return null; }
+    const { move, start, undo } = res;
+    const { rotEnd, ...rest } = undo;
+    const seg = { name, params, subject, start, duration: move.duration, kind: move.points ? 'path' : 'pan', undo: rest };
+    if (rotEnd) seg.rotEnd = rotEnd;
 
     seg.sig = this._sig(this._anim(cam));
     this.meta[cam.id] = { segments: [...this._prefix(cam, this._sig(before)), seg] };
@@ -251,12 +217,10 @@ export class CameraMoveTool {
 
   /** 清除运镜：删路径 + 该机位全部约束 + rot 轨道（一次撤销）。 */
   clear(cam) {
-    const tl = this.app.timeline;
-    const { path, constraints, rotTrack } = this._anim(cam);
+    const { app } = this;
     try {
-      if (path) tl.removePath(path.id);
-      for (const c of constraints) tl.removeConstraint(c.id);
-      if (rotTrack) tl.removeTrack(rotTrack.id);
+      const doc = app.toDocument({ view: false });
+      if (clearCameraMoves(doc, cam.id)) app.timeline.commitAnim(doc);
     } catch (err) { toastError(err); return; }
     delete this.meta[cam.id];
     toast('已清除运镜');

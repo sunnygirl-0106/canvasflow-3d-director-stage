@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Emitter } from '../util/Emitter.js';
 import { DEFAULT_TIMELINE, validate, DocumentError } from '../doc/schema.js';
 import { genId } from '../entities/Entity.js';
+import { dropTransformAnim } from '../doc/edit.js';
 import { Track } from './Track.js';
 import { PathTrack } from './PathTrack.js';
 import { applyLocomotion } from './Locomotion.js';
@@ -390,6 +391,12 @@ export class Timeline extends Emitter {
     return x;
   }
 
+  /**
+   * 整体提交 tracks / paths / constraints（src/doc/edit.js 的纯函数在文档拷贝上算好的结果）：
+   * 校验 + 'change' + 一次撤销，与逐个调用下面的编辑 API 等价。
+   */
+  commitAnim({ timeline, paths, constraints }) { this._commit({ tracks: timeline.tracks, paths, constraints }); }
+
   setDuration(s) { this._commit({ duration: s }); }
   setFps(n) { this._commit({ fps: n }); }
   setMainCamera(id) { this._commit({ mainCameraId: id ?? null }); }
@@ -502,10 +509,8 @@ export class Timeline extends Emitter {
    * （打组后成员不能有路径）。约束只引用实体位置，不受影响。
    */
   dropTransformAnimation(ids) {
-    const set = new Set(ids);
     const n = this.tracks.length + this.paths.length;
-    this.tracks = this.tracks.filter((t) => !(set.has(t.target) && t.property !== 'fov'));
-    this.paths = this.paths.filter((p) => !set.has(p.target));
+    Object.assign(this, dropTransformAnim({ tracks: this.tracks, paths: this.paths }, ids));
     const changed = n !== this.tracks.length + this.paths.length;
     if (changed) this._afterStructural();
     return changed;

@@ -7,6 +7,7 @@
 import { VOCAB, DEFAULT_POSE } from './vocab.js';
 import { TRACK_TARGETS, PATH_TARGETS, FOV_RANGE } from '../doc/schema.js';
 import { MOVE_PARAMS, MOVE_DIRS } from '../anim/cameraMoves.js';
+import { CROWD_LIMITS, CROWD_SPACING } from '../doc/edit.js';
 
 /** 三种模式：生成新场景 / 修改当前场景 / 识图导入。 */
 export const MODES = ['generate', 'modify', 'image'];
@@ -22,9 +23,6 @@ export const LIMITS = {
   name: 32,       // 名字长度
   ops: 200,       // 一批最多几条
 };
-
-/** 群众阵列的行列数 / 间距范围（与 App.addCrowd 的夹取范围一致）。 */
-const CROWD_LIMITS = { size: [1, 6], spacing: [0.5, 5] };
 
 export const TYPE_LABEL = { character: '角色', prop: '道具', camera: '机位', group: '组' };
 
@@ -175,7 +173,7 @@ export const OP_SPECS = {
   add_prop: { fields: { name: req(T.name), kind: req(E.prop), pos: req(T.pos), yaw: opt(T.yaw), scale: opt(T.scale), color: opt(T.color) }, note: '加道具' },
   add_camera: { fields: { name: req(T.name), pos: req(T.pos), lookAt: req(T.refOrPoint), fov: opt(T.fov) }, note: '加机位，对准 lookAt（实体注视点或坐标）；fov 默认 40' },
   add_group: { fields: { name: req(T.name), members: req(T.names) }, note: '把已存在的 ≥ 2 个独立角色打成一组（保留各自位置）' },
-  add_crowd: { fields: { name: req(T.name), rows: req(T.crowdSize), cols: req(T.crowdSize), spacing: opt(T.spacing), pos: req(T.pos), yaw: opt(T.yaw), body: opt(E.body) }, note: '群众阵列（行 × 列网格，成员自动命名）；spacing 默认 1.2' },
+  add_crowd: { fields: { name: req(T.name), rows: req(T.crowdSize), cols: req(T.crowdSize), spacing: opt(T.spacing), pos: req(T.pos), yaw: opt(T.yaw), body: opt(E.body) }, note: `群众阵列（行 × 列网格，成员自动命名）；spacing 默认 ${CROWD_SPACING}` },
   remove: { fields: { target: req(T.ref) }, note: '删除实体（连同引用它的路径 / 约束 / 关键帧；删组连成员一起删）' },
   move: { fields: { target: req(T.ref), pos: opt(T.pos), yaw: opt(T.yaw), scale: opt(T.scale) }, note: '改手动位置 / 朝向 / 缩放（机位只能改 pos，并保持对准原注视点）' },
   set_pose: { fields: { target: req(T.ref), preset: req(E.pose) }, note: '换姿势（对组 = 全部成员）' },
