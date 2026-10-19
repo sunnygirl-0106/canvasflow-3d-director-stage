@@ -208,7 +208,7 @@ export class Timeline extends Emitter {
         if (c.type !== type || !constraintActive(c, t)) continue;
         const st = states.get(c.target);
         if (!st) continue;
-        applyConstraint(this.app, c, st);
+        applyConstraint(this.app, c, st, t, this.constraints);
         this._write(st);
         touched.add(st);
       }

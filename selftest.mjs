@@ -1995,6 +1995,53 @@ async function camTest() {
   // ---- 12 第 0 节修正后的属性面板（角色 Y = 0.00、缩放 1.00）----
   await pickInOutliner(ids.An);
   await page.screenshot({ path: `${OUT}/12_panel_units.png`, clip: await panelClip() });
+
+  // ---- 收尾 1 · lookAt 入场 / 退场 0.5 s 混合；接力不回摆 ----
+  const blend = await page.evaluate(async (ids) => {
+    const { aimPoint } = await import('/src/anim/Constraint.js');
+    const a = window.__app, tl = a.timeline, pb = a.playback;
+    pb.stop();
+    const c = a.addCamera('side_track');
+    a.select(null);
+    c.root.rotation.y += 1.1; // 偏开 ~63°：没对准主体
+    c.root.updateMatrixWorld(true);
+    const pre = c.root.quaternion.clone();
+    const Q = pre.constructor, M = c.root.matrix.constructor, V = c.root.position.constructor;
+    const aimQ = (sub) => new Q().setFromRotationMatrix(new M().lookAt(c.root.position, aimPoint(a, sub), new V(0, 1, 0)));
+    const ang = (q1, q2) => q1.angleTo(q2) * 180 / Math.PI;
+    tl.setDuration(Math.max(tl.duration, 8));
+    const lk = tl.addConstraint({ type: 'lookAt', target: c.id, subject: ids.A, start: 2, end: 5 });
+    const at = (t) => { pb.seek(t); return c.root.quaternion.clone(); };
+    const out = { gap: ang(pre, aimQ(ids.A)) };
+    out.t19 = ang(at(1.9), pre);
+    out.t20 = ang(at(2.0), pre);
+    out.t25 = ang(at(2.5), aimQ(ids.A));
+    let prev = Infinity; out.mono = true; out.maxStep = 0;
+    for (let i = 0; i <= 15; i++) {
+      const q = at(2 + i / 30), d = ang(q, aimQ(ids.A));
+      if (d > prev + 1e-6) out.mono = false;
+      if (i) out.maxStep = Math.max(out.maxStep, prev - d);
+      prev = d;
+    }
+    out.t45 = ang(at(4.5), aimQ(ids.A));
+    out.t50 = ang(at(5.0), pre);
+    out.t51 = ang(at(5.1), pre);
+    // 接力：A [2,4] → B [4, 全程]：t=4 ≡ 注视 A，4.5 ≡ 注视 B，之间不回到手动朝向
+    tl.updateConstraint(lk.id, { end: 4 });
+    tl.addConstraint({ type: 'lookAt', target: c.id, subject: ids.B, start: 4, end: null });
+    out.h40 = ang(at(4.0), aimQ(ids.A));
+    out.h45 = ang(at(4.5), aimQ(ids.B));
+    out.hPreMin = Infinity;
+    for (let i = 0; i <= 15; i++) out.hPreMin = Math.min(out.hPreMin, ang(at(3.75 + i / 30), pre));
+    out.h38 = ang(at(3.8), aimQ(ids.A));
+    pb.stop();
+    return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, typeof v === 'number' ? +v.toFixed(4) : v]));
+  }, ids);
+  ok('lookAt 混合：start=2 —— t=2.0 朝向 ≡ 约束前、t=2.5 ≡ 注视（< 0.5°），中间单调', blend.gap > 30 && blend.t19 < 0.5 && blend.t20 < 0.5 && blend.t25 < 0.5 && blend.mono,
+    `偏差 ${blend.gap}°；t=1.9 ${blend.t19}° t=2.0 ${blend.t20}° t=2.5 ${blend.t25}°，每帧最多转 ${blend.maxStep}°`);
+  ok('lookAt 混合：end=5 —— t=4.5 ≡ 注视、t=5.0 ≡ 约束前（退场）', blend.t45 < 0.5 && blend.t50 < 0.5 && blend.t51 < 0.5, `t=4.5 ${blend.t45}° t=5.0 ${blend.t50}° t=5.1 ${blend.t51}°`);
+  ok('lookAt 接力（A 到 4 s、B 从 4 s）：上一条不退场，t=4 ≡ 注视 A、t=4.5 ≡ 注视 B，期间不回摆到手动朝向',
+    blend.h38 < 0.5 && blend.h40 < 0.5 && blend.h45 < 0.5 && blend.hPreMin > 10, `t=3.8 ${blend.h38}° t=4.0 ${blend.h40}° t=4.5 ${blend.h45}°，离手动朝向最近 ${blend.hPreMin}°`);
 }
 
 // ---- 阶段 G：导出视频 ----
