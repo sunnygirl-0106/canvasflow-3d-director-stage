@@ -6,7 +6,7 @@ import { POSE_PRESETS } from '../entities/posePresets.js';
 import { downloadURL } from '../app/ShotManager.js';
 import { propState } from './timeline/animState.js';
 import { toastError } from './timeline/Transport.js';
-import { arcPoints, PATH_MODES } from '../app/PathTool.js';
+import { arcPoints, pathModes } from '../app/PathTool.js';
 import { pathLength, defaultDuration } from '../anim/pathGen.js';
 import { popupMenu } from './timeline/keyDrag.js';
 import { CAMERA_MOVES, MOVE_PARAMS, MOVE_DIRS, MOVE_LABEL } from '../anim/cameraMoves.js';
@@ -128,7 +128,7 @@ export class Inspector {
     const path = anim.paths.find((p) => p.target === ent.id);
     if (ent.type === 'camera') nodes.push(this._moveSection(ent));
     if (path) nodes.push(this._pathSection(path, ent));
-    else if (this.app.pathTool.canDraw(ent)) nodes.push(this._pathEmpty());
+    else if (this.app.pathTool.canDraw(ent)) nodes.push(this._pathEmpty(ent));
     if (ent.type === 'camera') nodes.push(this._constraintSection(ent, anim.constraints.filter((c) => c.target === ent.id)));
     host.replaceChildren(...nodes);
   }
@@ -139,22 +139,25 @@ export class Inspector {
   }
 
   /** 「新建路径 ▾」：五种绘制方式（与 Dock「路径」按钮等价）。 */
-  _newPathBtn(label) {
+  _newPathBtn(label, ent) {
     const tool = this.app.pathTool;
     return el('button', {
       class: 'sec-btn', text: label + ' ▾',
       onclick: (e) => {
         const r = e.currentTarget.getBoundingClientRect();
-        popupMenu(r.left, r.bottom + 4, PATH_MODES.map(([mode, text]) => ({ label: text, onClick: () => tool.request(mode) })));
+        popupMenu(r.left, r.bottom + 4, pathModes(ent).map(([mode, text]) => ({ label: text, onClick: () => tool.request(mode) })));
       },
     });
   }
 
-  /** 没有路径的角色 / 道具 / 组：只有段头与入口。 */
-  _pathEmpty() {
+  /** 没有路径的角色 / 道具 / 组 / 机位：只有段头与入口。 */
+  _pathEmpty(ent) {
+    const info = ent.type === 'camera'
+      ? '未设置路径。新建后机位沿路径移动（画在机位高度的水平面上，朝向保持不变）。'
+      : '未设置路径。新建后角色沿路径移动，播放时自动走 / 跑。';
     return el('div', { class: 'anim-sec', 'data-sec': 'path' }, [
-      el('div', { class: 'sec-title' }, [el('span', { text: '路径' }), el('span', { class: 'sec-spacer' }), this._newPathBtn('新建路径')]),
-      el('div', { class: 'anim-info', text: '未设置路径。新建后角色沿路径移动，播放时自动走 / 跑。' }),
+      el('div', { class: 'sec-title' }, [el('span', { text: '路径' }), el('span', { class: 'sec-spacer' }), this._newPathBtn('新建路径', ent)]),
+      el('div', { class: 'anim-info', text: info }),
     ]);
   }
 
@@ -177,7 +180,7 @@ export class Inspector {
       el('div', { class: 'sec-title' }, [
         el('span', { text: '路径' }), el('span', { class: 'sec-tag path', text: `${p.points.length} 个点` }),
         el('span', { class: 'sec-spacer' }),
-        tool.canDraw(ent) ? this._newPathBtn('重新绘制') : null,
+        tool.canDraw(ent) ? this._newPathBtn('重新绘制', ent) : null,
       ]),
       el('div', { class: 'anim-info path-stats' }, [
         `顶点 ${p.points.length} · 总长 ${len.toFixed(2)} m · `,

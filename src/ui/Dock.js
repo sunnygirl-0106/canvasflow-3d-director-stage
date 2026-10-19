@@ -6,7 +6,7 @@ import { listCanvasAssets } from '../util/assetLibrary.js';
 import { RATIO_OPTIONS, isPanoRatio, BODY_TYPES, PROP_KINDS } from '../config.js';
 import { icon } from './icons.js';
 import { exportScene, pickAndImportScene } from '../app/SceneFile.js';
-import { PATH_MODES } from '../app/PathTool.js';
+import { pathModes } from '../app/PathTool.js';
 
 const svg = (name, w = 21) => icon(name, w);
 
@@ -78,7 +78,7 @@ export class Dock {
     const camAdd = this._btn('video', '添加机位（预设）', (e) => { e.stopPropagation(); this.camMenu.toggle(); });
     this.camAddBtn = camAdd;
 
-    // 4.5 路径（选中角色 / 道具 / 组时可用）：五种绘制方式
+    // 4.5 路径（选中角色 / 道具 / 组 / 机位时可用）：五种绘制方式
     const pathBtn = this._btn('path', '路径（为选中对象绘制移动路径）', (e) => { e.stopPropagation(); this.pathMenu.toggle(); });
     this.pathBtn = pathBtn;
     if (!this._pathBound) {
@@ -255,8 +255,8 @@ export class Dock {
   _buildPathItems() {
     const tool = this.app.pathTool;
     const ok = tool.canDraw(this.app.selected);
-    const items = [el('div', { class: 'menu-group', text: ok ? '绘制路径' : '先选中角色 / 道具 / 组' })];
-    for (const [mode, label] of PATH_MODES) {
+    const items = [el('div', { class: 'menu-group', text: ok ? '绘制路径' : '先选中角色 / 道具 / 组 / 机位' })];
+    for (const [mode, label] of pathModes(this.app.selected)) {
       items.push(this._item(null, label, () => { this.menu.close(); tool.request(mode); }, tool.mode === mode, 17, { disabled: !ok }));
     }
     return items;

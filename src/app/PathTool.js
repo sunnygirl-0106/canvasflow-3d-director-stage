@@ -14,6 +14,11 @@ export const PATH_MODES = [
   ['toward', '走到'],
 ];
 
+/** 某实体的绘制方式文案：机位的「走到」叫「推到」（同一个 toward）。 */
+export function pathModes(ent) {
+  return ent?.type === 'camera' ? PATH_MODES.map(([k, l]) => [k, k === 'toward' ? '推到' : l]) : PATH_MODES;
+}
+
 const ORBIT_HINT = '⌥拖动环绕视角';
 const HINTS = {
   points: '点击地面落点 · 回车 / 双击结束 · Backspace 退一点 · Esc 取消',
@@ -27,6 +32,7 @@ const DBL_EPS = 0.05;     // 双击结束时，与上一点距离小于它的点
 const STROKE_STEP = 0.02; // 手绘采样间隔（米）
 const SIMPLIFY_TOL = 0.05;
 const MIN_RADIUS = 0.1;   // 环绕：当前位置离中心太近时无法定半径
+const TOWARD_STOP = { default: 0.8, camera: 1.5 }; // 走到 / 推到：停在目标前的水平距离（米）
 export const ARC_SWEEP = 180; // 环绕默认扫过角度
 
 /** 环绕参数 → 生成结果（Inspector 改三参数时也用它）：每 22.5° 一段，180° = 8 段。 */
@@ -38,14 +44,16 @@ export function arcPoints({ center, radius, startDeg, sweepDeg }, y) {
 const isTyping = (t) => t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
 
 /**
- * 路径绘制工具（阶段 E）：Dock「路径」/ Inspector「新建路径」进入绘制态，在视口里画出 points[]，
+ * 路径绘制工具（阶段 E；阶段 F 放开机位）：Dock「路径」/ Inspector「新建路径」进入绘制态，在视口里画出 points[]，
  * 结束时一次写入（addPath 或替换现有路径的 updatePath，一次撤销）。
  *
  * 绘制态下视口左键归绘制：OrbitControls 的左键动作临时置空，⌥ + 左键拖动仍可环绕（产品确认）；
  * 右键平移、滚轮缩放不变。gizmo 隐藏、视口点选暂停。
  *
- * 起点规则：首点 = 实体当前手动值（Timeline base，active 时也不取动画瞬时值）投到地面，所以创建后 t=0 不跳。
- * 坐标：一律文档口径（stage.world 局部坐标，y = scene.ground.height）。
+ * 起点规则：首点 = 实体当前手动值（Timeline base，active 时也不取动画瞬时值）投到绘制平面，所以创建后 t=0 不跳。
+ * 绘制平面：角色 / 道具 / 组 = 地面（y = scene.ground.height）；机位 = 过机位当前位置的水平面（路径点 y = 机位高度）。
+ * 机位路径默认 orient = keep（镜头不随切线转），「走到」对机位叫「推到」，停在目标前 1.5 m。
+ * 坐标：一律文档口径（stage.world 局部坐标）。
  * 事件：'mode'(key | null) —— 进入 / 退出绘制态。
  */
 export class PathTool extends Emitter {
@@ -72,8 +80,8 @@ export class PathTool extends Emitter {
     app.on('view', (pov) => { if (this.mode && pov) this.cancel(); });
   }
 
-  /** 实体能否画路径：角色 / 道具 / 组（机位路径是阶段 F）。 */
-  canDraw(ent) { return !!ent && ['character', 'prop', 'crowd'].includes(ent.type); }
+  /** 实体能否画路径：角色 / 道具 / 组 / 机位。 */
+  canDraw(ent) { return !!ent && ['character', 'prop', 'crowd', 'camera'].includes(ent.type); }
 
   // ---- 入口 ----
   /**
@@ -83,7 +91,7 @@ export class PathTool extends Emitter {
   request(mode) {
     const { app } = this;
     const ent = app.selected;
-    if (!this.canDraw(ent)) { toast('请先选中角色、道具或组'); return; }
+    if (!this.canDraw(ent)) { toast('请先选中角色、道具、组或机位'); return; }
     if (app.cameraView) { toast('请切到导演视角绘制路径'); return; }
     const anim = app.timeline.toJSON();
     const go = () => this.begin(mode, ent);
@@ -101,12 +109,14 @@ export class PathTool extends Emitter {
     this.mode = mode;
     this.ent = ent;
     this.start = this.startPoint(ent);
+    this.planeY = this.start[1];
     this.draft = [this.start];
     this.cursor = null;
     app.playback.pause();
     app.gizmo.setVisible(false);
     app.rig.controls.mouseButtons.LEFT = -1; // 左键归绘制；⌥ 左键在 _onDown 里临时恢复环绕
-    this.hintEl.textContent = `${HINTS[mode]} · ${ORBIT_HINT}`;
+    const hint = ent.type === 'camera' ? HINTS[mode].replaceAll('地面', '机位高度平面') : HINTS[mode];
+    this.hintEl.textContent = `${hint} · ${ORBIT_HINT}`;
     this.hintEl.hidden = false;
     app.stage.viewport.classList.add('path-drawing');
     this._preview();
@@ -136,10 +146,10 @@ export class PathTool extends Emitter {
   // ---- 坐标 ----
   get groundY() { return this.app.sceneState.ground.height; }
 
-  /** 实体当前手动值的位置投到地面（文档口径）。 */
+  /** 实体当前手动值的位置投到绘制平面（文档口径）：机位保留自身高度，其余落到地面。 */
   startPoint(ent) {
     const pos = ent._transformJSON(this.app.timeline.baseOf(ent) || ent.root).pos;
-    return [pos[0], this.groundY, pos[2]];
+    return [pos[0], ent.type === 'camera' ? pos[1] : this.groundY, pos[2]];
   }
 
   _setRay(e) {
@@ -148,8 +158,8 @@ export class PathTool extends Emitter {
     this._ray.setFromCamera(ndc, this.app.getRenderCamera());
   }
 
-  /** 光标处的地面点（文档口径：world 局部坐标里 y = 地面高度的平面）；看不到地面时 null。 */
-  groundPoint(e) { return this.planePoint(e, this.groundY); }
+  /** 光标处的绘制平面点（文档口径：角色 / 道具 / 组 = 地面，机位 = 机位高度）；看不到平面时 null。 */
+  groundPoint(e) { return this.planePoint(e, this.mode ? this.planeY : this.groundY); }
 
   /** 光标射线与 world 局部坐标里水平面 y 的交点（[x, y, z]，相机背后 / 平行时 null）。 */
   planePoint(e, y) {
@@ -272,8 +282,9 @@ export class PathTool extends Emitter {
         const target = this.pickEntity(e);
         const at = target ? this.anchorOf(target).point : e.shiftKey ? g : null;
         if (!at) { toast('请点击目标对象（⇧ + 点击地面可取地面点）'); return; }
-        const pts = toward(this.start, at);
-        if (!pts) { toast('离目标太近（≤ 0.8 m），不需要走过去'); return; }
+        const stop = this._towardStop();
+        const pts = toward(this.start, at, { stopDistance: stop });
+        if (!pts) { toast(`离目标太近（≤ ${stop} m），不需要${this.ent.type === 'camera' ? '推过去' : '走过去'}`); return; }
         this._commit(pts);
         break;
       }
@@ -283,7 +294,7 @@ export class PathTool extends Emitter {
         if (!center) return;
         const meta = this._arcMeta(center);
         if (!meta) { toast('当前位置离中心太近，无法环绕（换个中心点）'); return; }
-        this._commit(arcPoints(meta, this.groundY).points, { meta });
+        this._commit(arcPoints(meta, this.planeY).points, { meta });
         break;
       }
     }
@@ -293,8 +304,10 @@ export class PathTool extends Emitter {
   _arcMeta(center) {
     const { radius, deg } = polar(center, this.start);
     if (radius < MIN_RADIUS) return null;
-    return { kind: 'arc', center: [center[0], this.groundY, center[2]], radius: round4(radius), startDeg: round4(deg), sweepDeg: ARC_SWEEP };
+    return { kind: 'arc', center: [center[0], this.planeY, center[2]], radius: round4(radius), startDeg: round4(deg), sweepDeg: ARC_SWEEP };
   }
+
+  _towardStop() { return this.ent?.type === 'camera' ? TOWARD_STOP.camera : TOWARD_STOP.default; }
 
   /** 手绘松手：采样 → simplify；首点替换为当前位置。 */
   _endStroke() {
@@ -323,12 +336,12 @@ export class PathTool extends Emitter {
       ov.setSnap(a?.point, a?.radius);
       if (this.mode === 'arc') {
         const meta = this._arcMeta(a ? a.point : g || this.start);
-        const r = meta && arcPoints(meta, this.groundY);
+        const r = meta && arcPoints(meta, this.planeY);
         ov.setDraft(r ? r.points : [this.start], { dots: false });
         return;
       }
       const at = a ? a.point : e.shiftKey ? g : null;
-      ov.setDraft((at && toward(this.start, at)) || [this.start]);
+      ov.setDraft((at && toward(this.start, at, { stopDistance: this._towardStop() })) || [this.start]);
       return;
     }
     this.cursor = g;
@@ -358,7 +371,7 @@ export class PathTool extends Emitter {
   /**
    * 写入文档（一次撤销）：已有路径 → 替换 points / closed，按新长度重算时长，保留 start / speed / orient；
    * 否则删掉该实体的 pos 轨道（若有，request 时已确认）并新建路径：start = 当前时刻（idle 为 0）、
-   * duration = defaultDuration、speed = smooth、orient = tangent。
+   * duration = defaultDuration、speed = smooth、orient = tangent（机位 keep）。
    * @returns {string|null} 路径 id
    */
   _commit(points, { closed = false, meta = null } = {}) {
@@ -376,7 +389,7 @@ export class PathTool extends Emitter {
         for (const t of anim.timeline.tracks) if (t.target === ent.id && t.property === 'pos') tl.removeTrack(t.id);
         path = tl.addPath({
           target: ent.id, points, closed, duration,
-          start: tl.active ? app.playback.time : 0, speed: 'smooth', orient: 'tangent',
+          start: tl.active ? app.playback.time : 0, speed: 'smooth', orient: ent.type === 'camera' ? 'keep' : 'tangent',
         });
       }
     } catch (err) { toastError(err); return null; }

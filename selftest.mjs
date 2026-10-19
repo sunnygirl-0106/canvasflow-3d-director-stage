@@ -1729,6 +1729,53 @@ async function camTest() {
   await moveBtn('清除运镜');
   await moveField('主体', '');
 
+  // ---- 8 机位画路径：点击落点 3 点 ----
+  await page.evaluate(() => window.__app.playback.stop());
+  const camY = (await camPose(ids.c1)).pos[1];
+  const camP = (await camPose(ids.c1)).pos;
+  await clickSel('#dock .dockbtn[title^="路径"]');
+  await settle();
+  const towardLabel = await page.$$eval('#dock .dockmenu.open .menu-item', (ns) => ns.map((n) => n.textContent).join(' '));
+  await page.evaluate(() => [...document.querySelectorAll('#dock .dockmenu.open .menu-item')].find((n) => n.textContent.includes('点击落点')).click());
+  await settle();
+  const hint8 = await page.$eval('.path-hint', (n) => n.textContent);
+  for (const q of [[camP[0] + 1.5, camY, camP[2] + 0.6], [camP[0] + 3, camY, camP[2] - 0.8], [camP[0] + 3.4, camY, camP[2] - 2.8]]) { await page.mouse.click(...await scr(q)); await settle(); }
+  await page.keyboard.press('Enter');
+  await settle(150);
+  const cp = (await camAnim(ids.c1)).path;
+  const maxDy8 = cp ? Math.max(...cp.points.map((q) => Math.abs(q[1] - camY))) : 1;
+  ok('验收8 机位「点击落点」3 点：共 4 点（首点 = 机位位置）、所有点 y = 机位高度 ± 1 mm、orient = keep；菜单「走到」→「推到」',
+    cp?.points.length === 4 && maxDy8 <= 0.001 && hdist(cp.points[0], camP) < 1e-4 && cp.orient === 'keep' && towardLabel.includes('推到') && !towardLabel.includes('走到') && hint8.includes('机位高度平面'),
+    JSON.stringify({ n: cp?.points.length, maxDy8, orient: cp?.orient, towardLabel, hint8 }));
+  await page.evaluate(() => window.__app.playback.seek(0.5));
+  await settle();
+  const dot = await page.evaluate((id) => window.__app.pathOverlay.dotOf(id), cp.id);
+  const ovVis = await page.evaluate(() => window.__app.pathOverlay.visible);
+  await page.screenshot({ path: `${OUT}/8_camera_path.png` });
+  await page.evaluate(() => window.__app.setCameraView(true));
+  await settle();
+  const ovPov = await page.evaluate(() => window.__app.pathOverlay.visible);
+  await page.evaluate(() => { window.__app.setCameraView(false); window.__app.playback.stop(); });
+  await settle();
+  ok('验收8 overlay 画在机位高度（播放亮点 y ≈ 机位高度）、机位视角下不显示', Math.abs(dot[1] - 0.01 - camY) < 0.002 && ovVis && !ovPov, JSON.stringify({ dotY: dot[1], camY, ovVis, ovPov }));
+
+  // 推到：停在目标前 1.5 m
+  await page.evaluate(() => [...document.querySelectorAll('#inspector [data-sec="path"] .minibtn')].find((b) => b.textContent === '删除路径').click());
+  await settle();
+  await pickInOutliner(ids.c1n);
+  await clickSel('#dock .dockbtn[title^="路径"]');
+  await settle();
+  await page.evaluate(() => [...document.querySelectorAll('#dock .dockmenu.open .menu-item')].find((n) => n.textContent.includes('推到')).click());
+  await settle();
+  const footA = (await camPose(ids.c1)).foot[ids.A];
+  await page.mouse.click(...await scr([footA[0], 0.9, footA[2]]));
+  await settle(150);
+  const tw = (await camAnim(ids.c1)).path;
+  ok('机位「推到」角色：停在目标前 1.5 m（水平）、高度不变', !!tw && Math.abs(hdist(tw.points[1], footA) - 1.5) < 0.01 && Math.abs(tw.points[1][1] - camY) < 1e-4,
+    JSON.stringify(tw?.points));
+  await page.evaluate(() => [...document.querySelectorAll('#inspector [data-sec="path"] .minibtn')].find((b) => b.textContent === '删除路径').click());
+  await settle();
+
   // ---- 其余预设截图（t = duration / 2）----
   await moveField('预设', 'circle');
   await moveBtn('应用');
