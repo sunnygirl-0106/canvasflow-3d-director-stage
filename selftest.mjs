@@ -620,6 +620,41 @@ async function animTest() {
   ok('步态：压到 1.5 s（4 m/s）t=0.75 为跑步（膝屈 > 45°）', gait.runKnee > 45, `膝 ${gait.runKnee.toFixed(1)}°`);
   ok('步态：stop() 后恢复原姿势', gait.restored);
   ok('步态：组沿路径时成员一起走、步伐错开，停下恢复', gait.crowdWalk && gait.crowdRestored);
+  // ---- 收尾 1 · 起步平滑转身：手动朝向 −100°、路径朝 +X（90°），差 170° ----
+  await buildAnimScene().then((v) => Object.assign(ids, v));
+  const turn = await page.evaluate(async (ids) => {
+    const { Path } = await import('/src/anim/Path.js');
+    const { TURN_IN_DIST } = await import('/src/anim/PathTrack.js');
+    const a = window.__app, tl = a.timeline, pb = a.playback;
+    const m = a.findEntity(ids.m);
+    const R2D = 180 / Math.PI;
+    m.root.rotation.set(0, -100 / R2D, 0);
+    a.history.reset();
+    const x = m.root.position.x, z = m.root.position.z;
+    const json = tl.addPath({ target: ids.m, points: [[x, 0, z], [x + 4, 0, z]], start: 1, duration: 3, speed: 'smooth', orient: 'tangent' });
+    const P = new Path(json);
+    const yaw = () => { const e = m.root.rotation.clone().reorder('YXZ'); return e.y * R2D; };
+    const d = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
+    const out = { maxStep: 0, beforeErr: 0, afterErr: 0, turnFrames: 0 };
+    let prev = null;
+    for (let i = 0; i <= 120; i++) {
+      const t = i / 30;
+      pb.seek(t);
+      const y = yaw(), s = P.distanceAt(t);
+      if (prev !== null) out.maxStep = Math.max(out.maxStep, d(y, prev));
+      prev = y;
+      if (t <= 1) out.beforeErr = Math.max(out.beforeErr, d(y, -100));
+      else if (s >= TURN_IN_DIST) out.afterErr = Math.max(out.afterErr, d(y, 90));
+      else out.turnFrames++;
+    }
+    pb.seek(1); out.startErr = d(yaw(), -100);
+    pb.stop();
+    out.restored = d(yaw(), -100) < 1e-9;
+    return out;
+  }, ids);
+  ok('起步转身：t ≤ start 朝向 ≡ 手动朝向（< 0.5°）', turn.startErr < 0.5 && turn.beforeErr < 0.5, `t=start 误差 ${turn.startErr.toFixed(4)}°，之前最大 ${turn.beforeErr.toFixed(4)}°`);
+  ok('起步转身：走过 0.6 m 后朝向 ≡ 切线（< 0.5°）', turn.afterErr < 0.5, `最大误差 ${turn.afterErr.toFixed(4)}°`);
+  ok('起步转身：170° 转身每帧 yaw 变化 < 15°（30 fps）', turn.maxStep < 15 && turn.turnFrames >= 10, `最大 ${turn.maxStep.toFixed(2)}°/帧，转身用 ${turn.turnFrames} 帧；停止后回手动朝向 ${turn.restored}`);
   // ---- 约束：lookAt 保留 roll；follow 刚性跟随且覆盖 pos 轨道 / 路径 ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
   const cons = await page.evaluate(async (ids) => {
@@ -1490,6 +1525,29 @@ async function pathTest() {
   ok('验收10 6 m 直线直接 Space：中途在走路（姿势非零），t ≥ 结束时停在终点（误差 < 1 cm）',
     Math.abs(hdist(p10.points[0], p10.points[1]) - 6) < 0.05 && walk > 1 && e10 < 0.01,
     `长 ${hdist(p10.points[0], p10.points[1]).toFixed(3)} m 时长 ${p10.duration}s 姿势Σ|v|=${walk.toFixed(1)} 终点误差 ${(e10 * 100).toFixed(3)} cm ${JSON.stringify(end10).length ? '' : ''}`);
+  // 收尾 1 · 起步平滑转身（界面画的直线，朝 −X；角色手动朝向不同）
+  const turn10 = await page.evaluate(async (pid, id) => {
+    const a = window.__app, pb = a.playback;
+    const { Path } = await import('/src/anim/Path.js');
+    const P = new Path(a.timeline.toJSON().paths.find((p) => p.id === pid));
+    const e = a.findEntity(id);
+    const R2D = 180 / Math.PI;
+    const yaw = () => e.root.rotation.clone().reorder('YXZ').y * R2D;
+    const d = (x, y) => Math.abs(((x - y) % 360 + 540) % 360 - 180);
+    const manual = yaw();
+    const tan = P.tangentAt(P.length / 2);
+    const tanYaw = Math.atan2(tan.x, tan.z) * R2D;
+    let t06 = P.json.start;
+    while (P.distanceAt(t06) < 0.6) t06 += 1 / 120;
+    pb.seek(P.json.start); const s0 = d(yaw(), manual);
+    pb.seek(t06); const s1 = d(yaw(), tanYaw);
+    let maxStep = 0, prev = null;
+    for (let t = P.json.start; t <= t06 + 0.1; t += 1 / 30) { pb.seek(t); const y = yaw(); if (prev !== null) maxStep = Math.max(maxStep, d(y, prev)); prev = y; }
+    pb.stop();
+    return { manual, tanYaw, s0, s1, maxStep, t06 };
+  }, p10.id, ids.B);
+  ok('起步转身（界面画的直线）：t=start ≡ 手动朝向、走过 0.6 m ≡ 切线（< 0.5°），每帧 < 15°', turn10.s0 < 0.5 && turn10.s1 < 0.5 && turn10.maxStep < 15 && turn10.manual !== turn10.tanYaw,
+    JSON.stringify(Object.fromEntries(Object.entries(turn10).map(([k, v]) => [k, +v.toFixed(3)]))));
 
   console.log(`📁 产物：${OUT}/`);
 }
