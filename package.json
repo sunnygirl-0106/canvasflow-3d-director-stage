@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test:e2e": "node selftest.mjs",
-    "test:unit": "node --test tests/pathGen.test.mjs tests/cameraMoves.test.mjs tests/aiOps.test.mjs tests/docEdit.test.mjs"
+    "test:unit": "node --test tests/pathGen.test.mjs tests/cameraMoves.test.mjs tests/aiOps.test.mjs tests/docEdit.test.mjs tests/aiApply.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

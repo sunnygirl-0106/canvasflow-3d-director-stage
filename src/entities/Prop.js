@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { Entity, hexColor } from './Entity.js';
+import { PROP_PALETTE } from '../config.js';
 
 // 道具：几何体（方块/圆柱/球/人体素模）。沿用 MVP demo 思路。
-const PRIM_COLORS = [0x7ee787, 0xbc8cff, 0xffb066, 0x68d6c8, 0x4f8ef7, 0xf07b6b];
 let _colorIdx = 0;
 
 function stdMat(c) {
@@ -51,6 +51,25 @@ function buildPrimitive(kind, mat) {
   return me;
 }
 
+const _centers = new Map(); // kind → 几何包围盒中心（root 局部坐标）
+
+/**
+ * 道具几何在 root 局部坐标下的包围盒中心（与 Constraint.aimPoint 量的是同一个盒子）。
+ * AI 在文档上推算注视点时用（实体还没有场景对象）。
+ */
+export function propLocalCenter(kind) {
+  let c = _centers.get(kind);
+  if (!c) {
+    const root = new THREE.Group();
+    root.add(kind === 'mannequin' ? buildMannequin(null) : buildPrimitive(kind, null));
+    root.updateMatrixWorld(true);
+    c = new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3());
+    root.traverse((o) => o.geometry?.dispose());
+    _centers.set(kind, c);
+  }
+  return c.clone();
+}
+
 export class Prop extends Entity {
   /**
    * @param {'box'|'cylinder'|'sphere'|'mannequin'} kind
@@ -58,7 +77,7 @@ export class Prop extends Entity {
    * @param {string} [id]
    */
   constructor(kind, name, id) {
-    const color = PRIM_COLORS[_colorIdx++ % PRIM_COLORS.length];
+    const color = PROP_PALETTE[_colorIdx++ % PROP_PALETTE.length];
     const mat = stdMat(color);
     const root = new THREE.Group();
     const mesh = kind === 'mannequin' ? buildMannequin(mat) : buildPrimitive(kind, mat);

@@ -33,7 +33,7 @@ const DBL_EPS = 0.05;     // 双击结束时，与上一点距离小于它的点
 const STROKE_STEP = 0.02; // 手绘采样间隔（米）
 const SIMPLIFY_TOL = 0.05;
 const MIN_RADIUS = 0.1;   // 环绕：当前位置离中心太近时无法定半径
-const TOWARD_STOP = { default: 0.8, camera: 1.5 }; // 走到 / 推到：停在目标前的水平距离（米）
+export const TOWARD_STOP = { default: 0.8, camera: 1.5 }; // 走到 / 推到：停在目标前的水平距离（米）
 export const ARC_SWEEP = 180; // 环绕默认扫过角度
 
 /** 环绕参数 → 生成结果（Inspector 改三参数时也用它）：每 22.5° 一段，180° = 8 段。 */

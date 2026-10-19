@@ -28,6 +28,9 @@ export const PROP_LABEL = Object.fromEntries(PROP_KINDS);
 // 角色默认颜色（截图同款素体绿）
 export const CHARACTER_COLOR = 0x34c759;
 
+// 道具配色（新建道具按顺序轮换）
+export const PROP_PALETTE = [0x7ee787, 0xbc8cff, 0xffb066, 0x68d6c8, 0x4f8ef7, 0xf07b6b];
+
 // 群众阵列成员配色
 export const CROWD_PALETTE = [0x4f8ef7, 0xff9f43, 0xee5253, 0x10ac84, 0xfeca57, 0xa55eea, 0x00d2d3, 0xff6b9d, 0x9b59b6];
 

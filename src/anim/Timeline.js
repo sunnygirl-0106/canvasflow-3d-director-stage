@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Emitter } from '../util/Emitter.js';
 import { DEFAULT_TIMELINE, validate, DocumentError } from '../doc/schema.js';
 import { genId } from '../entities/Entity.js';
-import { dropTransformAnim } from '../doc/edit.js';
+import { dropTransformAnim, pruneAnim } from '../doc/edit.js';
 import { Track } from './Track.js';
 import { PathTrack } from './PathTrack.js';
 import { applyLocomotion } from './Locomotion.js';
@@ -494,9 +494,7 @@ export class Timeline extends Emitter {
     const dead = new Set(ids);
     for (const ent of [...this._base.keys()]) if (dead.has(ent.id)) this._base.delete(ent); // 实体已销毁，不写回
     const n = this.tracks.length + this.paths.length + this.constraints.length;
-    this.tracks = this.tracks.filter((t) => !dead.has(t.target));
-    this.paths = this.paths.filter((p) => !dead.has(p.target));
-    this.constraints = this.constraints.filter((c) => !dead.has(c.target) && !(typeof c.subject === 'string' && dead.has(c.subject)));
+    Object.assign(this, pruneAnim({ tracks: this.tracks, paths: this.paths, constraints: this.constraints }, dead));
     const camGone = dead.has(this.mainCameraId);
     if (camGone) this.mainCameraId = null;
     const changed = camGone || n !== this.tracks.length + this.paths.length + this.constraints.length;

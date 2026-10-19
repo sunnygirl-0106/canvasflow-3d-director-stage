@@ -49,6 +49,12 @@ export function spawnPoint(n) {
   return [Math.cos(a) * r, 0, Math.sin(a) * r];
 }
 
+/** 第 n 个自动角色名：角色A…角色Z，之后 角色A2…角色Z2，依此类推（不会溢出成标点符号）。 */
+export function charName(n) {
+  const round = Math.floor(n / 26);
+  return '角色' + String.fromCharCode(65 + (n % 26)) + (round ? round + 1 : '');
+}
+
 /** 顶层实体个数（群众成员不算），= 界面里的实体列表长度。 */
 export const topLevelCount = (doc) => doc.entities.filter((e) => !(e.type === 'character' && e.parent)).length;
 
@@ -173,6 +179,40 @@ export function groupCharacters(doc, ids, { name, pivot }) {
   doc.timeline.tracks = anim.tracks;
   doc.paths = anim.paths;
   return { group, members };
+}
+
+// ---- 删除 ----
+/** 去掉引用这些实体的轨道 / 路径 / 约束（target 或 subject）。返回新的 { tracks, paths, constraints }。 */
+export function pruneAnim({ tracks, paths, constraints }, ids) {
+  const dead = new Set(ids);
+  return {
+    tracks: tracks.filter((t) => !dead.has(t.target)),
+    paths: paths.filter((p) => !dead.has(p.target)),
+    constraints: constraints.filter((c) => !dead.has(c.target) && !(typeof c.subject === 'string' && dead.has(c.subject))),
+  };
+}
+
+/**
+ * 删除实体（与界面删除同规则）：组连成员一起删；删成员后组空了连组一起删；
+ * 引用它们的轨道 / 路径 / 约束、主机位、当前机位一并清掉。返回删掉的 id 列表。
+ */
+export function removeEntity(doc, id) {
+  const e = findEntity(doc, id);
+  if (!e) return [];
+  const dead = [id, ...(e.type === 'group' ? e.members : [])];
+  doc.entities = doc.entities.filter((x) => !dead.includes(x.id));
+  const parent = e.parent ? findEntity(doc, e.parent) : null;
+  if (parent) {
+    parent.members = parent.members.filter((m) => m !== id);
+    if (!parent.members.length) dead.push(...removeEntity(doc, parent.id));
+  }
+  const anim = pruneAnim({ tracks: doc.timeline.tracks, paths: doc.paths, constraints: doc.constraints }, dead);
+  doc.timeline.tracks = anim.tracks;
+  doc.paths = anim.paths;
+  doc.constraints = anim.constraints;
+  if (dead.includes(doc.timeline.mainCameraId)) doc.timeline.mainCameraId = null;
+  if (dead.includes(doc.scene.activeCameraId)) doc.scene.activeCameraId = null;
+  return dead;
 }
 
 // ---- 路径 ----

@@ -150,11 +150,7 @@ export class App extends Emitter {
 
   // ---- 新增 ----
   /** A…Z，之后 A2…Z2，依此类推（不会溢出成标点符号）。 */
-  _nextCharName() {
-    const n = this._charSeq++;
-    const round = Math.floor(n / 26);
-    return '角色' + String.fromCharCode(65 + (n % 26)) + (round ? round + 1 : '');
-  }
+  _nextCharName() { return edit.charName(this._charSeq++); }
 
   /** 加载一个角色（不入场）。所有角色都经此创建，保证 spec 完整、可复制。 */
   _loadCharacter(spec) { return Character.load(this._nextCharName(), spec); }
