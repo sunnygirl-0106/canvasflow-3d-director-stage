@@ -9,6 +9,7 @@ import { Selection } from '../core/Selection.js';
 import { PathOverlay } from '../core/PathOverlay.js';
 import { PathTool } from './PathTool.js';
 import { PathEditor } from './PathEditor.js';
+import { CameraMoveTool } from './CameraMoveTool.js';
 import { BODY_TYPES, bodySpec, PROP_LABEL, CROWD_PALETTE, RATIO_OPTIONS } from '../config.js';
 import { Emitter } from '../util/Emitter.js';
 import { toast } from '../util/dom.js';
@@ -92,6 +93,8 @@ export class App extends Emitter {
     this.pathTool = new PathTool(this);       // 路径绘制
     this.pathEditor = new PathEditor(this);   // 顶点编辑
     this.pathMeta = {};                       // 会话态：pathId → 生成器参数（环绕三参数），不进文档
+    this.moveMeta = {};                       // 会话态：cameraId → 运镜段列表（阶段 F），不进文档
+    this.cameraMoves = new CameraMoveTool(this); // 机位运镜
     this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis || this.pathTool.busy || this.pathEditor.busy);
 
     this.labels = new Labels(labelLayer);

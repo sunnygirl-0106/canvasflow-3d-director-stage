@@ -9,6 +9,7 @@ import { toastError } from './timeline/Transport.js';
 import { arcPoints, PATH_MODES } from '../app/PathTool.js';
 import { pathLength, defaultDuration } from '../anim/pathGen.js';
 import { popupMenu } from './timeline/keyDrag.js';
+import { CAMERA_MOVES, MOVE_PARAMS, MOVE_DIRS, MOVE_LABEL } from '../anim/cameraMoves.js';
 
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
@@ -16,6 +17,8 @@ const FOV_TIP = '控制镜头视野范围。数值越小，画面越近、越聚
 const PREVIEW_W = 248, PREVIEW_H = 140;
 const RUN_SPEED = 2.6; // m/s：平均速度超过它标「跑」（步态 ≥ 2.6 纯跑）
 const PACES = [[0.8, '慢走'], [1.3, '走'], [1.8, '快走'], [3.5, '跑']];
+const round2 = (x) => Math.round(x * 100) / 100;
+const fmtS = (x) => (Math.round(x * 10) / 10).toFixed(1);
 
 // 每种实体的标签页：[key, 文案]
 const TABS = {
@@ -58,6 +61,7 @@ export class Inspector {
   show(entity) {
     this.entity = entity;
     this._reset();
+    this.app.pathOverlay.setMovePreview(null); // 运镜预览只跟着机位的运镜段走
     if (!entity) { this.container.replaceChildren(); return; }
 
     const root = el('div', { class: 'rp rp-pad' });
@@ -122,6 +126,7 @@ export class Inspector {
     const anim = this.app.timeline.toJSON();
     const nodes = [];
     const path = anim.paths.find((p) => p.target === ent.id);
+    if (ent.type === 'camera') nodes.push(this._moveSection(ent));
     if (path) nodes.push(this._pathSection(path, ent));
     else if (this.app.pathTool.canDraw(ent)) nodes.push(this._pathEmpty());
     if (ent.type === 'camera') nodes.push(this._constraintSection(ent, anim.constraints.filter((c) => c.target === ent.id)));
@@ -230,6 +235,82 @@ export class Inspector {
         numberRow({ label: '扫过角度', value: meta.sweepDeg, step: 15, unit: '°', onChange: (v) => { if (v) set({ sweepDeg: v }); else this._renderAnimSections(); } }).el,
       ]),
     ];
+  }
+
+  /**
+   * 运镜段（机位）：预设 / 主体 / 参数 / 时长 → 应用（或追加）；清除运镜；已有段列表（只能删最后一段）。
+   * 表单是会话态（app.cameraMoves.form），改动即重算视口里的虚线预览；写操作全在 CameraMoveTool（一次撤销）。
+   */
+  _moveSection(cam) {
+    const tool = this.app.cameraMoves;
+    const f = tool.formOf(cam);
+    const ctx = tool.context(cam);
+    const params = tool.params(cam);
+    const built = tool.build(cam);
+    const rerender = () => this._renderAnimSections();
+    const setParam = (k, v) => { f.params[k] = v; rerender(); };
+    const segs = tool.segments(cam);
+
+    const nearest = tool.nearestSubject(cam);
+    const nearestLabel = Array.isArray(nearest) ? '前方 3 m' : this.app.findEntity(nearest)?.name;
+    const nodes = [
+      el('div', { class: 'sec-title' }, [
+        el('span', { text: '运镜' }),
+        segs.length ? el('span', { class: 'sec-tag path', text: `${segs.length} 段` }) : null,
+      ]),
+      dropdownRow({
+        label: '预设', value: f.name,
+        options: CAMERA_MOVES.map(([value, label]) => ({ value, label: `${label} ${value}` })),
+        onChange: (v) => { tool.setName(cam, v); rerender(); },
+      }).el,
+      dropdownRow({
+        label: '主体', value: f.subject,
+        options: [{ value: '', label: `最近角色（${nearestLabel}）` }, ...tool.subjects(cam), { value: '__point', label: '自定义点' }],
+        onChange: (v) => { f.subject = v; rerender(); },
+      }).el,
+    ];
+    if (f.subject === '__point') {
+      const v = f.point;
+      nodes.push(tripleRow({
+        label: '主体坐标', step: 0.05, onCommit: rerender,
+        axes: ['x', 'y', 'z'].map((k, i) => ({ key: k, get: () => v[i], set: (x) => { v[i] = Math.round(x * 1000) / 1000; } })),
+      }).el);
+    }
+    const keys = MOVE_PARAMS[f.name];
+    const pair = [];
+    if (keys.includes('amount')) pair.push(numberRow({ label: '距离', value: round2(params.amount), step: 0.1, min: 0.01, unit: 'm', onChange: (v) => setParam('amount', v) }).el);
+    if (keys.includes('sweep')) pair.push(numberRow({ label: '扫过角度', value: params.sweep, step: 15, min: 1, unit: '°', onChange: (v) => setParam('sweep', v) }).el);
+    pair.push(numberRow({ label: '时长', value: params.duration, step: 0.5, min: 0.1, unit: 's', onChange: (v) => setParam('duration', v) }).el);
+    nodes.push(el('div', { class: 'anim-pair' }, pair));
+    if (keys.includes('dir')) {
+      nodes.push(dropdownRow({
+        label: '方向', value: params.dir,
+        options: MOVE_DIRS[f.name].map(([value, label]) => ({ value, label })),
+        onChange: (v) => setParam('dir', v),
+      }).el);
+    }
+    nodes.push(el('div', { class: 'anim-info move-info' + (built.error ? ' err' : ''), text: built.error || `${fmtS(ctx.time)}–${fmtS(ctx.time + built.move.duration)} s · 注视 ${this._subjectName(built.subject)}` }));
+    nodes.push(el('div', { class: 'anim-btns' }, [
+      el('button', { class: 'minibtn primary', text: ctx.append ? '追加' : '应用', disabled: built.error ? '' : null, onclick: () => tool.request(cam) }),
+      tool.hasMoves(cam) ? el('button', { class: 'minibtn danger', text: '清除运镜', title: '删除路径、该机位全部约束与旋转轨道', onclick: () => tool.clear(cam) }) : null,
+    ]));
+    if (segs.length) {
+      nodes.push(el('div', { class: 'move-segs' }, segs.map((sg, i) => el('div', { class: 'move-seg' }, [
+        el('span', { class: 'move-seg-name', text: `${i + 1}. ${MOVE_LABEL[sg.name]}` }),
+        el('span', { class: 'move-seg-time', text: `${fmtS(sg.start)}–${fmtS(sg.start + sg.duration)} s` }),
+        el('button', {
+          class: 'move-seg-del', text: '×', title: i === segs.length - 1 ? '删除这一段' : '只能删除最后一段',
+          onclick: () => { if (i === segs.length - 1) tool.removeLast(cam); else toast('只能删除最后一段，请清除后重做'); },
+        }),
+      ]))));
+    }
+    this.app.pathOverlay.setMovePreview(built.move?.points || null, { closed: built.move?.closed && !ctx.append });
+    return el('div', { class: 'anim-sec', 'data-sec': 'move' }, nodes);
+  }
+
+  _subjectName(subject) {
+    if (Array.isArray(subject)) return `(${subject.map((x) => x.toFixed(2)).join(', ')})`;
+    return this.app.findEntity(subject)?.name || subject;
   }
 
   /** 约束段（机位）：注视（无 / 实体 / 自定义点）、跟随（实体 + 偏移），各自生效区间。 */

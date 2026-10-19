@@ -182,6 +182,16 @@ if (CMD === 'path') {
   process.exit(failed ? 1 : 0);
 }
 
+if (CMD === 'cam') {
+  await camTest();
+  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
+  await browser.close();
+  await server?.close();
+  const failed = results.filter((r) => !r.pass).length;
+  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
+  process.exit(failed ? 1 : 0);
+}
+
 if (CMD === 'doc') {
   await docTest();
   ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
@@ -1457,6 +1467,209 @@ async function pathTest() {
  * 单角色姿势截图：隐藏其余实体与名牌，角色放原点，固定相机出 正面 + 3/4 侧面 两视图拼一张。
  * 渲染走 Stage.snapshot（主渲染器），保证与应用内画面一致且确定。
  */
+// ---- 阶段 F：机位运镜 ----
+/** Inspector 运镜段：按标签找下拉 / 输入并设值（触发 change）。 */
+async function moveField(label, value) {
+  await page.evaluate((label, value) => {
+    const f = [...document.querySelectorAll('#inspector [data-sec="move"] .field')].find((x) => x.querySelector('label')?.textContent === label);
+    const n = f.querySelector('select, input');
+    n.value = String(value);
+    n.dispatchEvent(new Event('change'));
+  }, label, value);
+  await settle();
+}
+async function moveBtn(text) {
+  await page.evaluate((t) => [...document.querySelectorAll('#inspector [data-sec="move"] .anim-btns button')].find((b) => b.textContent === t).click(), text);
+  await settle(120);
+}
+/** 机位 −Z 与主体注视点方向的夹角（度）+ 注视点投影到画面的偏差（占画幅比例）。 */
+function camAim(camId, subjectId) {
+  return page.evaluate(async (camId, subjectId) => {
+    const a = window.__app;
+    const { aimPoint } = await import('/src/anim/Constraint.js');
+    const cam = a.findEntity(camId);
+    cam.root.updateMatrixWorld(true);
+    const p = aimPoint(a, subjectId);
+    const world = a.stage.world;
+    world.updateMatrixWorld(true);
+    const pw = world.localToWorld(p.clone());
+    const fwd = cam.cam.getWorldDirection(p.clone());
+    const to = pw.clone().sub(cam.cam.getWorldPosition(p.clone())).normalize();
+    const ndc = pw.clone().project(cam.cam);
+    return { angle: fwd.angleTo(to) * 180 / Math.PI, off: Math.max(Math.abs(ndc.x), Math.abs(ndc.y)) / 2 };
+  }, camId, subjectId);
+}
+
+/** 机位位姿（场景根节点坐标）+ 各角色脚底位置（水平距离用）。 */
+function camPose(camId) {
+  return page.evaluate((camId) => {
+    const a = window.__app;
+    const c = a.findEntity(camId);
+    const foot = {};
+    for (const e of a.entities) if (e.type === 'character') foot[e.id] = e.toJSON().transform.pos;
+    return { pos: c.root.position.toArray(), rot: c.root.rotation.toArray().slice(0, 3), foot };
+  }, camId);
+}
+/** 机位的动画数据：路径 / 约束 / rot 轨道。 */
+function camAnim(camId) {
+  return page.evaluate((id) => {
+    const t = window.__app.timeline.toJSON();
+    return {
+      path: t.paths.find((p) => p.target === id) || null,
+      cns: t.constraints.filter((c) => c.target === id),
+      rot: t.timeline.tracks.find((x) => x.target === id && x.property === 'rot') || null,
+    };
+  }, camId);
+}
+/** 机位画面（洁净渲染 stage.snapshot），写成 PNG。 */
+async function camShot(camId, file) {
+  const url = await page.evaluate((id) => {
+    const a = window.__app;
+    const c = a.findEntity(id);
+    return a.withCleanRender(() => a.stage.snapshot(c.cam, { width: 640, height: 360 })).toDataURL('image/png');
+  }, camId);
+  fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));
+  return file;
+}
+
+async function camTest() {
+  const OUT = 'test-output/cam';
+  fs.rmSync(OUT, { recursive: true, force: true });
+  fs.mkdirSync(OUT, { recursive: true });
+  const panelClip = () => page.$eval('#rightPanel', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; });
+
+  // ---- 场景：种子角色 A / B；机位1 对准 A ----
+  const ids = await page.evaluate(() => {
+    const a = window.__app;
+    a.playback.stop();
+    const [A, B] = a.entities.filter((e) => e.type === 'character').sort((x, y) => x.name.localeCompare(y.name)); // 加载顺序不定：按名字取
+    const c1 = a.addCamera('front_mid');
+    a.select(null);
+    a.rig.controls.target.set(0, 0, 0.6); a.stage.camera.position.set(0, 8.5, 9.5); a.rig.controls.update();
+    a.history.reset();
+    return { A: A.id, B: B.id, c1: c1.id, An: A.name, Bn: B.name, c1n: c1.name };
+  });
+  await settle(200);
+
+  // ---- 2 半环绕盯人 ----
+  await page.evaluate(async (ids) => { // 机位先对准 A 的注视点（运镜从 start 起注视，不改手动朝向）
+    const a = window.__app;
+    const { aimPoint } = await import('/src/anim/Constraint.js');
+    a.findEntity(ids.c1).aimAt(aimPoint(a, ids.A));
+  }, ids);
+  await pickInOutliner(ids.c1n);
+  const before2 = await camShot(ids.c1, `${OUT}/2_before.png`);
+  const cam0 = await camPose(ids.c1);
+  await moveField('预设', 'half_orbit');
+  await moveField('主体', ids.A);
+  const pv = await page.evaluate(() => window.__app.pathOverlay.movePreviewSize);
+  await page.screenshot({ path: `${OUT}/12_preview.png` });
+  await page.evaluate(() => document.querySelector('#inspector [data-sec="move"]').scrollIntoView());
+  await page.screenshot({ path: `${OUT}/12_move_section.png`, clip: await panelClip() });
+  await moveBtn('应用');
+  const ho = await camAnim(ids.c1);
+  ok('验收2 应用半环绕：一条路径（smooth / keep / 5 s）+ 一条注视 A（从 0 起、全程）、预览虚线已显示',
+    !!ho.path && ho.path.speed === 'smooth' && ho.path.orient === 'keep' && ho.path.duration === 5 && ho.path.start === 0
+    && ho.cns.length === 1 && ho.cns[0].type === 'lookAt' && ho.cns[0].subject === ids.A && ho.cns[0].start === 0 && ho.cns[0].end === null && pv === 1,
+    JSON.stringify({ path: ho.path && { n: ho.path.points.length, d: ho.path.duration }, cns: ho.cns, pv }));
+  const samples = [];
+  for (let t = 0; t <= 5 + 1e-9; t += 0.25) {
+    await page.evaluate((t) => window.__app.playback.seek(t), t);
+    const pose = await camPose(ids.c1);
+    const aim = await camAim(ids.c1, ids.A);
+    samples.push({ t, r: hdist(pose.pos, pose.foot[ids.A]), y: pose.pos[1], off: aim.off });
+  }
+  const r0 = hdist(cam0.pos, cam0.foot[ids.A]);
+  const maxDr = Math.max(...samples.map((x) => Math.abs(x.r - r0)));
+  const maxDy = Math.max(...samples.map((x) => Math.abs(x.y - cam0.pos[1])));
+  const maxOff = Math.max(...samples.map((x) => x.off));
+  ok('验收2 每 0.25 s：水平距离恒定 ±1 cm、高度恒定 ±1 mm、注视点偏离画面中心 < 2%', maxDr <= 0.01 && maxDy <= 0.001 && maxOff < 0.02,
+    `Δr=${(maxDr * 100).toFixed(2)}cm Δy=${(maxDy * 1000).toFixed(3)}mm off=${(maxOff * 100).toFixed(3)}%`);
+  const end2 = await camPose(ids.c1);
+  ok('验收2 扫过 180°：终点在主体对面', Math.abs(hdist(end2.pos, cam0.pos) - 2 * r0) < 0.02, `弦长 ${hdist(end2.pos, cam0.pos).toFixed(3)} / 直径 ${(2 * r0).toFixed(3)}`);
+  await page.evaluate(() => window.__app.playback.seek(2.5));
+  await settle();
+  await camShot(ids.c1, `${OUT}/12_half_orbit.png`);
+  await page.evaluate(() => window.__app.playback.seek(0));
+  const at0 = await camShot(ids.c1, `${OUT}/2_t0.png`);
+  const d2 = pixelDiff(before2, at0, `${OUT}/2_t0_diff.png`);
+  ok('验收2 t=0 与应用前画面一致（不跳）', d2 === 0, `差异 ${(d2 * 100).toFixed(4)}%`);
+
+  // ---- 清除运镜 ----
+  await page.evaluate(() => window.__app.playback.stop());
+  await moveBtn('清除运镜');
+  const cleared = await camAnim(ids.c1);
+  ok('清除运镜：路径 / 约束 / rot 轨道全删、段列表消失', !cleared.path && !cleared.cns.length && !cleared.rot
+    && !(await page.$('#inspector [data-sec="move"] .move-seg')), JSON.stringify(cleared));
+
+  // ---- 3 推 / 拉 ----
+  const moveEnd = async (name, params = {}) => {
+    await moveField('预设', name);
+    for (const [k, v] of Object.entries(params)) await moveField(k, v);
+    await moveBtn('应用');
+    const an = await camAnim(ids.c1);
+    const T = an.path ? an.path.start + an.path.duration : 0;
+    await page.evaluate((T) => window.__app.playback.seek(T), T);
+    const pose = await camPose(ids.c1);
+    await page.evaluate(() => window.__app.playback.seek(1.5));
+    await settle();
+    await camShot(ids.c1, `${OUT}/12_${name}.png`);
+    await page.evaluate(() => window.__app.playback.stop());
+    await moveBtn('清除运镜');
+    return { an, pose };
+  };
+  const push = await moveEnd('push_in');
+  const pull = await moveEnd('pull_out');
+  const rPush = hdist(push.pose.pos, cam0.foot[ids.A]), rPull = hdist(pull.pose.pos, cam0.foot[ids.A]);
+  ok('验收3 推：终点到主体（水平）= 原距离 × 0.6 ± 1 cm；拉 = × 1.6', Math.abs(rPush - r0 * 0.6) <= 0.01 && Math.abs(rPull - r0 * 1.6) <= 0.01
+    && push.an.path.duration === 3 && pull.an.path.duration === 3,
+    `原 ${r0.toFixed(3)} → 推 ${rPush.toFixed(3)}（×${(rPush / r0).toFixed(4)}）拉 ${rPull.toFixed(3)}（×${(rPull / r0).toFixed(4)}）`);
+
+  // ---- 4 横移 / 升降 ----
+  const tr = await moveEnd('truck');
+  const disp = [tr.pose.pos[0] - cam0.pos[0], tr.pose.pos[2] - cam0.pos[2]];
+  const conn = [cam0.foot[ids.A][0] - cam0.pos[0], cam0.foot[ids.A][2] - cam0.pos[2]];
+  const ang = Math.acos((disp[0] * conn[0] + disp[1] * conn[1]) / Math.hypot(...disp) / Math.hypot(...conn)) * 180 / Math.PI;
+  // 机位视角的左：机位右方向量（本地 +X）与位移反向
+  const right = await page.evaluate((id) => { const c = window.__app.findEntity(id); c.root.updateMatrix(); const e = c.root.matrix.elements; return [e[0], e[2]]; }, ids.c1);
+  ok('验收4 横移：位移垂直于初始连线（90° ± 1°）、y 不变、默认 2 m 向机位左方',
+    Math.abs(ang - 90) <= 1 && Math.abs(tr.pose.pos[1] - cam0.pos[1]) < 1e-4 && Math.abs(Math.hypot(...disp) - 2) < 1e-3 && disp[0] * right[0] + disp[1] * right[1] < 0,
+    `夹角 ${ang.toFixed(3)}° |d|=${Math.hypot(...disp).toFixed(4)} Δy=${(tr.pose.pos[1] - cam0.pos[1]).toExponential(1)}`);
+  const cr = await moveEnd('crane');
+  const dc = cr.pose.pos.map((v, i) => v - cam0.pos[i]);
+  ok('验收4 升降：只有 y 变化 1 m', Math.abs(dc[0]) < 1e-4 && Math.abs(dc[2]) < 1e-4 && Math.abs(dc[1] - 1) < 1e-4, JSON.stringify(dc.map((v) => +v.toFixed(5))));
+
+  // ---- 5 摇 ----
+  await page.evaluate((id) => { const c = window.__app.findEntity(id); c.root.rotation.y += 0.7; c.root.updateMatrixWorld(true); }, ids.c1);
+  const panPos0 = (await camPose(ids.c1)).pos;
+  await moveField('预设', 'pan');
+  await moveBtn('应用');
+  const pan = await camAnim(ids.c1);
+  const panPos = [];
+  for (const t of [0, 0.5, 1, 1.5, 2, 3]) { await page.evaluate((t) => window.__app.playback.seek(t), t); panPos.push((await camPose(ids.c1)).pos); }
+  await page.evaluate(() => window.__app.playback.seek(2));
+  const panAim = await camAim(ids.c1, ids.A);
+  await page.evaluate(() => window.__app.playback.seek(1));
+  await settle();
+  await camShot(ids.c1, `${OUT}/12_pan.png`);
+  const still = Math.max(...panPos.map((p) => Math.hypot(...p.map((v, i) => v - panPos0[i]))));
+  ok('验收5 摇：无路径、rot 轨道 2 键（0 / 2 s）、注视从 2 s 起', !pan.path && pan.rot?.keys.length === 2 && pan.rot.keys[0].t === 0 && pan.rot.keys[1].t === 2
+    && pan.cns.length === 1 && pan.cns[0].start === 2 && pan.cns[0].end === null, JSON.stringify({ rot: pan.rot?.keys.map((k) => k.t), cns: pan.cns }));
+  ok('验收5 t=duration 机位 −Z 指向主体 < 0.5°、位置全程不变', panAim.angle < 0.5 && still < 1e-6, `夹角 ${panAim.angle.toFixed(4)}° 位移 ${still.toExponential(1)}`);
+  await page.evaluate(() => window.__app.playback.stop());
+  await moveBtn('清除运镜');
+  await page.evaluate((id) => { const c = window.__app.findEntity(id); c.root.rotation.y -= 0.7; c.root.updateMatrixWorld(true); }, ids.c1);
+
+  // ---- 其余预设截图（t = duration / 2）----
+  await moveField('预设', 'circle');
+  await moveBtn('应用');
+  await page.evaluate(() => window.__app.playback.seek(4));
+  await settle();
+  await camShot(ids.c1, `${OUT}/12_circle.png`);
+  await page.evaluate(() => window.__app.playback.stop());
+  await moveBtn('清除运镜');
+}
+
 async function shootPoses(outDir, bodyKey) {
   fs.mkdirSync(outDir, { recursive: true });
   const keys = await page.evaluate(async (bodyKey) => {

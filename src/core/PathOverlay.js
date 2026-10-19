@@ -65,6 +65,10 @@ export class PathOverlay {
     this.snapRing.visible = false;
     this.group.add(this.snapRing);
 
+    // 运镜预览（Inspector 运镜段写入）：将要生成的路径，虚线。不随 rebuild 清空。
+    this.moveGroup = new THREE.Group();
+    this.group.add(this.moveGroup);
+
     app.timeline.on('change', () => this.rebuild());
     app.playback.on('tick', () => this._placeDots());
     app.on('selection', () => this.rebuild());
@@ -76,7 +80,7 @@ export class PathOverlay {
   // ---- 构建 ----
   rebuild() {
     for (const o of [...this.group.children]) {
-      if (o === this.draftGroup || o === this.snapRing) continue;
+      if (o === this.draftGroup || o === this.snapRing || o === this.moveGroup) continue;
       this.group.remove(o);
       this._disposeLine(o);
     }
@@ -208,6 +212,24 @@ export class PathOverlay {
     }
     this.app.stage.invalidate();
   }
+
+  /** 运镜预览：虚线画出将要生成的路径（points 为 null 清空）。 */
+  setMovePreview(points, { closed = false } = {}) {
+    for (const o of [...this.moveGroup.children]) { this.moveGroup.remove(o); this._disposeLine(o); }
+    if (points?.length >= 2) {
+      const path = new Path({ points, closed, start: 0, duration: 1, speed: 'linear' });
+      if (path.length > 1e-6) {
+        const line = this._line(this._sample(path), true, { color: COLOR.hover, opacity: 0.95 });
+        Object.assign(line.material, { dashed: true, dashSize: 0.12, gapSize: 0.08 });
+        line.material.needsUpdate = true;
+        this.moveGroup.add(line);
+      }
+    }
+    this.app.stage.invalidate();
+  }
+
+  /** 当前运镜预览的曲线采样点数（selftest 用；0 = 无预览）。 */
+  get movePreviewSize() { return this.moveGroup.children.length; }
 
   /** 吸附目标高亮环（局部坐标中心 + 半径；null 隐藏）。 */
   setSnap(center, radius = 0.5) {

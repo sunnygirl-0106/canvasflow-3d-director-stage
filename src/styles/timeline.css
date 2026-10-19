@@ -193,3 +193,16 @@
 .anim-btns .minibtn { margin: 0; padding: 7px 6px; font-size: 12px; white-space: nowrap; }
 .anim-btns .minibtn.danger:hover { color: #ff8a80; }
 .anim-sub { font-size: 12.5px; color: var(--txt); font-weight: 600; margin: 4px 0 10px; }
+
+/* 运镜段（阶段 F） */
+.anim-btns .minibtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.anim-btns .minibtn.primary:hover { filter: brightness(1.1); }
+.anim-btns .minibtn[disabled] { opacity: .45; cursor: default; filter: none; }
+.move-info.err { color: #ff8a80; }
+.move-segs { display: flex; flex-direction: column; gap: 4px; margin: -4px 0 12px; }
+.move-seg { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 8px; border-radius: 6px; background: rgba(52,199,89,.08); }
+.move-seg-name { flex: 1; color: var(--green); }
+.move-seg-time { color: var(--dim); font-variant-numeric: tabular-nums; }
+.move-seg-del { background: none; border: 0; color: var(--dim); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+.move-seg-del:hover { color: #ff8a80; }
+.move-seg:not(:last-child) .move-seg-del { opacity: .35; }
