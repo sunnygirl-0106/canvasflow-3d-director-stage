@@ -63,24 +63,29 @@ export class CameraRig {
    * 关键点——**宽度只按主体「身体中心跨度 + 身宽余量」算，忽略 T-pose 张开的手臂**，
    * 这样相机能贴得足够近、人物足够大；张开的手臂允许裁出画面边缘（电影常规构图）。
    * 高度用骨骼盒全高。结果设为 home（「重置视角」回到此构图）。
+   * insetRight：视口右侧被遮住的宽度占比（AI 抽屉打开时，收尾 1）。> 0 时按剩余宽度取景、主体居中在左侧可用区域，
+   * 并保证每个主体的包围盒（角色用骨骼盒）投影都落在可用区域内（不够就再拉远）。0 时与之前完全相同。
    */
-  frameAll(entities, { margin = 1.06, bodyPad = 0.32 } = {}) {
+  frameAll(entities, { margin = 1.06, bodyPad = 0.32, insetRight = 0 } = {}) {
     const box = new THREE.Box3();        // 垂直 + 中心（角色用骨骼盒）
+    const boxes = [];
     let any = false;
     let minX = Infinity, maxX = -Infinity; // 主体「中心」的水平跨度（忽略张开手臂）
     for (const e of entities) {
       if (!e || e.type === 'camera' || !e.visible) continue;
       const b = worldBox(e.root, { useBones: e.type === 'character' });
-      if (!b.isEmpty()) { box.union(b); any = true; }
+      if (!b.isEmpty()) { box.union(b); boxes.push(b); any = true; }
       const c = e.root.getWorldPosition(new THREE.Vector3());
       minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x);
     }
     if (!any || box.isEmpty()) return;
 
+    const free = 1 - Math.min(Math.max(insetRight, 0), 0.8); // 可用宽度占比
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const vfov = THREE.MathUtils.degToRad(this.camera.fov);
-    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
+    const tanFull = Math.tan(vfov / 2) * this.camera.aspect;
+    const hfov = 2 * Math.atan(tanFull * free);
     const halfH = size.y * 0.5;
     const halfW = (maxX - minX) * 0.5 + bodyPad; // 中心跨度 + 身宽，不含手臂
     const dH = halfH / Math.tan(vfov / 2);
@@ -88,12 +93,34 @@ export class CameraRig {
     let dist = Math.max(dH, dW) * margin;
     dist = Math.max(this.controls.minDistance, Math.min(dist, this.controls.maxDistance));
 
-    this.controls.target.copy(center);
-    const dir = new THREE.Vector3().subVectors(this.camera.position, this.controls.target);
+    const dir = new THREE.Vector3().subVectors(this.camera.position, center); // 视线方向保持（从主体中心看过来）
     if (dir.lengthSq() < 1e-6) dir.set(0, 0.12, 1);
     dir.normalize();
-    this.camera.position.copy(center).addScaledVector(dir, dist);
-    this.controls.update();
+    const right = new THREE.Vector3().crossVectors(this.camera.up, dir).normalize(); // 相机右方
+    const place = (d) => {
+      // 可用区域的中心在 NDC x = −insetRight：注视点向右偏 insetRight × 半画幅宽，主体就落在左侧区域中央
+      this.controls.target.copy(center).addScaledVector(right, (1 - free) * d * tanFull);
+      this.camera.position.copy(this.controls.target).addScaledVector(dir, d);
+      this.controls.update();
+    };
+    place(dist);
+    if (free < 1) {
+      const xMax = 1 - 2 * (1 - free), p = new THREE.Vector3();
+      const inside = () => {
+        this.camera.updateMatrixWorld(true);
+        for (const b of boxes) {
+          for (let i = 0; i < 8; i++) {
+            p.set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(this.camera);
+            if (p.x < -0.98 || p.x > xMax - 0.02 || Math.abs(p.y) > 0.98) return false;
+          }
+        }
+        return true;
+      };
+      for (let i = 0; i < 40 && !inside() && dist < this.controls.maxDistance; i++) {
+        dist = Math.min(dist * 1.06, this.controls.maxDistance);
+        place(dist);
+      }
+    }
 
     // 重置视角回到该自动取景
     this._home.pos.copy(this.camera.position);

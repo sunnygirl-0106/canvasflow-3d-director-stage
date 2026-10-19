@@ -2739,6 +2739,42 @@ async function aiTest() {
     r1.status === 'ok' && g.n === 3 && g.poses.join() === 'wave,sit' && g.camPath && g.lookAt && g.duration === 5 && g.main && (await aiState()).hist === h0 + 1,
     JSON.stringify({ r1: r1.status, ...g, camId: undefined }));
   ok('验收 1 t=2.5 s 主机位画面两人都入画（gen_t2.5.png）', g.inFrame.every(Boolean), JSON.stringify(g.inFrame));
+  // 收尾 1 · 抽屉开着生成：自动取景避开抽屉 —— 所有角色包围盒（骨骼盒）投影都在抽屉左侧
+  const avoid = await page.evaluate(async () => {
+    const a = window.__app;
+    const { worldBox } = await import('/src/util/measure.js');
+    const cv = a.stage.renderer.domElement.getBoundingClientRect();
+    const dr = document.querySelector('.ai-drawer').getBoundingClientRect();
+    const cam = a.stage.camera;
+    cam.updateMatrixWorld(true);
+    const measure = () => {
+      cam.updateMatrixWorld(true);
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const e of a.entities) for (const m of [e, ...e.children]) {
+        if (m.type !== 'character') continue;
+        const b = worldBox(m.root, { useBones: true });
+        for (let i = 0; i < 8; i++) {
+          const p = b.min.clone().set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(cam);
+          const x = cv.left + (p.x * 0.5 + 0.5) * cv.width, y = cv.top + (-p.y * 0.5 + 0.5) * cv.height;
+          minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        }
+      }
+      return { minX, maxX, minY, maxY };
+    };
+    const { minX, maxX, minY, maxY } = measure();
+    a.rig.frameAll(a.entities); // 对照：不扣抽屉（修之前）的取景
+    const before = measure();
+    a.frameSubjects();
+    const inset = a.frameInsetRight;
+    window.__aiPanel.toggle(false);
+    const closed = a.frameInsetRight;
+    window.__aiPanel.toggle(true);
+    return { minX, maxX, minY, maxY, cvL: cv.left, cvT: cv.top, cvB: cv.bottom, drawerL: dr.left, inset, closed, beforeMaxX: before.maxX };
+  });
+  await shootViewport(`${OUT}/gen_viewport_drawer.png`);
+  ok('抽屉开着生成：所有角色包围盒投影落在抽屉左侧区域内；抽屉关了 inset 恢复 0',
+    avoid.inset > 300 && avoid.minX >= avoid.cvL && avoid.maxX <= avoid.drawerL && avoid.minY >= avoid.cvT && avoid.maxY <= avoid.cvB && avoid.closed === 0,
+    `角色 x ${avoid.minX.toFixed(0)}–${avoid.maxX.toFixed(0)}（不扣抽屉时右边到 ${avoid.beforeMaxX.toFixed(0)}）/ 抽屉左边 ${avoid.drawerL.toFixed(0)}（视口 ${avoid.cvL.toFixed(0)}–），y ${avoid.minY.toFixed(0)}–${avoid.maxY.toFixed(0)}，inset ${avoid.inset}px → 关 ${avoid.closed}`);
 
   // ---- 验收 4 修改模式（在验收 1 的场景上）----
   const before4 = await aiState();

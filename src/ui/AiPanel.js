@@ -70,6 +70,8 @@ export class AiPanel {
     this.open = v;
     this.root.hidden = !v;
     this.root.parentElement.classList.toggle('ai-open', v); // 视口：Dock 让出抽屉的位置
+    // 自动取景（frameSubjects）避开抽屉：被遮住的宽度 = 视口右边 − 抽屉左边；关了恢复 0
+    this.app.frameInsetRight = v ? Math.max(0, this.root.parentElement.getBoundingClientRect().right - this.root.getBoundingClientRect().left) : 0;
     if (v) { this.render(); this.textarea?.focus(); }
     this.onToggle?.(v);
   }

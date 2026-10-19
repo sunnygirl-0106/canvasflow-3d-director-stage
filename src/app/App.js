@@ -58,6 +58,7 @@ export class App extends Emitter {
     this._mainPreview = false;     // 正透过主机位看成片（gizmo 隐藏）
     this._povUnset = false;        // 机位视角 active 但没设主机位（视口提示）
     this.ratio = 'auto';           // 取景比例（默认自由）
+    this.frameInsetRight = 0;      // 视口右侧被 AI 抽屉遮住的宽度（px），自动取景时扣掉
     this.labelPreview = false;     // 「预览名牌」：视口也用精灵名牌（会话态）
     this._cleanDepth = 0;          // 洁净渲染嵌套层数（>0 时 gizmo 等不显示）
 
@@ -718,8 +719,14 @@ export class App extends Emitter {
     this.stage.render();
   }
 
-  /** 自动对准主体：相机贴合所有角色/道具取景（默认加载时调用）。 */
-  frameSubjects() { this.rig.frameAll(this.entities); }
+  /**
+   * 自动对准主体：相机贴合所有角色/道具取景（默认加载时调用）。
+   * 视口右侧被遮住的宽度（AI 抽屉打开时由 AiPanel 设 frameInsetRight，px）从可用视口里扣掉，抽屉关了恢复为 0。
+   */
+  frameSubjects() {
+    const w = this.stage.renderer.domElement.clientWidth;
+    this.rig.frameAll(this.entities, { insetRight: w > 0 ? this.frameInsetRight / w : 0 });
+  }
 
   resetView() { this.rig.resetView(); toast('已重置视角'); }
 
