@@ -271,6 +271,8 @@ export class Dock {
       el('div', { class: 'menu-sep' }),
       this._item('download', '导出场景', () => { this.menu.close(); exportScene(this.app); }),
       this._item('upload', '导入场景', () => { this.menu.close(); pickAndImportScene(this.app); }),
+      el('div', { class: 'menu-sep' }),
+      this._item(null, '预览名牌', () => { this.menu.close(); this.app.setLabelPreview(!this.app.labelPreview); }, !!this.app.labelPreview),
     ];
   }
 

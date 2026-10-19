@@ -1,12 +1,20 @@
 import * as THREE from 'three';
 import { el } from '../util/dom.js';
 
+/** 名牌锚点（世界坐标）：实体根节点上方 labelOffset（头顶 / 机位上方），DOM 名牌与精灵名牌共用。 */
+export function labelAnchor(t, worldScale, out) {
+  t.root.getWorldPosition(out);
+  out.y += t.labelOffset() * worldScale;
+  return out;
+}
+
 // 3D 名牌层：为实体（及群众成员）建 DOM 名牌，渲染前投影到屏幕。
 // 位置用 CSS translate（不触发布局），显隐仅在变化时写 DOM。
 export class Labels {
   constructor(layerEl) {
     this.layer = layerEl;
-    this.visible = true;
+    this.visible = true;      // scene.labels
+    this.suppressed = false;  // 精灵名牌接管时（导出 / 预览名牌）隐藏 DOM 层，见 LabelSprites
     this._tmp = new THREE.Vector3();
   }
 
@@ -30,8 +38,15 @@ export class Labels {
 
   setVisible(v) {
     this.visible = v;
-    this.layer.style.display = v ? 'block' : 'none';
+    this._applyDisplay();
   }
+
+  setSuppressed(v) {
+    this.suppressed = v;
+    this._applyDisplay();
+  }
+
+  _applyDisplay() { this.layer.style.display = this.visible && !this.suppressed ? 'block' : 'none'; }
 
   /**
    * @param {Entity[]} entities 顶层实体
@@ -39,7 +54,7 @@ export class Labels {
    * @param {{worldScale:number, hideCameras:boolean}} opts
    */
   update(entities, camera, { worldScale, hideCameras }) {
-    if (!this.visible) return;
+    if (!this.visible || this.suppressed) return;
     const W = this.layer.clientWidth, H = this.layer.clientHeight;
     const p = this._tmp;
     for (const ent of entities) {
@@ -48,9 +63,7 @@ export class Labels {
         if (!lab) continue;
         let show = t.visible && !(hideCameras && t.type === 'camera');
         if (show) {
-          t.root.getWorldPosition(p);
-          p.y += t.labelOffset() * worldScale;
-          p.project(camera);
+          labelAnchor(t, worldScale, p).project(camera);
           show = p.z < 1; // 在相机前方
           if (show) lab.style.translate = `${(p.x * 0.5 + 0.5) * W}px ${(-p.y * 0.5 + 0.5) * H}px`;
         }

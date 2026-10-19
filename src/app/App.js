@@ -17,6 +17,7 @@ import { worldBox } from '../util/measure.js';
 import { ShotManager } from './ShotManager.js';
 import { Panorama } from './Panorama.js';
 import { Labels } from './Labels.js';
+import { LabelSprites } from './LabelSprites.js';
 import { toDocument, loadDocument } from '../doc/serialize.js';
 import { History } from './History.js';
 import { Timeline } from '../anim/Timeline.js';
@@ -55,6 +56,8 @@ export class App extends Emitter {
     this._mainPreview = false;     // 正透过主机位看成片（gizmo 隐藏）
     this._povUnset = false;        // 机位视角 active 但没设主机位（视口提示）
     this.ratio = 'auto';           // 取景比例（默认自由）
+    this.labelPreview = false;     // 「预览名牌」：视口也用精灵名牌（会话态）
+    this._cleanDepth = 0;          // 洁净渲染嵌套层数（>0 时 gizmo 等不显示）
 
     this._charSeq = 0;
     this._propCount = {};
@@ -105,6 +108,7 @@ export class App extends Emitter {
     this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis || this.pathTool.busy || this.pathEditor.busy);
 
     this.labels = new Labels(labelLayer);
+    this.labelSprites = new LabelSprites(this); // 3D 精灵名牌：截图 / 导出 / 「预览名牌」（阶段 G）
     this.shots = new ShotManager(this);
     this.panorama = new Panorama(stage, {
       getSky: () => this.sceneState.sky,
@@ -347,7 +351,7 @@ export class App extends Emitter {
   /** gizmo 是否应显示：有可见的主选实体，且不是「POV 下正在透过它看的出画机位」。 */
   _gizmoShouldShow() {
     const ent = this.selected;
-    if (!ent || !ent.visible || this._mainPreview) return false; // 透过主机位 = 成片预览，不显示 gizmo
+    if (!ent || !ent.visible || this._mainPreview || this._cleanDepth) return false; // 透过主机位 = 成片预览，不显示 gizmo
     return !(this.cameraView && ent.id === this.povCameraId);
   }
 
@@ -566,6 +570,13 @@ export class App extends Emitter {
   setScenePos(axis, v) { this.sceneState.pos[axis] = v; const p = this.sceneState.pos; this.stage.setWorldPos(p.x, p.y, p.z); }
   setSceneRot(axis, deg) { this.sceneState.rot[axis] = deg; const r = this.sceneState.rot; const k = Math.PI / 180; this.stage.setWorldRot(r.x * k, r.y * k, r.z * k); }
   setSkyColor(hex) { this.sceneState.sky = new THREE.Color(hex).getHex(); this.stage.setSkyColor(hex); }
+  /** 「预览名牌」：视口里也用 3D 精灵名牌（看导出效果）；会话态，不进文档。 */
+  setLabelPreview(on) {
+    if (!!on === !!this.labelPreview) return;
+    this.labelPreview = !!on;
+    if (on) this.labelSprites.enable(); else this.labelSprites.disable();
+    this.emit('labelPreview', this.labelPreview);
+  }
   setLabelsVisible(v) { this.sceneState.labels = v; this.labels.setVisible(v); this.stage.invalidate(); }
   setGroundVisible(v) { this.sceneState.ground.visible = v; this.stage.setGroundVisible(v); }
   setGroundOpacity(v) { this.sceneState.ground.opacity = v; this.stage.setGroundOpacity(v); }
@@ -678,25 +689,45 @@ export class App extends Emitter {
     }
   }
 
-  // ---- 洁净渲染（截图 / 机位预览）----
+  // ---- 洁净渲染（截图 / 机位预览 / 导出）----
   /**
-   * 在隐藏 gizmo / 选中环 / 相机可视化 / 路径 overlay 的状态下执行 fn（通常是 stage.snapshot），
+   * 在隐藏 gizmo / 选中环 / 相机可视化 / 路径 overlay、名牌改为 3D 精灵的状态下执行 fn（通常是 stage.snapshot），
    * 结束后恢复并立即重绘主视图，屏幕上不会闪出离屏帧。
    */
   withCleanRender(fn) {
+    this.beginCleanRender();
+    try {
+      return fn();
+    } finally {
+      this.endCleanRender();
+    }
+  }
+
+  /** 跨异步的洁净渲染区间（导出视频逐帧 await 用），须与 endCleanRender 成对；可嵌套（最外层结束才恢复）。 */
+  beginCleanRender() {
+    this._cleanDepth++;
+    this.hideOverlays();
+    this.labelSprites.beginClean();
+  }
+
+  /** 隐藏 gizmo / 选中环 / 相机可视化 / 路径 overlay（洁净渲染区间内，导出每帧渲染前再调一次防被事件重新显示）。 */
+  hideOverlays() {
     this.gizmo.setVisible(false);
     this.selection.setRingVisible(false);
     this.setCameraHelpersVisible(false);
     this.pathOverlay.setHidden(true);
-    try {
-      return fn();
-    } finally {
+  }
+
+  endCleanRender() {
+    this.labelSprites.endClean();
+    if (--this._cleanDepth <= 0) {
+      this._cleanDepth = 0;
       this.gizmo.setVisible(this._gizmoShouldShow());
       this.selection.setRingVisible(true);
       this.setCameraHelpersVisible(!this.cameraView);
       this.pathOverlay.setHidden(false);
-      this.stage.render();
     }
+    this.stage.render();
   }
 
   /** 自动对准主体：相机贴合所有角色/道具取景（默认加载时调用）。 */
@@ -748,5 +779,6 @@ export class App extends Emitter {
       worldScale: this.stage.world.scale.y,
       hideCameras: this.cameraView,
     });
+    this.labelSprites.update();
   }
 }
