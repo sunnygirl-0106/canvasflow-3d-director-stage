@@ -4,7 +4,7 @@ import { tripleRow, sliderRow, colorRow, dropdownRow, infoTip, shotCard, toHex, 
 import { PoseSliders } from './PoseSliders.js';
 import { POSE_PRESETS } from '../entities/posePresets.js';
 import { downloadURL } from '../app/ShotManager.js';
-import { propState } from './timeline/animState.js';
+import { propState, toggleKey } from './timeline/animState.js';
 import { toastError } from './timeline/Transport.js';
 import { arcPoints, pathModes } from '../app/PathTool.js';
 import { pathLength, defaultDuration, stopsAfterReverse, toggleStop } from '../anim/pathGen.js';
@@ -448,20 +448,7 @@ export class Inspector {
    * 时间轴 idle 时 = 在 0 秒打键并 seek(0) 进入 active（"第一次打键"的入口）。
    */
   _toggleKey(ent, prop) {
-    const { app } = this;
-    const tl = app.timeline, pb = app.playback;
-    const idle = !tl.active;
-    const t = idle ? 0 : pb.time;
-    const st = propState(app, tl.toJSON(), ent.id, prop, t);
-    try {
-      if (st.key) tl.removeKey(st.track.id, st.key.t);
-      else {
-        const value = tl.valueOf(ent, prop); // 此刻显示的值（idle = 手动值，active = 求值结果）
-        const track = st.track || tl.addTrack({ target: ent.id, property: prop });
-        tl.setKey(track.id, t, value);
-      }
-    } catch (err) { toastError(err); return; }
-    if (idle) pb.seek(0);
+    try { toggleKey(this.app, ent, prop); } catch (err) { toastError(err); }
   }
 
   /** 标签页头（无标签页的类型返回 null）。 */

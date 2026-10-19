@@ -1196,6 +1196,39 @@ async function tlTest() {
   await settle(150);
   await page.screenshot({ path: `${OUT}/01_panel.png` });
 
+  // ---- 收尾 1 · 面板列出所有实体：新建场景两个角色即出现；「◇ 打键」→ pos 行 + t=0 键 ----
+  const bare = await page.evaluate(async () => {
+    const { createEmptyDocument } = await import('/src/doc/schema.js');
+    const a = window.__app;
+    a.playback.stop();
+    await a.loadDocument(createEmptyDocument());
+    const m = await a.addCharacter('male');
+    const f = await a.addCharacter('female');
+    m.root.position.x = -1; f.root.position.x = 1;
+    a.select(null);
+    await new Promise((r) => setTimeout(r, 100));
+    const rows = [...document.querySelectorAll('#timeline .tl-row')].map((r) => ({ ent: r.dataset.ent, bare: r.classList.contains('is-bare'), btn: !!r.querySelector('.tl-addkey'), color: getComputedStyle(r.querySelector('.tl-label')).color }));
+    return { m: m.id, f: f.id, fName: f.name, rows };
+  });
+  await page.screenshot({ path: `${OUT}/20_bare_rows.png`, clip: await page.$eval('#timeline', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; }) });
+  ok('面板列出所有实体：新建场景两个角色即出现（灰字表头 + 「◇ 打键」）',
+    bare.rows.length === 2 && bare.rows.every((r) => r.bare && r.btn) && bare.rows.some((r) => r.ent === bare.m) && bare.rows.some((r) => r.ent === bare.f), JSON.stringify(bare.rows));
+  await clickSel(`#timeline .tl-row[data-ent="${bare.f}"] .tl-addkey`);
+  await settle(150);
+  const keyed = await page.evaluate((id) => {
+    const a = window.__app;
+    const tr = a.timeline.toJSON().timeline.tracks.filter((t) => t.target === id);
+    const rows = [...document.querySelectorAll(`#timeline .tl-row[data-ent="${id}"]`)];
+    return {
+      tracks: tr.map((t) => [t.property, t.keys.map((k) => k.t)]),
+      head: rows[0]?.classList.contains('is-bare'), posRow: rows.some((r) => r.dataset.track && r.querySelector('.tl-label')?.textContent === '位置'),
+      key0: !!document.querySelector(`#timeline .tl-key[data-t="0"]`), sel: a.selectedIds.has(id), active: a.timeline.active,
+    };
+  }, bare.f);
+  ok('面板「◇ 打键」：出现 pos 行且 t=0 有键（同 Inspector 位置菱形）、选中该角色',
+    JSON.stringify(keyed.tracks) === '[["pos",[0]]]' && keyed.head === false && keyed.posRow && keyed.key0 && keyed.sel, JSON.stringify(keyed));
+  await page.evaluate(() => window.__app.playback.stop());
+
   // ---- 9 折叠：视口高 +184px，刷新保持 ----
   const vh0 = await page.evaluate(() => document.getElementById('viewport').clientHeight);
   await clickSel('#timeline .tl-fold');

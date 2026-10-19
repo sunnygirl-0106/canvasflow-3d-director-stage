@@ -1,5 +1,7 @@
 import { el } from '../../util/dom.js';
 import { icon } from '../icons.js';
+import { toggleKey } from './animState.js';
+import { toastError } from './Transport.js';
 
 /** 轨道行名（词汇表 → 中文）。 */
 export const PROP_LABEL = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视野' };
@@ -26,7 +28,10 @@ export class TrackRows {
     this.groups = [];               // [{ ent, rows:[{ kind, data }] }]
   }
 
-  /** 当前文档 → 分组数据。只列出有动画数据的实体，顺序同大纲（顶层实体，成员紧跟其组）。 */
+  /**
+   * 当前文档 → 分组数据。所有实体都列一行，顺序同大纲（顶层实体，成员紧跟其组）；
+   * 没有动画数据的只有表头（rows 为空：灰字 + 「◇ 打键」）。
+   */
   _collect() {
     const { app } = this.panel;
     const { timeline, paths, constraints } = app.timeline.toJSON();
@@ -38,8 +43,7 @@ export class TrackRows {
     const groups = [];
     for (const e of app.entities) {
       for (const ent of [e, ...e.children]) {
-        const rows = by.get(ent.id);
-        if (rows) groups.push({ ent, rows: rows.sort((a, b) => a.order - b.order) });
+        groups.push({ ent, rows: (by.get(ent.id) || []).sort((a, b) => a.order - b.order) });
       }
     }
     return groups;
@@ -50,7 +54,7 @@ export class TrackRows {
     this.groups = this._collect();
     const frag = document.createDocumentFragment();
     if (!this.groups.length) {
-      frag.appendChild(el('div', { class: 'tl-empty', text: '还没有动画。选中对象后，在右侧属性面板点「位置 / 旋转 / 缩放」旁的 ◇ 打第一个关键帧。' }));
+      frag.appendChild(el('div', { class: 'tl-empty', text: '场景里还没有对象。在左侧 Dock 添加角色 / 道具 / 机位后，它们会列在这里。' }));
       return frag;
     }
     for (const g of this.groups) {
@@ -62,6 +66,7 @@ export class TrackRows {
   }
 
   _headRow({ ent, rows }) {
+    if (!rows.length) return this._bareRow(ent);
     const folded = this.collapsedEnts.has(ent.id);
     const caret = el('span', { class: 'tl-caret' + (folded ? ' folded' : ''), html: icon('chevron', 12, 2) });
     caret.addEventListener('click', (e) => {
@@ -82,6 +87,25 @@ export class TrackRows {
     for (const r of rows) if (r.kind === 'track') for (const k of r.data.keys) times.add(k.t);
     const lane = el('div', { class: 'tl-lane' }, [...times].map((t) => vars(el('i', { class: 'tl-sum' }), { '--t': t })));
     return el('div', { class: 'tl-row tl-head', 'data-ent': ent.id }, [name, lane]);
+  }
+
+  /**
+   * 没有动画的实体：只有表头（灰字），右侧「◇ 打键」= Inspector 位置菱形（在当前时刻打位置键，idle 时在 0 秒）。
+   * 按下时行照常选中该实体（属性面板随之切过去）。
+   */
+  _bareRow(ent) {
+    const btn = el('button', { class: 'tl-addkey', title: '在当前时刻给位置打一个关键帧（同属性面板「位置」旁的 ◇）', text: '◇ 打键' });
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      try { toggleKey(this.panel.app, ent, 'pos'); } catch (err) { toastError(err); }
+    });
+    const name = el('div', { class: 'tl-name' }, [
+      el('span', { class: 'tl-caret-gap' }),
+      el('span', { class: 'tl-type', html: icon(TYPE_ICON[ent.type] || 'cube', 14) }),
+      el('span', { class: 'tl-label', text: ent.name }),
+      btn,
+    ]);
+    return el('div', { class: 'tl-row tl-head is-bare', 'data-ent': ent.id }, [name, el('div', { class: 'tl-lane' })]);
   }
 
   _row(ent, { kind, data }) {

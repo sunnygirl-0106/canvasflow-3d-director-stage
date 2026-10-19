@@ -103,6 +103,15 @@
   background-size: 8px 1px; opacity: .6;
 }
 .tl-track.is-empty .tl-name { color: var(--dim2); }
+/* 没有动画的实体：只有表头，灰字 + 「◇ 打键」 */
+.tl-head.is-bare .tl-name { color: var(--dim2); font-weight: 400; }
+.tl-head.is-bare .tl-type { color: var(--dim2); }
+.tl-caret-gap { width: 14px; flex: none; }
+.tl-addkey {
+  flex: none; border: 1px solid var(--line); background: none; color: var(--dim); cursor: pointer;
+  font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: 4px; white-space: nowrap;
+}
+.tl-addkey:hover { color: #fff; border-color: var(--accent); }
 
 /* 关键帧菱形 */
 .tl-key, .tl-sum {
