@@ -30,6 +30,7 @@
 - **角色路径** — 底部工具坞「路径」或属性面板「新建路径 ▾」为选中角色 / 道具 / 组画移动路径：点击落点 / 手绘 / 直线 / 环绕 / 走到五种方式；视口里蓝线 + 球形顶点，可拖顶点、⇧ 拖整条平移、点线插入、`Del` 删顶点；起点自动取对象当前位置，创建后画面不跳；直接播放即沿线走 / 跑。
 - **机位运镜** — 选中机位，属性面板「运镜」段选预设（推 / 拉 / 横移 / 升降 / 摇 / 半环绕 / 环绕）、主体（默认最近的角色）和参数，视口里虚线预览，点「应用」生成机位路径 + 注视约束；再点「追加」把下一个运镜接在后面（段列表可删最后一段）。机位也能用五种方式画路径（画在机位高度的水平面上）。时间轴「主机位」选好后，在机位视角下播放即透过主机位看成片。
 - **导出视频** — 底部工具坞「场景 → 导出视频…」把主机位画面逐帧离线渲染成 H.264 MP4（720p / 1080p / 1440p 实验，宽高比跟随取景比例），角色名牌画进画面；第 i 帧 = `evaluate(t0 + i/fps)`，与电脑快慢无关，两次导出逐帧相同。**仅支持 Chrome / Edge**（WebCodecs），全程在浏览器内完成、不上传。
+- **AI 导演** — 底部工具坞最右「AI」打开右侧抽屉：一句话生成整个场景（人物、姿势、道具、机位、路径、运镜、时长）、对话式修改当前场景、附一张站位图识图导入。模型只输出高层操作（ops），经校验后才写入场景，失败自动把错误喂回模型重试；每轮应用 = 一步撤销。接任意 OpenAI 兼容接口，密钥只存本机。
 - **动画内核（供时间轴 / AI 调用）** — 角色 / 道具 / 组 / 机位的位置 · 旋转 · 缩放 · FOV 关键帧；沿 Catmull-Rom 路径移动（切线朝向、匀速 / 缓入缓出）；角色沿路径自动切程序化步行 / 跑步（脚踩点 + 腿部 IK，不悬空不打滑，停下恢复原姿势）；机位注视 / 刚性跟随约束。任意时刻状态 = `timeline.evaluate(t)`，播放与跳转结果逐数值一致；播放中导出 / 撤销记的是手动值。
 
 ## 🚀 快速开始
@@ -55,8 +56,10 @@ node selftest.mjs anim                       # 动画内核验收：纯函数 / 
 node selftest.mjs tl                         # 时间轴面板验收（真实点击 / 拖拽）：打键 / 自动打键 / 拖键 / 区间条 / 约束段 / 播放 / 快捷键 / 性能 / 折叠 → test-output/tl/
 node selftest.mjs path                       # 角色路径验收（真实点击 / 拖拽）：五种绘制 / 起点不跳 / 顶点编辑 / 冲突确认 / 可视化 / 播放 / 往返 → test-output/path/
 node selftest.mjs export                     # 导出视频验收：精灵名牌 / 帧 ≡ 快照 / 逐帧确定性 / MP4（ffprobe 或盒子解析）/ 取消 / 不支持的浏览器 → test-output/export/
+node selftest.mjs ai                         # AI 生成验收（MockProvider，不依赖网络）：一句话生成 / 校验回路 / 三次失败不改场景 / 修改 + ⌘Z / 重名 / 识图 / 词汇表一致 → test-output/ai/
 node selftest.mjs cam                        # 机位运镜验收（真实操作）：半环绕盯人 / 推拉 / 横移升降 / 摇 / 追加 + 删末段 / 机位路径 / 主机位播放 / 往返 → test-output/cam/
-npm run test:unit                            # 路径生成器 + 运镜生成器单元测试（node:test，不起浏览器）
+npm run test:unit                            # 路径 / 运镜生成器、文档纯函数、AI ops 校验 / 编译 / 提示词单元测试（node:test，不起浏览器）
+npm run docs:ai                              # 按代码重新生成 README「AI 生成」里的 ops / 词汇表块
 ```
 
 开发时校准页：`npm run dev` 后打开 `/calib.html?profile=bodykun_male`。
@@ -108,6 +111,93 @@ Object.assign(cm.formOf(cam), { name: 'push_in', subject: a.id }); cm.request(ca
 带路径的运镜：`speed = smooth`、`orient = keep`，并加 lookAt 约束指向主体（`subject`：实体 id 或 `[x,y,z]`），从该段开始一直注视到全程结束；`pan` 的注视从摇完那一刻开始。追加 = 新段从现有路径终点、结束时刻接上（同一主体的注视合并为一条，不同主体按段截断）；预设参数不进文档，文档只存生成的 points / keys / constraints。
 
 词汇表（AI 用，定了不改）：运镜 `push_in / pull_out / truck / crane / pan / half_orbit / circle`，参数 `amount / dir / sweep / subject / duration`；路径绘制方式 `points / freehand / line / arc / toward`（前两者 AI 不用）；property `pos / rot / scale / fov`；ease `linear / smooth / step`；路径 speed `linear / smooth`、orient `tangent / keep`；约束 `lookAt / follow`。文档形状见 `src/doc/schema.js` 顶部注释。
+
+## 🤖 AI 生成
+
+底部工具坞最右的「AI」按钮打开右侧抽屉。三种模式：
+
+| 模式 | 做什么 | 说明 |
+| --- | --- | --- |
+| 生成新场景 | 一句话生成整个场景 | 发送前确认「将清空当前场景」；没设主机位时自动取有运镜的机位 |
+| 修改当前场景（默认） | 对话式修改 | 模型只输出补丁（改哪几项），没提到的实体不动；场景为空时自动按「生成」处理 |
+| 识图导入 | 附一张站位参考图（≤ 2 MB，压到长边 1024 px） | 只允许 clear / scene / add_character / add_prop / add_camera / move，姿势固定站立；机位只推断方向（高 1.4 m、距离约 3 m） |
+
+**配置**：抽屉右上角 ⚙ 填 Base URL / API Key / Model（任何 OpenAI 兼容的 `/chat/completions` 接口：OpenAI、DeepSeek、通义、Kimi、OpenRouter、本地 vLLM / Ollama 的 OpenAI 端点等；识图需要支持图片输入的模型），「测试连接」验证。接口不支持 `response_format: json_object` 时自动去掉重试。
+
+**示例提示词**
+
+- 生成：「两个人在广场对话，一个女的站着挥手，一个男的坐着，一个机位半环绕拍他们，5 秒」
+- 生成：「黄昏，三个人排成一排，中间的人抱臂，镜头从远处推近到中间的人，再环绕半圈，8 秒」
+- 修改：「让男的站起来走到女的旁边，机位改成推」「加一个方块当桌子放在两人中间」「时长改成 10 秒」
+- 识图：附图 +「照图里的站位摆，机位从正前方拍」
+
+**流程**：模型输出 `{"ops":[…], "note":"…"}` → `validateOps`（结构 / 枚举 / 名字引用 / 数值范围，错误定位到 `ops[i].字段`）→ 在场景文档拷贝上逐条执行（与界面操作同一套 `src/doc/edit.js` 纯函数）→ 文档校验器 → 全部通过才加载。失败把错误原文发回模型「修正后重新输出完整 ops」，最多重试 2 次；都失败则 toast 前 3 条错误，场景不变。成功的一轮 = 一步撤销（抽屉里「撤销这一轮」）。
+
+**约定**：实体按名字引用（重名新建自动加数字后缀并在回执里说明）；坐标为文档口径（米、Y 上、角色 y = 0 站在地面）；`yaw` 为度，**0 = 面朝 +Z**，90 = 面朝 +X。
+
+控制台：
+
+```js
+await __app.ai.applyOps([{ op: 'add_character', name: '小王', body: 'male', pos: [1, 0, 0], pose: 'wave' }]);  // 直接应用 ops（{ ok, applied, renames, warnings, errors }）
+__app.ai.summarize();                                     // 给模型看的当前场景摘要
+await __app.ai.run({ input: '让小王走到原点', mode: 'modify' });   // 走模型 + 重试回路
+```
+
+**隐私**：Base URL / API Key / Model 只存本机浏览器 localStorage（键 `director-stage.ai`），不写进场景文件、撤销栈和自动保存，不出现在日志与 selftest 产物里。请求由浏览器直接发往你配置的接口：发送的是提示词、当前场景摘要（实体名字 / 位置 / 姿势等）和你的输入，识图模式还有压缩后的图片；对话记录只在当前页面会话里。
+
+<!-- ai-vocab:start（npm run docs:ai 生成，勿手改）-->
+**操作（ops）**
+
+```
+{ op:'clear' }  // 清空场景（实体与动画；天空 / 地面 / 比例 / 全景保留）。只在生成新场景 / 识图模式，必须是第一条
+{ op:'scene', sky?:"#rrggbb", ground?:{visible?:true|false, height?:米}, ratio?:<取景比例 ratio>, panorama?:'none' }  // 场景参数；panorama 只能是 'none'（清除全景）
+{ op:'add_character', name:"名字", body:<体型 body>, pos:[x,y,z], yaw?:度, pose?:<姿势 pose>, color?:"#rrggbb" }  // 加角色；pose 默认站立
+{ op:'add_prop', name:"名字", kind:<道具 kind>, pos:[x,y,z], yaw?:度, scale?:倍数|[x,y,z], color?:"#rrggbb" }  // 加道具
+{ op:'add_camera', name:"名字", pos:[x,y,z], lookAt:"实体名"|[x,y,z], fov?:度 }  // 加机位，对准 lookAt（实体注视点或坐标）；fov 默认 40
+{ op:'add_group', name:"名字", members:["名字",…] }  // 把已存在的 ≥ 2 个独立角色打成一组（保留各自位置）
+{ op:'add_crowd', name:"名字", rows:1–6, cols:1–6, spacing?:米, pos:[x,y,z], yaw?:度, body?:<体型 body> }  // 群众阵列（行 × 列网格，成员自动命名）；spacing 默认 1.2
+{ op:'remove', target:"实体名" }  // 删除实体（连同引用它的路径 / 约束 / 关键帧；删组连成员一起删）
+{ op:'move', target:"实体名", pos?:[x,y,z], yaw?:度, scale?:倍数|[x,y,z] }  // 改手动位置 / 朝向 / 缩放（机位只能改 pos，并保持对准原注视点）
+{ op:'set_pose', target:"实体名", preset:<姿势 pose> }  // 换姿势（对组 = 全部成员）
+{ op:'set_path', target:"实体名", path:{kind:'points', points:[[x,y,z],…]} | {kind:'line', to:"实体名"|[x,y,z]} | {kind:'arc', center:"实体名"|[x,y,z], sweep?:度, dir?:<环绕 dir>} | {kind:'toward', target:"实体名", stop?:米}, start?:秒, duration?:秒, speed?:<路径速度 speed>, orient?:<路径朝向 orient> }  // 沿路径移动（替换已有路径）；duration 默认按步速 1.3 m/s 估算
+{ op:'clear_path', target:"实体名" }  // 删除路径
+{ op:'camera_move', target:"实体名", preset:<运镜 preset>, subject?:"实体名"|[x,y,z], amount?:米, dir?:<方向>, sweep?:度, duration?:秒, append?:true|false }  // 运镜：生成机位路径并注视主体（subject 默认最近的角色）；append=true 接在已有运镜之后，否则替换已有运镜
+{ op:'clear_moves', target:"实体名" }  // 清除机位的运镜（路径 + 约束 + 旋转关键帧）
+{ op:'look_at', target:"实体名", subject:"实体名"|[x,y,z], start?:秒, end?:秒 }  // 机位注视主体（start / end 省略 = 全程）
+{ op:'follow', target:"实体名", subject:"实体名", offset?:[x,y,z], start?:秒, end?:秒 }  // 机位刚性跟随主体；offset 默认 = 当前相对位置
+{ op:'keyframe', target:"实体名", property:<关键帧属性 property>, t:秒, value:[x,y,z]|数（fov）, ease?:<缓动 ease> }  // 打一个关键帧（同一时刻覆盖）
+{ op:'timeline', duration?:秒, fps?:1–120, mainCamera?:"机位名"|null }  // 时间轴时长 / 帧率 / 主机位（导出视频用主机位出画）
+```
+
+**词汇表**
+
+```
+体型 body：male（男性素体，身高 1.75 m） / female（女性素体，身高 1.62 m） / tall（高大素体，身高 2.05 m） / small（矮小素体，身高 1.25 m） / broad（宽厚素体，身高 1.7 m） / slim（纤细素体，身高 1.78 m） / xbot（Xbot 素体，身高 1.75 m）
+姿势 pose：stand（站立） / tpose（T型） / walk（行走） / run（跑步） / akimbo（叉腰） / bow（鞠躬） / think（思考） / fight（格斗） / kick（踢球） / throw（投掷） / push（推进） / wave（招手） / reach（伸手） / sit（坐姿） / cross（抱臂）
+道具 kind：box（方块） / cylinder（圆柱） / sphere（球体） / mannequin（人体素模）
+运镜 preset（camera_move）：
+- push_in（推：沿机位→主体的水平连线靠近）· 参数：amount · 默认时长 3 s
+- pull_out（拉：沿连线远离主体）· 参数：amount · 默认时长 3 s
+- truck（横移：垂直于连线水平平移（左右以机位视角为准））· 参数：amount、dir（left 向左 / right 向右） · 默认时长 3 s
+- crane（升降：竖直平移）· 参数：amount、dir（up 升 / down 降） · 默认时长 3 s
+- pan（摇：机位不动，从当前朝向摇到对准主体）· 参数：无 · 默认时长 2 s
+- half_orbit（半环绕：以主体为圆心、当前水平距离为半径、在当前高度绕行）· 参数：sweep、dir（ccw 逆时针 / cw 顺时针） · 默认时长 5 s
+- circle（环绕：同半环绕，默认绕满一整圈（闭合））· 参数：sweep、dir（ccw 逆时针 / cw 顺时针） · 默认时长 8 s
+运镜参数：amount = 距离（米；推默认当前距离 × 0.4、拉 × 0.6、横移 2、升降 1；推进后离主体至少留 0.3 m）；dir = 方向；sweep = 扫过角度（度，0–360；半环绕默认 180、环绕 360）
+路径 path.kind（set_path）：
+- points（点击落点）：从实体当前位置出发，依次经过 points 里的点
+- line（直线）：从实体当前位置直线走到 to（坐标或实体名）
+- arc（环绕）：以 center（坐标或实体名）为圆心、当前位置到圆心的水平距离为半径绕行 sweep 度（默认 180，dir 默认 ccw）
+- toward（走到）：朝 target（实体名）走，停在它前方 stop 米处（水平距离；角色默认 0.8，机位默认 1.5）
+环绕路径 dir：ccw（逆时针，俯视） / cw（顺时针，俯视）
+路径速度 speed：linear（匀速） / smooth（缓入缓出（默认））
+路径朝向 orient：tangent（朝向跟随路径切线（角色 / 道具 / 组默认）） / keep（保持原朝向（机位默认））
+关键帧属性 property：pos（位置 [x,y,z]（米）） / rot（旋转 [x,y,z]（XYZ 欧拉角，度）） / scale（缩放 [x,y,z]（倍数，机位不可用）） / fov（视野（度，10–120，只有机位））
+缓动 ease：linear（线性插值） / smooth（缓入缓出） / step（阶跃（保持到下一键））
+约束：lookAt（注视：机位始终对准主体（look_at）） / follow（跟随：机位与主体保持相对位置刚性跟随（follow））
+取景比例 ratio：auto / 21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16
+```
+<!-- ai-vocab:end -->
 
 ## ⌨️ 操作
 
@@ -189,6 +279,13 @@ Object.assign(cm.formOf(cam), { name: 'push_in', subject: a.id }); cm.request(ca
 src/
 ├─ main.js              入口：实例化并串联各模块（UI 订阅 app 事件）
 ├─ config.js            体型 / 道具 / 取景比例 / 全景规则（单一事实来源）
+├─ ai/                  AI 生成（阶段 H）：模型只输出 ops，校验后在文档拷贝上执行
+│  ├─ vocab.js          词汇表（全部从代码枚举生成，只补中文解释）
+│  ├─ ops.js            ops 规格 + validateOps（错误定位到 ops[i].字段）
+│  ├─ apply.js          compileOps / applyOps（一次 = 一步撤销）/ summarize 场景摘要
+│  ├─ provider.js       OpenAICompatProvider（fetch）/ MockProvider（selftest）/ 本机设置
+│  ├─ prompt.js         系统提示 / 用户消息 / 重试消息 / 范例
+│  └─ agent.js          重试回路 AiAgent（app.ai）
 ├─ app/
 │  ├─ App.js            应用状态：实体清单 / 选择 / 视角切换 / 场景参数；变化以事件广播
 │  ├─ History.js        撤销 / 重做（场景文档快照栈）
@@ -212,6 +309,7 @@ src/
 ├─ doc/                 场景文档：导演台全部场景状态 ↔ 一份可校验的 JSON
 │  ├─ schema.js         版本号 / 文档形状说明 / 默认值 / validate（错误定位到字段路径）
 │  ├─ serialize.js      toDocument / loadDocument（先建好再一次性替换，失败不留半个场景）
+│  ├─ edit.js           作用于文档的纯函数：新建角色 / 群众 / 打组 / 路径 / 运镜 / 删除（界面与 AI 共用）
 │  └─ migrate.js        按版本逐级升级
 ├─ anim/                动画内核（无界面）：文档里的 timeline / paths / constraints → evaluate(t)
 │  ├─ Timeline.js       数据持有 + idle/active + base 快照 + evaluate（关键帧 → 路径/步态 → 约束）+ 编辑 API
@@ -230,14 +328,15 @@ src/
 │  └─ Pose.js           姿势数据（values，0 = 站立）
 ├─ calib.js             骨骼档案校准页（calib.html，开发用）
 ├─ entities/            Entity 基类 + Character / Prop / Camera / Crowd / 姿势预设
-├─ ui/                  Dock / Outliner / Inspector / ScenePanel / 姿势滑条 / 弹层 / 图标
+├─ ui/                  Dock / Outliner / Inspector / ScenePanel / 姿势滑条 / 弹层 / AiPanel（AI 抽屉）/ 图标
 │  └─ timeline/         时间轴面板：TimelinePanel（布局 / 播放头 / 快捷键）· Transport 播放条 · Ruler 标尺
 │                       · TrackRows 轨道行 · keyDrag 拖键 / 区间条 / 弹出菜单 · animState 菱形状态
 ├─ util/                事件总线 / 度量 / 骨骼 / 素材库 / DOM helper
 └─ styles/             style.css · timeline.css
 public/assets/          Xbot.glb（中性素体，meshopt 压缩）
 public/assets/figures/  BodyKun / BodyChan 关节人偶 GLB + 交接文档
-tests/                  node 单元测试（pathGen / cameraMoves）
+tests/                  node 单元测试（pathGen / cameraMoves / docEdit / aiOps / aiApply）
+scripts/                gen-ai-vocab.mjs（README AI 词汇表块）
 docs/                   交接文档 / 技术规划 / 任务说明（已完成的在 docs/done/）
 ```
 

@@ -173,7 +173,7 @@ export class AiPanel {
     });
     const reply = [];
     if (t.status === 'running') reply.push(el('div', { class: 'ai-status run', text: `生成中 · 第 ${t.attempts.length} 次尝试…` }));
-    if (t.note && t.status !== 'running') reply.push(el('div', { class: 'ai-note', text: t.note }));
+    if (t.note && t.status === 'ok') reply.push(el('div', { class: 'ai-note', text: t.note })); // 失败轮的 note 描述的是没生效的输出，不显示
     if (t.status === 'ok') {
       const r = t.result;
       const renames = Object.entries(r.renames || {}).map(([a, b]) => `「${a}」重名，改为「${b}」`);
