@@ -29,8 +29,12 @@
 //   node selftest.mjs cam
 //     机位运镜验收（阶段 F）：Inspector 运镜段真实操作 —— 半环绕盯人 / 推拉 / 横移升降 / 摇、清除、追加 + 段列表 + 删末段 + ⌘Z、
 //     机位画路径、主机位播放（视口 ≡ 主机位 snapshot）、含运镜文档往返。产物在 test-output/cam/。
+//   node selftest.mjs export
+//     导出视频验收（阶段 G）：精灵名牌进画面 / 位置一致、离屏帧 ≡ snapshot、两次导出逐帧 md5 相同且播放头 / 文档 / 撤销不变、
+//     分辨率与比例、MP4 文件（ffprobe 或 mp4 盒子解析）、取消、不支持的浏览器、导出帧干净。产物在 test-output/export/。
 //   pathGen / cameraMoves 单元测试不起浏览器：npm run test:unit
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
 import { createServer } from 'vite';
@@ -187,6 +191,16 @@ if (CMD === 'path') {
 
 if (CMD === 'cam') {
   await camTest();
+  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
+  await browser.close();
+  await server?.close();
+  const failed = results.filter((r) => !r.pass).length;
+  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
+  process.exit(failed ? 1 : 0);
+}
+
+if (CMD === 'export') {
+  await exportTest();
   ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
   await browser.close();
   await server?.close();
@@ -1906,6 +1920,118 @@ async function camTest() {
   // ---- 12 第 0 节修正后的属性面板（角色 Y = 0.00、缩放 1.00）----
   await pickInOutliner(ids.An);
   await page.screenshot({ path: `${OUT}/12_panel_units.png`, clip: await panelClip() });
+}
+
+// ---- 阶段 G：导出视频 ----
+function md5(buf) { return crypto.createHash('md5').update(buf).digest('hex'); }
+function dataURLBuf(url) { return Buffer.from(url.split(',')[1], 'base64'); }
+
+/** 导出验收场景：走路角色（直线路径）+ 第二个角色 + 半环绕盯人的主机位 + 全景图。 */
+async function buildExportScene() {
+  return page.evaluate(async () => {
+    const { createEmptyDocument } = await import('/src/doc/schema.js');
+    const { aimPoint } = await import('/src/anim/Constraint.js');
+    const a = window.__app;
+    a.playback.stop();
+    await a.loadDocument(createEmptyDocument());
+    const m = await a.addCharacter('male');
+    m.root.position.x = -1.6;
+    const f = await a.addCharacter('female');
+    f.root.position.set(1.2, f.root.position.y, -0.8);
+    const tl = a.timeline;
+    tl.setDuration(6);
+    tl.addPath({ target: m.id, points: [[-1.6, 0, 0], [1.6, 0, 0.4]], start: 0, duration: 4, speed: 'smooth', orient: 'tangent' });
+    a.select(m.id);
+    const c = a.addCamera('front_full');
+    c.aimAt(a.stage.world.localToWorld(aimPoint(a, m.id).clone()));
+    const mv = a.cameraMoves;
+    mv.setName(c, 'half_orbit');
+    mv.formOf(c).subject = m.id;
+    const seg = mv.commit(c, mv.build(c));
+    tl.setMainCamera(c.id);
+    await a.panorama.setFromAsset({ url: './assets/panoramas/pano-sunset.jpg', title: '威尼斯黄昏' });
+    for (let i = 0; i < 50 && !a.panorama.active; i++) await new Promise((r) => setTimeout(r, 100));
+    a.select(null);
+    a.rig.controls.target.set(0, 0.9, 0); a.stage.camera.position.set(2.5, 4.5, 9); a.rig.controls.update();
+    a.history.reset();
+    return { m: m.id, f: f.id, c: c.id, mName: m.name, cName: c.name, seg: !!seg, pano: a.panorama.active };
+  });
+}
+
+/** 播放头 / 文档 / 撤销栈的状态指纹（导出前后比对）。 */
+function exportState() {
+  return page.evaluate(() => {
+    const a = window.__app;
+    const d = a.toDocument();
+    d.meta.updatedAt = null;
+    return { active: a.timeline.active, time: a.playback.time, doc: JSON.stringify(d), hist: a.history.entries.length, idx: a.history.index };
+  });
+}
+
+async function exportTest() {
+  const OUT = 'test-output/export';
+  fs.rmSync(OUT, { recursive: true, force: true });
+  fs.mkdirSync(`${OUT}/frames`, { recursive: true });
+  // 主画布需 ≥ 1920×1080，stage.snapshot(1920×1080) 才不缩小（验收 3 对比用）
+  await page.setViewport({ width: 1600, height: 900, deviceScaleFactor: 2 });
+  await page.evaluate(() => { const st = window.__app.stage; st.renderer.setPixelRatio(2); st.onResize(); }); // 像素比只在启动时读取
+  await page.exposeFunction('__saveFile', (name, url) => fs.writeFileSync(`${OUT}/${name}`, dataURLBuf(url)));
+  const ids = await buildExportScene();
+  ok('导出场景：走路角色 + 半环绕主机位 + 全景', ids.seg && ids.pano, JSON.stringify(ids));
+  await settle(200);
+
+  // ---- 验收 3 帧 = 快照 ----
+  await page.evaluate(async () => {
+    const a = window.__app;
+    const { renderFrame } = await import('/src/app/VideoExporter.js');
+    const cam = a.findCamera(a.timeline.mainCameraId);
+    const fr = await renderFrame(a, 2.0, { width: 1920, height: 1080 });
+    await window.__saveFile('03_frame.png', fr.toDataURL('image/png'));
+    a.timeline.evaluate(2.0);
+    const snap = a.withCleanRender(() => a.stage.snapshot(cam.cam, { width: 1920, height: 1080 }));
+    await window.__saveFile('03_snapshot.png', snap.toDataURL('image/png'));
+    a.playback.stop();
+  });
+  const d3 = pixelDiff(`${OUT}/03_frame.png`, `${OUT}/03_snapshot.png`, `${OUT}/03_diff.png`);
+  ok('验收3 renderFrame(2.0) ≡ evaluate(2.0) 后 snapshot(主机位, 1920×1080)', d3 < 0.005, `差异 ${(d3 * 100).toFixed(4)}%`);
+
+  // ---- 验收 4 离线确定性 + 播放头 / 文档 / 撤销不变 ----
+  await page.evaluate(() => window.__app.playback.seek(1.25)); // 导出前处于 active（暂停在 1.25 s）
+  await settle();
+  const before = await exportState();
+  const runs = [];
+  for (let run = 0; run < 2; run++) {
+    const hashes = await page.evaluate(async (run) => {
+      const a = window.__app;
+      const { renderFrames, pixelsToCanvas } = await import('/src/app/VideoExporter.js');
+      const out = [];
+      await renderFrames(a, { width: 1280, height: 720, fps: 30, range: [0, 1] }, async (px, { i, width, height }) => {
+        const url = pixelsToCanvas(px, width, height).toDataURL('image/png');
+        out.push(url.length);
+        await window.__saveFile(`frames/run${run}_${String(i).padStart(3, '0')}.png`, url);
+      });
+      return out.length;
+    }, run);
+    runs.push(hashes);
+  }
+  const files = (r) => fs.readdirSync(`${OUT}/frames`).filter((f) => f.startsWith(`run${r}_`)).sort();
+  const h0 = files(0).map((f) => md5(fs.readFileSync(`${OUT}/frames/${f}`)));
+  const h1 = files(1).map((f) => md5(fs.readFileSync(`${OUT}/frames/${f}`)));
+  const same = h0.length === 30 && h0.every((h, i) => h === h1[i]);
+  const moving = new Set(h0).size > 20; // 角色在走、机位在转：帧应各不相同
+  ok('验收4 同一文档导出两次 30 帧 PNG 序列逐帧 md5 相同', same && moving, `帧数 ${runs.join('/')}，不同帧 ${new Set(h0).size}/30`);
+  const after = await exportState();
+  ok('验收4 导出后播放头回到导出前（时间 + active）、toDocument 不变、History 不变',
+    after.active === before.active && after.time === before.time && after.doc === before.doc && after.hist === before.hist && after.idx === before.idx,
+    `active ${before.active}→${after.active} t ${before.time}→${after.time} doc ${after.doc === before.doc} hist ${before.hist}/${before.idx}→${after.hist}/${after.idx}`);
+  await page.evaluate(() => window.__app.playback.stop());
+  const idleBefore = await exportState();
+  await page.evaluate(async () => {
+    const { renderFrames } = await import('/src/app/VideoExporter.js');
+    await renderFrames(window.__app, { width: 320, height: 180, fps: 10, range: [0, 0.5] });
+  });
+  const idleAfter = await exportState();
+  ok('验收4 导出前 idle → 导出后仍 idle、文档不变', !idleAfter.active && idleAfter.time === 0 && idleAfter.doc === idleBefore.doc, `active=${idleAfter.active} t=${idleAfter.time}`);
 }
 
 async function shootPoses(outDir, bodyKey) {

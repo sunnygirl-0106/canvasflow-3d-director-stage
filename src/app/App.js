@@ -703,11 +703,14 @@ export class App extends Emitter {
     }
   }
 
-  /** 跨异步的洁净渲染区间（导出视频逐帧 await 用），须与 endCleanRender 成对；可嵌套（最外层结束才恢复）。 */
-  beginCleanRender() {
+  /**
+   * 跨异步的洁净渲染区间（导出视频逐帧 await 用），须与 endCleanRender 成对；可嵌套（最外层结束才恢复）。
+   * labels=false：本区间不画名牌（导出「名牌」开关关闭时）。
+   */
+  beginCleanRender({ labels = true } = {}) {
     this._cleanDepth++;
     this.hideOverlays();
-    this.labelSprites.beginClean();
+    this.labelSprites.beginClean({ labels });
   }
 
   /** 隐藏 gizmo / 选中环 / 相机可视化 / 路径 overlay（洁净渲染区间内，导出每帧渲染前再调一次防被事件重新显示）。 */

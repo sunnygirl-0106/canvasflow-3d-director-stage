@@ -50,10 +50,10 @@ export class LabelSprites {
   }
 
   /** 洁净渲染开始：按 scene.labels 显示精灵（机位名牌隐藏）。可嵌套；结束后精灵留作缓存（机位预览每帧都会走这里）。 */
-  beginClean() {
+  beginClean({ labels = true } = {}) {
     this._clean++;
     this.sync({ hideCameras: true });
-    this.group.visible = this.app.sceneState.labels;
+    this.group.visible = labels && this.app.sceneState.labels;
   }
 
   endClean() {

@@ -38,7 +38,7 @@ export async function exportVideo(app, { width, height, fps, range:[t0,t1], labe
 ```
 - 分辨率：由「取景比例」决定宽高比（`auto` 视为 16:9），用户选短边 720 / 1080 / 1440；宽高取偶数（H.264 要求）。
 - 渲染：新建一个**离屏** `WebGLRenderTarget(width, height, { samples: 4 })`，用主机位相机（`mainCameraId`；未设用当前机位；都没有则拒绝并提示"请先添加机位"）设置 `aspect = width/height` 渲染进去，再 `readRenderTargetPixels` → `ImageData` → `createImageBitmap`（翻转 Y）→ `VideoFrame`。不要动主 canvas 的尺寸（避免闪烁和布局抖动）。
-- 帧循环：`for i in 0..N-1: t = t0 + i/fps; timeline.evaluate(t); render; encode`。N = `round((t1−t0)·fps)+1`。每帧 `await` 一次让出主线程，进度条才能动；`signal` 取消时停止并清理。
+- 帧循环：`for i in 0..N-1: t = t0 + i/fps; timeline.evaluate(t); render; encode`。N = `round((t1−t0)·fps)`（不含终点：最后一帧在 t1 − 1/fps，视频时长 = 范围长度；3 s × 30 fps = 90 帧）。每帧 `await` 一次让出主线程，进度条才能动；`signal` 取消时停止并清理。
 - 导出期间：`timeline` 进入 active（用现有 `evaluate`），结束后恢复导出前的播放头（`seek(原 t)` 或 `stop()` 回 idle，取决于导出前状态）；`withCleanRender` 包住全程（gizmo / 选中环 / 视锥 / 路径 overlay / 播放亮点都不出现）；History、自动保存不触发（导出不改文档）。
 - 编码：`VideoEncoder`，codec `avc1.42001f`（Baseline，720p）/ `avc1.4d002a`（Main，1080p+），`bitrate` 按分辨率（720p 6 Mbps、1080p 12 Mbps、1440p 20 Mbps），`framerate=fps`，`latencyMode:'quality'`，关键帧每 2 秒。编码后的 chunk 交给 `mp4-muxer`（`Muxer` + `ArrayBufferTarget`，`fastStart:'in-memory'`），结束 `finalize()` → Blob → 下载。
 - 文件名：`${meta.name}_${width}x${height}_${fps}fps.mp4`。
