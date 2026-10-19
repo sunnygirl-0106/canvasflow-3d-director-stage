@@ -7,6 +7,7 @@ import { Outliner } from './ui/Outliner.js';
 import { Inspector } from './ui/Inspector.js';
 import { ScenePanel } from './ui/ScenePanel.js';
 import { TimelinePanel } from './ui/timeline/TimelinePanel.js';
+import { ExportModal } from './ui/ExportModal.js';
 import { toast } from './util/dom.js';
 import { AutoSave } from './app/SceneFile.js';
 
@@ -22,11 +23,13 @@ const app = new App({ stage, rig, labelLayer: $('labelLayer') });
 const navGizmo = new NavGizmo($('navsvg'), stage.camera, () => app.resetView());
 
 // ---- ui（各自订阅 app 事件）----
+// 导出视频弹层（阶段 G）：须先于时间轴面板创建 —— 它的 window 捕获阶段键盘监听要排在最前（导出中 / 弹层打开时拦下全部快捷键，Esc = 取消）
+const exportModal = new ExportModal(app);
 new ScenePanel($('scenePanel'), app);
 new Inspector($('inspector'), app);
 new Outliner($('outliner'), app, $('search'));
 const timelinePanel = new TimelinePanel($('timeline'), app);
-new Dock($('dock'), app, { timelinePanel });
+new Dock($('dock'), app, { timelinePanel, exportModal });
 
 // 右栏：未选中 → 3D场景面板；选中 → 属性面板
 app.on('selection', (ent) => {
@@ -90,6 +93,7 @@ window.addEventListener('keydown', (e) => {
 // 调试句柄（selftest 也通过它驱动）
 window.__app = app;
 window.__timelinePanel = timelinePanel;
+window.__exportModal = exportModal;
 
 // ---- 按需渲染循环 ----
 stage.startLoop({

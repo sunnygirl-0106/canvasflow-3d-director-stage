@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 
 // 导出视频（阶段 G）：第 i 帧 = timeline.evaluate(t0 + i/fps) 后用主机位离屏渲染。
 // evaluate 是纯函数，所以导出完全离线、逐帧，与机器快慢无关；不动主 canvas 尺寸，不改文档。
@@ -36,6 +37,39 @@ export function exportCamera(app) {
   const ent = app.findCamera(app.activeCameraId) || sel || app.cameras[0];
   return ent ? { ent, source: 'current' } : null;
 }
+
+// H.264 级别按每帧宏块数选（Baseline 3.1 / Main 4.2 是任务说明的默认；21:9、1440p 超出该级别的帧尺寸上限时升级）
+const AVC_LEVELS = [[3600, '1f'], [8192, '2a'], [22080, '32'], [36864, '33']];
+
+/** 编码参数：720p Baseline 6 Mbps，1080p Main 12 Mbps，1440p Main 20 Mbps；关键帧每 2 秒（encode 时指定）。 */
+export function encoderConfig(width, height, fps) {
+  const short = Math.min(width, height);
+  const mbs = Math.ceil(width / 16) * Math.ceil(height / 16);
+  const min = short <= 720 ? '1f' : '2a';
+  const level = AVC_LEVELS.find(([max, lv]) => mbs <= max && lv >= min)?.[1] || '33';
+  return {
+    codec: (short <= 720 ? 'avc1.4200' : 'avc1.4d00') + level,
+    width, height,
+    bitrate: short <= 720 ? 6e6 : short <= 1080 ? 12e6 : 20e6,
+    framerate: fps,
+    latencyMode: 'quality',
+    avc: { format: 'avc' },
+  };
+}
+
+/** 浏览器有 WebCodecs 编码器（Chrome / Edge）。 */
+export function hasWebCodecs() {
+  return typeof window.VideoEncoder === 'function' && typeof window.VideoFrame === 'function';
+}
+
+/** 能力检测：WebCodecs 存在且支持该配置。 */
+export async function isExportSupported(width, height, fps) {
+  if (!hasWebCodecs()) return false;
+  try { return !!(await VideoEncoder.isConfigSupported(encoderConfig(width, height, fps))).supported; }
+  catch { return false; }
+}
+
+export const UNSUPPORTED_MSG = '导出视频需要 Chrome 或 Edge 浏览器';
 
 export class ExportError extends Error {}
 
@@ -147,6 +181,47 @@ function renderAt(app, off, camEnt, t) {
   app.timeline.evaluate(t);
   app.hideOverlays(); // 求值可能触发 pov 同步等事件：每帧再确认一次 overlay 隐藏
   return off.render(app.stage.scene, camEnt.cam);
+}
+
+/**
+ * 导出 MP4：逐帧离屏渲染 → VideoEncoder（H.264）→ mp4-muxer（fastStart in-memory）→ Blob。
+ * 取消（signal）时抛 AbortError，不产生文件。下载由调用方处理（返回 filename）。
+ * @param {{width:number, height:number, fps:number, range:[number,number], labels?:boolean,
+ *          signal?:AbortSignal, onProgress?:(i:number, n:number)=>void}} opts
+ * @returns {Promise<{blob:Blob, filename:string, frames:number, width:number, height:number, fps:number}>}
+ */
+export async function exportVideo(app, { width, height, fps, range, labels = true, signal, onProgress }) {
+  if (!hasWebCodecs()) throw new ExportError(UNSUPPORTED_MSG);
+  const cfg = encoderConfig(width, height, fps);
+  if (!(await isExportSupported(width, height, fps))) throw new ExportError(`当前浏览器不支持 ${width}×${height} 的 H.264 编码`);
+
+  const target = new ArrayBufferTarget();
+  const muxer = new Muxer({ target, video: { codec: 'avc', width, height, frameRate: fps }, fastStart: 'in-memory' });
+  let encErr = null;
+  const encoder = new VideoEncoder({
+    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    error: (e) => { encErr = e; },
+  });
+  encoder.configure(cfg);
+  const gop = Math.max(1, Math.round(fps * 2));
+  const dur = Math.round(1e6 / fps);
+  try {
+    const { n } = await renderFrames(app, { width, height, fps, range, labels, signal, onProgress }, async (pixels, { i }) => {
+      if (encErr) throw encErr;
+      const frame = new VideoFrame(pixels, { format: 'RGBA', codedWidth: width, codedHeight: height, timestamp: Math.round((i * 1e6) / fps), duration: dur });
+      try { encoder.encode(frame, { keyFrame: i % gop === 0 }); }
+      finally { frame.close(); }
+      // 背压：编码器积压过多时等它消化（否则 1080p 帧会堆满内存）
+      while (encoder.encodeQueueSize > 4 && !encErr) await new Promise((r) => setTimeout(r, 2));
+    });
+    await encoder.flush();
+    if (encErr) throw encErr;
+    muxer.finalize();
+    const name = (app.docMeta.name || '未命名场景').replace(/[\\/:*?"<>|]/g, '_');
+    return { blob: new Blob([target.buffer], { type: 'video/mp4' }), filename: `${name}_${width}x${height}_${fps}fps.mp4`, frames: n, width, height, fps };
+  } finally {
+    if (encoder.state !== 'closed') encoder.close();
+  }
 }
 
 /**

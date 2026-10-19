@@ -236,6 +236,7 @@ main { flex: 1; display: flex; min-height: 0; }
 .menu-item .mi-check { margin-left: 12px; color: var(--accent); font-size: 12px; }
 .menu-item .mi-key { margin-left: 16px; color: var(--dim2); font-size: 11px; letter-spacing: .04em; }
 .menu-item.disabled { opacity: .38; pointer-events: none; }
+.menu-item.unsupported { opacity: .38; }
 
 /* 菜单分组标题（机位预设） */
 .menu-group { font-size: 11px; color: var(--dim2); padding: 8px 12px 4px; letter-spacing: .4px; }
@@ -537,3 +538,34 @@ select.dropdown:focus { border-color: var(--line2); }
 .pov-label { align-self: center; font-size: 12px; color: var(--dim); padding: 0 10px 0 6px; white-space: nowrap; }
 .pov-label.main { color: var(--accent); font-weight: 600; }
 .pov-hint { position: absolute; left: 14px; top: 12px; z-index: 5; font-size: 12px; color: var(--dim); pointer-events: none; }
+
+/* ===== 导出视频弹层（阶段 G，沿用历史记录弹层外框）===== */
+.export-box { width: min(460px, 94vw); height: auto; max-height: 92vh; }
+.export-box [hidden] { display: none !important; }
+.ex-body { padding: 4px 24px 8px; border-top: 1px solid var(--line); }
+.ex-cam { display: flex; align-items: center; gap: 8px; margin: 16px 0 18px; font-size: 13.5px; font-weight: 600; }
+.ex-cam.err, .ex-est.err, .ex-unsup { color: #ff8a80; }
+.ex-cam-tag { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--panel3); color: var(--dim); }
+.ex-cam-tag.main { background: rgba(59,130,246,.18); color: #8fb6ff; }
+.ex-dim { color: var(--dim); font-weight: 400; }
+.ex-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.ex-row > label { flex: 0 0 52px; font-size: 12px; color: var(--dim); }
+.ex-ctrl { flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; }
+.ex-ctrl .dropdown { flex: 1; min-width: 0; }
+.ex-range { display: flex; align-items: center; gap: 6px; flex-basis: 100%; }
+.ex-range .num-input { flex: 0 0 72px; background: var(--panel2); border-radius: 8px; padding: 7px 8px; }
+.ex-check { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
+.ex-note { font-size: 11.5px; color: var(--dim2); margin: -6px 0 12px 64px; }
+.ex-est { font-size: 12.5px; color: var(--txt); margin: 16px 0 6px; font-variant-numeric: tabular-nums; }
+.ex-progress { padding: 4px 24px 0; }
+.ex-bar { height: 6px; border-radius: 3px; background: var(--panel3); overflow: hidden; }
+.ex-fill { height: 100%; width: 0; background: var(--accent); transition: width .1s linear; }
+.ex-ptext { font-size: 12px; color: var(--dim); margin-top: 8px; font-variant-numeric: tabular-nums; }
+.ex-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 16px 24px 20px; }
+.ex-foot .minibtn { display: inline-block; width: auto; margin: 0; padding: 8px 18px; }
+.ex-foot .minibtn.primary { background: var(--accent); color: #fff; }
+.ex-foot .minibtn[disabled] { opacity: .45; cursor: default; }
+.ex-unsup { flex: 1; font-size: 12px; }
+/* 导出中：主界面置灰、不响应（弹层在其上） */
+body.exporting #timeline, body.exporting .side, body.exporting #dock { opacity: .4; pointer-events: none; }
+body.exporting #viewport { pointer-events: none; }

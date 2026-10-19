@@ -35,6 +35,7 @@
 //   pathGen / cameraMoves 单元测试不起浏览器：npm run test:unit
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
 import { createServer } from 'vite';
@@ -2032,6 +2033,284 @@ async function exportTest() {
   });
   const idleAfter = await exportState();
   ok('验收4 导出前 idle → 导出后仍 idle、文档不变', !idleAfter.active && idleAfter.time === 0 && idleAfter.doc === idleBefore.doc, `active=${idleAfter.active} t=${idleAfter.time}`);
+
+  // ---- 验收 1 / 2 名牌进画面、位置一致 ----
+  const lab = await page.evaluate(async (ids) => {
+    const a = window.__app;
+    const { labelAnchor } = await import('/src/app/Labels.js');
+    const cam = a.findCamera(a.timeline.mainCameraId);
+    const W = 1920, H = 1080;
+    const layer = document.getElementById('labelLayer');
+    const m = a.findEntity(ids.m);
+    /** 1080p 快照 + 角色 m 名牌锚点在画面里的像素坐标（与 DOM 名牌同一套 labelAnchor + project）。 */
+    const shoot = (file) => {
+      cam.cam.aspect = W / H; cam.cam.updateProjectionMatrix();
+      const p = labelAnchor(m, a.stage.world.scale.y, m.root.position.clone()).project(cam.cam);
+      const cv = a.withCleanRender(() => a.stage.snapshot(cam.cam, { width: W, height: H }));
+      window.__saveFile(file, cv.toDataURL('image/png'));
+      const ax = (p.x * 0.5 + 0.5) * W, ay = (-p.y * 0.5 + 0.5) * H;
+      // 在锚点上方 0–90 px、左右 ±200 px 的窗口里找名牌的白底像素
+      const x0 = Math.max(0, Math.round(ax - 200)), y0 = Math.max(0, Math.round(ay - 90));
+      const w = Math.min(W - x0, 400), h = Math.min(H - y0, Math.round(ay) + 6 - y0);
+      const px = cv.getContext('2d').getImageData(x0, y0, w, h).data;
+      let n = 0, bottom = -1;
+      const white = (i) => px[i] > 245 && px[i + 1] > 245 && px[i + 2] > 245;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (white((y * w + x) * 4)) { n++; bottom = Math.max(bottom, y); }
+      let xmin = Infinity, xmax = -Infinity;
+      const row = bottom - 6; // 底边上方 6 px：圆角已过，左右边界即名牌框宽
+      if (row >= 0) for (let x = 0; x < w; x++) if (white((row * w + x) * 4)) { xmin = Math.min(xmin, x); xmax = Math.max(xmax, x); }
+      return { ax, ay, n, bx: x0 + (xmin + xmax + 1) / 2, by: y0 + bottom + 1, bw: xmax - xmin + 1 };
+    };
+    a.playback.stop();
+    a.setLabelPreview(true);
+    await new Promise((r) => setTimeout(r, 100));
+    const on = shoot('01_labels_on.png');
+    const onState = { dom: getComputedStyle(layer).display, sprites: a.labelSprites.group.children.length, vis: a.labelSprites.debugItem(m).visible };
+    a.setLabelPreview(false);
+    await new Promise((r) => setTimeout(r, 100));
+    const offState = { dom: getComputedStyle(layer).display, sprites: a.labelSprites.group.children.length, groupVis: a.labelSprites.group.visible };
+    a.setLabelsVisible(false);
+    a.setLabelPreview(true);
+    const hidden = shoot('01_labels_scene_off.png');
+    const hiddenState = { dom: getComputedStyle(layer).display, groupVis: a.labelSprites.group.visible };
+    a.setLabelPreview(false);
+    a.setLabelsVisible(true);
+    return { on, onState, offState, hidden, hiddenState };
+  }, ids);
+  ok('验收1 精灵名牌：快照里锚点上方采到名牌白底；DOM 名牌层隐藏',
+    lab.on.n > 1500 && lab.onState.dom === 'none' && lab.onState.vis && lab.onState.sprites >= 2,
+    `白底像素 ${lab.on.n}，DOM=${lab.onState.dom}，精灵 ${lab.onState.sprites}`);
+  ok('验收1 关闭后 DOM 恢复、精灵移除；scene.labels=false 时两者都不显示',
+    lab.offState.dom === 'block' && lab.offState.sprites === 0 && !lab.offState.groupVis && lab.hidden.n === 0 && lab.hiddenState.dom === 'none' && !lab.hiddenState.groupVis,
+    `关闭：DOM=${lab.offState.dom} 精灵 ${lab.offState.sprites}；labels=false：白底 ${lab.hidden.n} DOM=${lab.hiddenState.dom}`);
+  const dpos = Math.hypot(lab.on.bx - lab.on.ax, lab.on.by - lab.on.ay);
+  ok('验收2 精灵名牌框底边中点 与 DOM 名牌锚点 差 < 4 px（1080p）', dpos < 4,
+    `锚点 (${lab.on.ax.toFixed(1)}, ${lab.on.ay.toFixed(1)}) 名牌底 (${lab.on.bx.toFixed(1)}, ${lab.on.by}) 差 ${dpos.toFixed(2)} px，框宽 ${lab.on.bw}`);
+
+  // ---- 验收 5 分辨率与比例 ----
+  const sizes = await page.evaluate(async () => {
+    const { exportSize, EXPORT_RESOLUTIONS } = await import('/src/app/VideoExporter.js');
+    const { RATIO_OPTIONS } = await import('/src/config.js');
+    const all = RATIO_OPTIONS.flatMap(([r]) => EXPORT_RESOLUTIONS.map((x) => ({ r, ...exportSize(r, x.short) })));
+    return { v916: exportSize('9:16', 1080), auto: exportSize('auto', 1080), odd: all.filter((x) => x.width % 2 || x.height % 2), all };
+  });
+  ok('验收5 9:16 + 1080p → 1080×1920；auto → 1920×1080；全部比例 × 分辨率宽高均为偶数',
+    sizes.v916.width === 1080 && sizes.v916.height === 1920 && sizes.auto.width === 1920 && sizes.auto.height === 1080 && !sizes.odd.length,
+    `9:16=${sizes.v916.width}×${sizes.v916.height} auto=${sizes.auto.width}×${sizes.auto.height} 奇数 ${sizes.odd.length}/${sizes.all.length}`);
+
+  // ---- 导出弹层（真实点击）----
+  const dl = path.resolve(`${OUT}/downloads`);
+  fs.mkdirSync(dl, { recursive: true });
+  const bcdp = await browser.target().createCDPSession();
+  await bcdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
+  const openExport = async () => {
+    await clickSel('#dock .dockbtn[title^="场景"]');
+    await page.evaluate(() => [...document.querySelectorAll('#dock .dockmenu.open .menu-item')].find((n) => n.textContent.includes('导出视频')).click());
+    await page.waitForSelector('.export-box');
+    await settle();
+  };
+  const setField = (name, value) => page.evaluate((name, value) => {
+    const n = document.querySelector(`.export-box [data-name="${name}"]`);
+    if (n.type === 'checkbox') n.checked = value; else n.value = String(value);
+    n.dispatchEvent(new Event('change'));
+  }, name, value);
+  const boxClip = () => page.$eval('.export-box', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; });
+  await page.evaluate(() => { window.__app.setRatio('9:16'); });
+  await openExport();
+  const resLabel = await page.$eval('.export-box [data-name="res"]', (s) => s.selectedOptions[0].textContent);
+  await page.evaluate(() => window.__exportModal.close());
+  await page.evaluate(() => { window.__app.setRatio('auto'); });
+  ok('验收5 弹层分辨率显示随取景比例（9:16 1080p）', resLabel.includes('1080×1920'), resLabel);
+
+  // ---- 验收 6 MP4 文件：3 s · 30 fps · 1080p（弹层导出 + 自动下载）----
+  await openExport();
+  await setField('res', 1080);
+  await setField('fps', 30);
+  await setField('range', 'custom');
+  await setField('t0', 0);
+  await setField('t1', 3);
+  const est = await page.$eval('.export-box .ex-est', (n) => n.textContent);
+  const camLine = await page.$eval('.export-box .ex-cam', (n) => n.textContent);
+  await page.screenshot({ path: `${OUT}/11_modal.png`, clip: await boxClip() });
+  const hist0 = await page.evaluate(() => window.__app.history.entries.length);
+  await clickSel('.export-box .ex-start');
+  await page.waitForFunction(() => { const t = document.querySelector('.export-box .ex-ptext')?.textContent || ''; const m = /帧 (\d+)\/(\d+)/.exec(t); return m && +m[1] >= +m[2] * 0.3; }, { timeout: 120000 });
+  const locked = await page.evaluate(() => ({ body: document.body.classList.contains('exporting'), tl: getComputedStyle(document.getElementById('timeline')).pointerEvents, dock: getComputedStyle(document.getElementById('dock')).opacity }));
+  await page.screenshot({ path: `${OUT}/11_progress.png` });
+  await page.waitForFunction(() => !document.querySelector('.export-box'), { timeout: 300000 });
+  const mp4Name = '未命名场景_1920x1080_30fps.mp4';
+  const done = () => fs.existsSync(path.join(dl, mp4Name)) && fs.statSync(path.join(dl, mp4Name)).size > 0 && !fs.readdirSync(dl).some((f) => f.endsWith('.crdownload'));
+  for (let i = 0; i < 100 && !done(); i++) await sleep(100);
+  const mp4Path = path.join(dl, mp4Name);
+  const exists = fs.existsSync(mp4Path);
+  const size = exists ? fs.statSync(mp4Path).size : 0;
+  ok('弹层：机位行显示主机位、估算 90 帧 3 s；导出中界面锁住', camLine.includes('主机位') && est.includes('90 帧') && est.includes('3 s') && locked.body && locked.tl === 'none',
+    `${camLine} | ${est} | ${JSON.stringify(locked)}`);
+  ok('验收6 MP4 文件存在且 ≥ 100 KB（自动下载，文件名 名称_宽x高_fps）', exists && size >= 100 * 1024, `${mp4Name} ${(size / 1024).toFixed(0)} KB`);
+  if (exists) {
+    const box = mp4Info(fs.readFileSync(mp4Path));
+    ok('验收6 mp4 盒子解析（mvhd / tkhd / stsz / avc1）：3.00 s、90 帧、avc1、1920×1080',
+      Math.abs(box.duration - 3) <= 0.05 && box.frames === 90 && box.codec === 'avc1' && box.width === 1920 && box.height === 1080, JSON.stringify(box));
+    const fp = ffprobe(mp4Path);
+    if (fp) ok('验收6 ffprobe：3.00 ± 0.05 s、90 帧、h264、1920×1080',
+      Math.abs(fp.duration - 3) <= 0.05 && fp.frames === 90 && fp.codec === 'h264' && fp.width === 1920 && fp.height === 1080, JSON.stringify(fp));
+    else console.log('ℹ️  本机无 ffprobe：验收6 只用 mp4 盒子解析器验证');
+  }
+  const hist1 = await page.evaluate(() => window.__app.history.entries.length);
+  ok('导出不记撤销', hist1 === hist0, `${hist0}→${hist1}`);
+
+  // ---- 验收 7 取消 ----
+  await page.evaluate(() => window.__app.playback.seek(0.75));
+  const cBefore = await exportState();
+  const filesBefore = fs.readdirSync(dl).length;
+  const errsBefore = errs.length;
+  await openExport();
+  await setField('res', 720);
+  await setField('range', 'all');
+  await clickSel('.export-box .ex-start');
+  await page.waitForFunction(() => { const t = document.querySelector('.export-box .ex-ptext')?.textContent || ''; const m = /帧 (\d+)\/(\d+)/.exec(t); return m && +m[1] >= +m[2] * 0.3; }, { timeout: 120000 });
+  const at = await page.$eval('.export-box .ex-ptext', (n) => n.textContent);
+  await page.keyboard.press('Escape'); // Esc = 取消
+  await page.waitForFunction(() => !window.__app.exporting, { timeout: 30000 });
+  await sleep(800);
+  const cAfter = await exportState();
+  const ui7 = await page.evaluate(() => ({ body: document.body.classList.contains('exporting'), start: !document.querySelector('.export-box .ex-start').hidden, tl: getComputedStyle(document.getElementById('timeline')).pointerEvents }));
+  ok('验收7 导出到 30% 取消：无文件、播放头恢复、UI 解锁、无 console 错误',
+    fs.readdirSync(dl).length === filesBefore && cAfter.time === cBefore.time && cAfter.active === cBefore.active && cAfter.doc === cBefore.doc
+      && !ui7.body && ui7.start && ui7.tl !== 'none' && errs.length === errsBefore,
+    `取消于「${at}」，文件 ${filesBefore}→${fs.readdirSync(dl).length}，t ${cBefore.time}→${cAfter.time}，UI ${JSON.stringify(ui7)}`);
+  await page.evaluate(() => window.__exportModal.close());
+  await page.evaluate(() => window.__app.playback.stop());
+
+  // ---- 验收 8 不支持的浏览器 ----
+  const unsup = await page.evaluate(async () => {
+    window.__VE = window.VideoEncoder;
+    window.VideoEncoder = undefined;
+    document.querySelector('#dock .dockbtn[title^="场景"]').click();
+    const item = [...document.querySelectorAll('#dock .dockmenu.open .menu-item')].find((n) => n.textContent.includes('导出视频'));
+    const greyed = item.classList.contains('unsupported');
+    item.click();
+    const t = document.getElementById('toast').textContent;
+    const noModal = !document.querySelector('.export-box');
+    window.__exportModal.open();
+    await new Promise((r) => setTimeout(r, 50));
+    const btn = document.querySelector('.export-box .ex-start').disabled;
+    const hint = document.querySelector('.export-box .ex-unsup');
+    const res = { greyed, toast: t, noModal, btnDisabled: btn, hint: hint.hidden ? '' : hint.textContent };
+    window.__exportModal.close();
+    window.VideoEncoder = window.__VE;
+    return res;
+  });
+  ok('验收8 window.VideoEncoder = undefined → 菜单项置灰 + 提示、弹层「开始导出」禁用',
+    unsup.greyed && unsup.toast.includes('Chrome 或 Edge') && unsup.noModal && unsup.btnDisabled && unsup.hint.includes('Chrome 或 Edge'), JSON.stringify(unsup));
+
+  // ---- 验收 9 导出帧干净：选中走路角色（gizmo + 选中环 + 路径线）、导演视角（机位视锥）----
+  const clean = await page.evaluate(async (ids) => {
+    const a = window.__app;
+    const { renderFrame } = await import('/src/app/VideoExporter.js');
+    const W = 960, H = 540;
+    a.playback.stop();
+    a.setCameraView(false);
+    const plain = (await renderFrame(a, 1.0, { width: W, height: H })).toDataURL('image/png');
+    a.select(ids.m);
+    a.addCamera('side_track'); // 另一个机位（视锥在主机位画面里）
+    a.select(ids.m);
+    await new Promise((r) => setTimeout(r, 100));
+    const shown = { gizmo: a.gizmo._helper.visible, ring: a.selection.ring.visible, path: a.pathOverlay.visible };
+    const fr = await renderFrame(a, 1.0, { width: W, height: H });
+    // 在路径线 / gizmo / 选中环应出现的屏幕位置采样：不含 accent 蓝、gizmo 红
+    const cam = a.findCamera(a.timeline.mainCameraId).cam;
+    cam.aspect = W / H; cam.updateProjectionMatrix();
+    a.timeline.evaluate(1.0);
+    const m = a.findEntity(ids.m);
+    const pts = [];
+    const path = a.timeline.toJSON().paths.find((p) => p.target === ids.m);
+    const P = (x, y, z) => a.stage.world.localToWorld(m.root.position.clone().set(x, y, z));
+    for (let i = 0; i <= 10; i++) {
+      const [p0, p1] = path.points;
+      pts.push(P(p0[0] + (p1[0] - p0[0]) * i / 10, 0.01, p0[2] + (p1[2] - p0[2]) * i / 10));
+    }
+    const foot = m.root.getWorldPosition(m.root.position.clone());
+    pts.push(foot.clone(), foot.clone().add({ x: 0.5, y: 0, z: 0 }), foot.clone().add({ x: 0, y: 0, z: 0.5 }), foot.clone().add({ x: 0, y: 0.5, z: 0 }));
+    const g = fr.getContext('2d');
+    let bad = 0, sampled = 0;
+    for (const p of pts) {
+      const q = p.project(cam);
+      if (Math.abs(q.x) > 1 || Math.abs(q.y) > 1 || q.z > 1) continue;
+      const x = Math.round((q.x * 0.5 + 0.5) * W), y = Math.round((-q.y * 0.5 + 0.5) * H);
+      const d = g.getImageData(Math.max(0, x - 3), Math.max(0, y - 3), 7, 7).data;
+      sampled++;
+      for (let i = 0; i < d.length; i += 4) {
+        const [r, gg, b] = [d[i], d[i + 1], d[i + 2]];
+        if ((b > 200 && r < 120 && gg > 90 && gg < 190) || (r > 200 && gg < 90 && b < 90)) bad++;
+      }
+    }
+    a.playback.stop();
+    window.__saveFile('09_clean_frame.png', fr.toDataURL('image/png'));
+    return { shown, sampled, bad, same: fr.toDataURL('image/png') === plain };
+  }, ids);
+  ok('验收9 导出帧里没有 gizmo / 选中环 / 视锥 / 路径线（采样无 accent 蓝 / 红；与未选中时的帧逐像素相同）',
+    clean.shown.gizmo && clean.shown.ring && clean.shown.path && clean.sampled >= 8 && clean.bad === 0 && clean.same, JSON.stringify(clean));
+  const after9 = await page.evaluate(() => ({ gizmo: window.__app.gizmo._helper.visible, ring: window.__app.selection.ring.visible, path: window.__app.pathOverlay.visible }));
+  ok('导出结束后 gizmo / 选中环 / 路径 overlay 恢复显示', after9.gizmo && after9.ring && after9.path, JSON.stringify(after9));
+
+  // ---- 验收 11 示例：5 s · 1080p MP4（不入库）----
+  const sample = await page.evaluate(async () => {
+    const a = window.__app;
+    a.select(null);
+    const { exportVideo } = await import('/src/app/VideoExporter.js');
+    const t = performance.now();
+    const out = await exportVideo(a, { width: 1920, height: 1080, fps: 30, range: [0, 5] });
+    const url = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(out.blob); });
+    await window.__saveFile('sample.mp4', url);
+    return { ms: Math.round(performance.now() - t), size: out.blob.size, frames: out.frames };
+  });
+  const sp = ffprobe(`${OUT}/sample.mp4`) || mp4Info(fs.readFileSync(`${OUT}/sample.mp4`));
+  ok('验收11 示例 sample.mp4：5 s · 1080p · 150 帧', sample.frames === 150 && Math.abs(sp.duration - 5) <= 0.05 && sp.frames === 150 && sp.width === 1920,
+    `${(sample.size / 1048576).toFixed(2)} MB，用时 ${(sample.ms / 1000).toFixed(1)} s（headless swiftshader），${JSON.stringify(sp)}`);
+}
+
+/** ffprobe 读时长 / 帧数 / 编码 / 宽高；本机没有 ffprobe 返回 null。 */
+function ffprobe(file) {
+  try {
+    const out = execFileSync('ffprobe', ['-v', 'error', '-count_frames', '-select_streams', 'v:0', '-show_entries',
+      'stream=codec_name,width,height,nb_read_frames:format=duration', '-of', 'json', file], { encoding: 'utf8' });
+    const j = JSON.parse(out);
+    const st = j.streams[0];
+    return { duration: +j.format.duration, frames: +st.nb_read_frames, codec: st.codec_name, width: st.width, height: st.height };
+  } catch { return null; }
+}
+
+/** 最小 mp4 盒子解析：mvhd 时长、首个视频轨 tkhd 宽高、stsd 编码、stsz 帧数。 */
+function mp4Info(buf) {
+  const out = {};
+  const CONTAINERS = new Set(['moov', 'trak', 'mdia', 'minf', 'stbl']);
+  const walk = (start, end) => {
+    for (let p = start; p + 8 <= end;) {
+      let size = buf.readUInt32BE(p);
+      const type = buf.toString('latin1', p + 4, p + 8);
+      let hdr = 8;
+      if (size === 1) { size = Number(buf.readBigUInt64BE(p + 8)); hdr = 16; }
+      if (size < hdr) break;
+      const body = p + hdr;
+      if (CONTAINERS.has(type)) walk(body, p + size);
+      else if (type === 'mvhd') {
+        const v = buf[body];
+        const ts = v === 1 ? buf.readUInt32BE(body + 20) : buf.readUInt32BE(body + 12);
+        const du = v === 1 ? Number(buf.readBigUInt64BE(body + 24)) : buf.readUInt32BE(body + 16);
+        out.duration = du / ts;
+      } else if (type === 'tkhd' && out.width == null) {
+        const v = buf[body];
+        const off = body + (v === 1 ? 88 : 76);
+        out.width = buf.readUInt32BE(off) / 65536;
+        out.height = buf.readUInt32BE(off + 4) / 65536;
+      } else if (type === 'stsd' && !out.codec) out.codec = buf.toString('latin1', body + 12, body + 16);
+      else if (type === 'stsz' && out.frames == null) out.frames = buf.readUInt32BE(body + 8);
+      p += size;
+    }
+  };
+  walk(0, buf.length);
+  return out;
 }
 
 async function shootPoses(outDir, bodyKey) {

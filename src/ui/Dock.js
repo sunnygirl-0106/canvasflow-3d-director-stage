@@ -7,6 +7,8 @@ import { RATIO_OPTIONS, isPanoRatio, BODY_TYPES, PROP_KINDS } from '../config.js
 import { icon } from './icons.js';
 import { exportScene, pickAndImportScene } from '../app/SceneFile.js';
 import { pathModes } from '../app/PathTool.js';
+import { hasWebCodecs, UNSUPPORTED_MSG } from '../app/VideoExporter.js';
+import { toast } from '../util/dom.js';
 
 const svg = (name, w = 21) => icon(name, w);
 
@@ -19,9 +21,10 @@ const TF_MODES = [['translate', 'move', '移动'], ['rotate', 'rotate', '旋转'
 
 // 底部悬浮工具坞：变换 / 添加 / 全景图 / 机位 / 比例 / 截图 / 场景（撤销·重做·导出·导入）/ 时间轴 / 全屏
 export class Dock {
-  constructor(container, app, { timelinePanel } = {}) {
+  constructor(container, app, { timelinePanel, exportModal } = {}) {
     this.app = app;
     this.timelinePanel = timelinePanel;
+    this.exportModal = exportModal;
     this.container = container;
     this.modeBtns = {};
     this._assets = [];
@@ -93,8 +96,8 @@ export class Dock {
     // 6 截图
     const shot = this._btn('shot', '截图', () => app.shots.captureShot());
 
-    // 7 场景：撤销 / 重做 / 导出 / 导入
-    const scene = this._btn('scene', '场景（撤销 / 重做 / 导出 / 导入）', (e) => { e.stopPropagation(); this.sceneMenu.toggle(); });
+    // 7 场景：撤销 / 重做 / 导出 / 导入 / 导出视频
+    const scene = this._btn('scene', '场景（撤销 / 重做 / 导出 / 导入 / 导出视频）', (e) => { e.stopPropagation(); this.sceneMenu.toggle(); });
     this.sceneBtn = scene;
 
     // 8 时间轴（展开 / 折叠底部面板）
@@ -272,8 +275,20 @@ export class Dock {
       this._item('download', '导出场景', () => { this.menu.close(); exportScene(this.app); }),
       this._item('upload', '导入场景', () => { this.menu.close(); pickAndImportScene(this.app); }),
       el('div', { class: 'menu-sep' }),
-      this._item(null, '预览名牌', () => { this.menu.close(); this.app.setLabelPreview(!this.app.labelPreview); }, !!this.app.labelPreview),
+      this._exportItem(),
     ];
+  }
+
+  /** 「导出视频…」：没有 WebCodecs（Safari / Firefox）时置灰，点击只提示。 */
+  _exportItem() {
+    const ok = hasWebCodecs();
+    const item = this._item('video', '导出视频…', () => {
+      this.menu.close();
+      if (!ok) { toast(UNSUPPORTED_MSG); return; }
+      this.exportModal?.open();
+    });
+    if (!ok) { item.classList.add('unsupported'); item.title = UNSUPPORTED_MSG; }
+    return item;
   }
 
   _toggleFullscreen() {
