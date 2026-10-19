@@ -8,6 +8,7 @@ import { Inspector } from './ui/Inspector.js';
 import { ScenePanel } from './ui/ScenePanel.js';
 import { TimelinePanel } from './ui/timeline/TimelinePanel.js';
 import { ExportModal } from './ui/ExportModal.js';
+import { AiPanel } from './ui/AiPanel.js';
 import { toast } from './util/dom.js';
 import { AutoSave } from './app/SceneFile.js';
 import { AiAgent } from './ai/agent.js';
@@ -24,6 +25,10 @@ stage.onViewportResize(() => rig.onResize());
 const app = new App({ stage, rig, labelLayer: $('labelLayer') });
 const navGizmo = new NavGizmo($('navsvg'), stage.camera, () => app.resetView());
 
+// AI 操作者（阶段 H）：__app.ai.run({ input, mode }) 走模型 + 重试回路；__app.ai.applyOps([...], { mode }) 直接应用 ops。
+// 失败场景不变，成功 = 一步撤销。模型接口设置只存本机 localStorage。
+app.ai = new AiAgent(app, { provider: new OpenAICompatProvider(loadSettings()) });
+
 // ---- ui（各自订阅 app 事件）----
 // 导出视频弹层（阶段 G）：须先于时间轴面板创建 —— 它的 window 捕获阶段键盘监听要排在最前（导出中 / 弹层打开时拦下全部快捷键，Esc = 取消）
 const exportModal = new ExportModal(app);
@@ -31,7 +36,8 @@ new ScenePanel($('scenePanel'), app);
 new Inspector($('inspector'), app);
 new Outliner($('outliner'), app, $('search'));
 const timelinePanel = new TimelinePanel($('timeline'), app);
-new Dock($('dock'), app, { timelinePanel, exportModal });
+const aiPanel = new AiPanel($('viewport'), app);
+new Dock($('dock'), app, { timelinePanel, exportModal, aiPanel });
 
 // 右栏：未选中 → 3D场景面板；选中 → 属性面板
 app.on('selection', (ent) => {
@@ -92,14 +98,11 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'Delete' || e.key === 'Backspace') { if (app.selectedId) app.remove(app.selectedId); }
 });
 
-// AI 操作者（阶段 H）：__app.ai.run({ input, mode }) 走模型 + 重试回路；__app.ai.applyOps([...], { mode }) 直接应用 ops。
-// 失败场景不变，成功 = 一步撤销。模型接口设置只存本机 localStorage。
-app.ai = new AiAgent(app, { provider: new OpenAICompatProvider(loadSettings()) });
-
 // 调试句柄（selftest 也通过它驱动）
 window.__app = app;
 window.__timelinePanel = timelinePanel;
 window.__exportModal = exportModal;
+window.__aiPanel = aiPanel;
 
 // ---- 按需渲染循环 ----
 stage.startLoop({

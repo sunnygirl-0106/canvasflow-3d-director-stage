@@ -21,10 +21,11 @@ const TF_MODES = [['translate', 'move', '移动'], ['rotate', 'rotate', '旋转'
 
 // 底部悬浮工具坞：变换 / 添加 / 全景图 / 机位 / 比例 / 截图 / 场景（撤销·重做·导出·导入）/ 时间轴 / 全屏
 export class Dock {
-  constructor(container, app, { timelinePanel, exportModal } = {}) {
+  constructor(container, app, { timelinePanel, exportModal, aiPanel } = {}) {
     this.app = app;
     this.timelinePanel = timelinePanel;
     this.exportModal = exportModal;
+    this.aiPanel = aiPanel;
     this.container = container;
     this.modeBtns = {};
     this._assets = [];
@@ -113,7 +114,13 @@ export class Dock {
     const full = this._btn('expand', '全屏', () => this._toggleFullscreen());
     this.fullBtn = full;
 
-    c.append(...[tf, addBtn, pano, camAdd, pathBtn, this._sep(), frame, shot, this._sep(), scene, tlBtn, full].filter(Boolean));
+    // 10 AI（阶段 H）：右侧抽屉开合
+    const ai = this.aiPanel;
+    const aiBtn = ai ? this._btn('sparkle', 'AI 导演（一句话生成 / 对话修改 / 识图导入）', () => ai.toggle()) : null;
+    if (aiBtn) { aiBtn.classList.add('ai-dockbtn'); aiBtn.classList.toggle('on', ai.open); ai.onToggle = (v) => this.aiBtn?.classList.toggle('on', v); }
+    this.aiBtn = aiBtn;
+
+    c.append(...[tf, addBtn, pano, camAdd, pathBtn, this._sep(), frame, shot, this._sep(), scene, tlBtn, full, aiBtn && this._sep(), aiBtn].filter(Boolean));
 
     // ---- 菜单（统一由 DockMenu 管理）----
     this.menu = new DockMenu(c);
