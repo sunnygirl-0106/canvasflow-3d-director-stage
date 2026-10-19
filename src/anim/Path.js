@@ -6,6 +6,33 @@ const MIN_SEGMENTS = 200;
 const SEGMENTS_PER_POINT = 64;
 const GAIT_SAMPLES = 512; // 步态相位积分表的采样数
 
+/**
+ * 角色 / 组 speed=smooth 的起步 / 收步时长（秒）。整段 smoothstep 会把加速拉满全程（5 s 的路第 1 s 才到均速，
+ * 步频跟着减半 = 慢动作），人起步 1 秒内就到步速，所以改成「加速 RAMP → 匀速 → 减速 RAMP」。机位不用（整段缓入缓出是运镜手感）。
+ */
+export const WALK_RAMP = 0.8;
+
+/** 实体类型 → Path 的 ramp 选项。 */
+export const rampFor = (type) => (type === 'camera' ? 0 : WALK_RAMP);
+
+/**
+ * 一段时长 dt、长 L 的位移曲线：x ∈ [0,dt] 秒 → [已走路程, 瞬时速度]。
+ * linear 匀速；smooth 且 ramp=0：整段 smoothstep；smooth 且 ramp>0：smoothstep 速度爬升 r 秒 → 匀速 V → 对称减速，
+ * r = min(ramp, dt/2)，V = L / (dt − r)（爬升段走 V·r/2：∫smoothstep = u³ − u⁴/2 在 1 处为 1/2）。两端速度为 0、全程 C¹。
+ */
+function profile(x, dt, L, ease, ramp) {
+  if (!(dt > 0)) return [L, 0];
+  x = Math.min(Math.max(x, 0), dt);
+  if (ease !== 'smooth') return [L * x / dt, L / dt];
+  if (!(ramp > 0)) { const u = x / dt; return [L * EASE.smooth(u), smoothDeriv(u) * L / dt]; }
+  const r = Math.min(ramp, dt / 2), V = L / (dt - r);
+  const F = (u) => u * u * u - u * u * u * u / 2;
+  if (x < r) return [V * r * F(x / r), V * EASE.smooth(x / r)];
+  const y = dt - x;
+  if (y < r) return [L - V * r * F(y / r), V * EASE.smooth(y / r)];
+  return [V * r / 2 + V * (x - r), V];
+}
+
 /** 一段 centripetal Catmull-Rom 曲线 + 弧长表（均匀参数 u 采样，累计弦长）。 */
 class Curve {
   constructor(points, closed) {
@@ -53,12 +80,14 @@ class Curve {
  * 停顿 stops（收尾 1，可选）：顶点索引升序、不含首尾。有 stops 时路径在这些顶点处断成几段，
  * 每段是独立的 Catmull-Rom（停顿处速度为 0，允许折角，所以推镜头那段是严格的直线）；
  * 每段各自缓入缓出（无论 speed），各段时长 = stopTimes（相对 start 的到达时刻，可选）或按弧长比例分配。
+ * 起步 / 收步（ramp 选项，角色 / 组）：smooth 不再整段缓入缓出，而是 ramp 秒加速 → 匀速 → ramp 秒减速（见 profile）。
  * 闭合路径有 stops 时按 [p0 … pn−1, p0] 的开放点列处理。
  */
 export class Path {
-  /** @param {object} json 文档 Path */
-  constructor(json) {
+  /** @param {object} json 文档 Path @param {{ramp?:number}} [opts] ramp：smooth 的起步 / 收步秒数（0 = 整段缓入缓出；角色传 rampFor(type)） */
+  constructor(json, { ramp = 0 } = {}) {
     this.json = json;
+    this.ramp = ramp;
     const stops = json.stops?.length ? json.stops : null;
     if (!stops) {
       this.curves = [new Curve(json.points, json.closed)];
@@ -126,7 +155,7 @@ export class Path {
 
   /** t 时刻的进度 ∈ [0,1]（已走弧长 / 全长）。 */
   progress(t) {
-    if (this.curves.length === 1) {
+    if (this.curves.length === 1 && !this.ramp) {
       const { start, duration, speed } = this.json;
       return EASE[speed](clamp01((t - start) / duration));
     }
@@ -144,9 +173,10 @@ export class Path {
 
   /** t 时刻已走的路程（米）。 */
   distanceAt(t) {
-    if (this.curves.length === 1) return this.progress(t) * this.length;
-    const [k, x] = this._segTime(t);
-    return this._S[k] + EASE.smooth(clamp01(x)) * (this._S[k + 1] - this._S[k]);
+    if (this.curves.length === 1 && !this.ramp) return this.progress(t) * this.length;
+    const [k, x, dt] = this._segTime(t);
+    const ease = this.curves.length === 1 ? this.json.speed : 'smooth';
+    return this._S[k] + profile(clamp01(x) * dt, dt, this._S[k + 1] - this._S[k], ease, this.ramp)[0];
   }
 
   /**
@@ -173,8 +203,9 @@ export class Path {
     const { start, duration, speed } = this.json;
     const x = (t - start) / duration;
     if (x < 0 || x > 1) return 0;
-    if (this.curves.length === 1) return (speed === 'smooth' ? smoothDeriv(x) : 1) * this.length / duration;
+    if (this.curves.length === 1 && !this.ramp) return (speed === 'smooth' ? smoothDeriv(x) : 1) * this.length / duration;
     const [k, u, dt] = this._segTime(t);
-    return dt > 0 ? smoothDeriv(clamp01(u)) * (this._S[k + 1] - this._S[k]) / dt : 0;
+    const ease = this.curves.length === 1 ? speed : 'smooth';
+    return dt > 0 ? profile(clamp01(u) * dt, dt, this._S[k + 1] - this._S[k], ease, this.ramp)[1] : 0;
   }
 }

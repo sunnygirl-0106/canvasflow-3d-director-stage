@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fitStops, stopsAfterInsert, stopsAfterDelete, stopsAfterReverse, toggleStop } from '../src/anim/pathGen.js';
-import { Path } from '../src/anim/Path.js';
+import { Path, WALK_RAMP } from '../src/anim/Path.js';
 import { createEmptyDocument, validate } from '../src/doc/schema.js';
 
 const PTS = [[0, 0, 0], [2, 0, 0], [2, 0, 3], [5, 0, 3], [5, 0, 6]];
@@ -63,4 +63,25 @@ test('插入 / 删除 / 反向 / 勾选停顿后的索引与时刻', () => {
   const s2 = S.vertexDistance(2);
   assert.ok(Math.abs(S.distanceAt(on.stopTimes[1]) - s2) < 0.01);
   assert.deepEqual(toggleStop(on, 2, false), { stops: [1, 3], stopTimes: [2, 6] });
+});
+
+test('角色起步：ramp 秒内加到匀速，之后匀速；首尾速度 0、终点 = 全长、位移连续；机位（ramp=0）仍整段 smoothstep', () => {
+  const json = { points: [[0, 0, 0], [13, 0, 0]], closed: false, start: 1, duration: 10, speed: 'smooth' };
+  const P = new Path(json, { ramp: WALK_RAMP }), C = new Path(json);
+  const V = 13 / (10 - WALK_RAMP);
+  assert.equal(P.speedAt(1), 0);
+  assert.ok(Math.abs(P.speedAt(1 + WALK_RAMP) - V) < 1e-9);
+  assert.ok(Math.abs(P.speedAt(6) - V) < 1e-9);
+  assert.ok(Math.abs(P.distanceAt(11) - 13) < 1e-9 && Math.abs(P.distanceAt(6) - 6.5) < 1e-9);
+  let prev = 0;
+  for (let i = 1; i <= 4000; i++) { // 数值导数 ≈ speedAt（C¹，无跳变）
+    const t = 1 + i / 400, d = P.distanceAt(t);
+    assert.ok(Math.abs((d - prev) * 400 - P.speedAt(t - 1 / 800)) < 1e-3);
+    prev = d;
+  }
+  assert.ok(Math.abs(C.distanceAt(6) - 6.5) < 1e-9 && Math.abs(C.speedAt(6) - 1.5 * 1.3) < 1e-9);
+  // 有 stops 时每段同样 ramp
+  const S = new Path({ ...json, points: [[0, 0, 0], [6.5, 0, 0], [13, 0, 0]], stops: [1] }, { ramp: WALK_RAMP });
+  assert.ok(S.speedAt(6) < 1e-12);
+  assert.ok(Math.abs(S.speedAt(1 + WALK_RAMP) - 6.5 / (5 - WALK_RAMP)) < 1e-9);
 });

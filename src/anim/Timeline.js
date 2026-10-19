@@ -5,6 +5,7 @@ import { genId } from '../entities/Entity.js';
 import { dropTransformAnim, pruneAnim } from '../doc/edit.js';
 import { Track } from './Track.js';
 import { PathTrack } from './PathTrack.js';
+import { rampFor } from './Path.js';
 import { fitStops } from './pathGen.js';
 import { applyLocomotion } from './Locomotion.js';
 import { applyConstraint, constraintActive } from './Constraint.js';
@@ -196,7 +197,7 @@ export class Timeline extends Emitter {
     // 2 路径轨道
     for (const json of this.paths) {
       const st = states.get(json.target);
-      if (st) this._rt(json, (j) => new PathTrack(j)).apply(t, st);
+      if (st) this._rt(json, (j) => new PathTrack(j, rampFor(st.ent.type))).apply(t, st);
     }
 
     for (const st of states.values()) this._write(st);

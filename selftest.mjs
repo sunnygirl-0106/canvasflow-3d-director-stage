@@ -515,14 +515,14 @@ async function animTest() {
   // ---- 路径：道具 / 机位 / 角色沿 Catmull-Rom 移动，tangent 朝向，smooth 首尾速度为 0 ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
   const pt = await page.evaluate(async (ids) => {
-    const { Path } = await import('/src/anim/Path.js');
+    const { Path, rampFor } = await import('/src/anim/Path.js');
     const a = window.__app, tl = a.timeline, pb = a.playback;
     const p = a.findEntity(ids.p), c2 = a.findEntity(ids.c2), m = a.findEntity(ids.m);
     const R2D = 180 / Math.PI;
     const pp = tl.addPath({ target: ids.p, points: [[0.2, 0, -1.4], [2, 0, -1.4], [2.5, 0, 1]], start: 1, duration: 3, speed: 'linear', orient: 'tangent' });
     const cp = tl.addPath({ target: ids.c2, points: [[3, 1.6, 3], [0, 1.8, 4], [-3, 1.6, 3]], start: 0, duration: 4, speed: 'smooth', orient: 'tangent' });
     const mp = tl.addPath({ target: ids.m, points: [[-1.2, 0, 0], [-1.2, 0, 3]], start: 0, duration: 4, speed: 'smooth', orient: 'tangent' });
-    const P = new Path(pp), C = new Path(cp), M = new Path(mp);
+    const P = new Path(pp, { ramp: rampFor('prop') }), C = new Path(cp), M = new Path(mp, { ramp: rampFor('character') });
     const out = {};
     const near = (v, arr, eps = 1e-6) => arr.every((x, i) => Math.abs(v[i] - x) < eps);
     pb.seek(0);
@@ -559,7 +559,7 @@ async function animTest() {
   ok('路径：机位镜头方向沿切线、高度取路径 y', pt.camDirErr < 1e-3 && pt.camHeight > 1.6 && pt.camHeight < 1.81, `误差 ${pt.camDirErr.toExponential(2)}°，y=${pt.camHeight.toFixed(3)}`);
   ok('路径：角色沿 +Z 朝向切线、贴路径高度（root.y − 站立基准 = 0）', Math.abs(pt.charYaw) < 1e-6 && Math.abs(pt.charRootY) < 1e-9 && Math.abs(pt.charZ - 1.5) < 1e-4, JSON.stringify({ yaw: pt.charYaw, z: pt.charZ }));
   ok('路径：active 时导出的仍是手动位置', pt.charDocY === 0);
-  ok('路径：smooth 首尾速度为 0、中段最快', pt.speeds[0] === 0 && pt.speeds[2] === 0 && pt.speeds[3] === 0 && pt.speeds[4] === 0 && Math.abs(pt.speeds[1] - 1.125) < 1e-6 && pt.startCreep < 1e-4, JSON.stringify(pt.speeds.map((v) => +v.toFixed(4))) + ` 起步=${pt.startCreep.toExponential(2)}m`);
+  ok('路径：smooth 首尾速度为 0、中段匀速（角色 0.8 s 起步：3 m / (4 − 0.8) s）', pt.speeds[0] === 0 && pt.speeds[2] === 0 && pt.speeds[3] === 0 && pt.speeds[4] === 0 && Math.abs(pt.speeds[1] - 3 / (4 - 0.8)) < 1e-6 && pt.startCreep < 1e-4, JSON.stringify(pt.speeds.map((v) => +v.toFixed(4))) + ` 起步=${pt.startCreep.toExponential(2)}m`);
   ok('路径：stop() 回到手动位置', pt.stopped);
   // ---- 步态：6 m 直线 smooth 4 s；压到 1.5 s 为跑步；组沿路径成员一起走 ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
@@ -664,7 +664,7 @@ async function animTest() {
   // ---- 收尾 1 · 起步平滑转身：手动朝向 −100°、路径朝 +X（90°），差 170° ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
   const turn = await page.evaluate(async (ids) => {
-    const { Path } = await import('/src/anim/Path.js');
+    const { Path, rampFor, WALK_RAMP } = await import('/src/anim/Path.js');
     const { TURN_IN_DIST } = await import('/src/anim/PathTrack.js');
     const a = window.__app, tl = a.timeline, pb = a.playback;
     const m = a.findEntity(ids.m);
@@ -673,7 +673,7 @@ async function animTest() {
     a.history.reset();
     const x = m.root.position.x, z = m.root.position.z;
     const json = tl.addPath({ target: ids.m, points: [[x, 0, z], [x + 4, 0, z]], start: 1, duration: 3, speed: 'smooth', orient: 'tangent' });
-    const P = new Path(json);
+    const P = new Path(json, { ramp: rampFor('character') });
     const yaw = () => { const e = m.root.rotation.clone().reorder('YXZ'); return e.y * R2D; };
     const d = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
     const out = { maxStep: 0, beforeErr: 0, afterErr: 0, turnFrames: 0 };
@@ -689,12 +689,16 @@ async function animTest() {
       else out.turnFrames++;
     }
     pb.seek(1); out.startErr = d(yaw(), -100);
+    // 起步加速：运行时角色按 ramp 走（不是整段 smoothstep），start + WALK_RAMP 时已是匀速
+    pb.seek(1.6); out.rampErr = Math.abs((m.root.position.x - x) - P.distanceAt(1.6));
+    out.vRamp = P.speedAt(1 + WALK_RAMP) / (4 / (3 - WALK_RAMP));
     pb.stop();
     out.restored = d(yaw(), -100) < 1e-9;
     return out;
   }, ids);
   ok('起步转身：t ≤ start 朝向 ≡ 手动朝向（< 0.5°）', turn.startErr < 0.5 && turn.beforeErr < 0.5, `t=start 误差 ${turn.startErr.toFixed(4)}°，之前最大 ${turn.beforeErr.toFixed(4)}°`);
-  ok('起步转身：走过 0.6 m 后朝向 ≡ 切线（< 0.5°）', turn.afterErr < 0.5, `最大误差 ${turn.afterErr.toFixed(4)}°`);
+  ok('起步转身：走过 TURN_IN_DIST（0.8 m）后朝向 ≡ 切线（< 0.5°）', turn.afterErr < 0.5, `最大误差 ${turn.afterErr.toFixed(4)}°`);
+  ok('起步加速：角色 smooth 路径按 WALK_RAMP 起步（运行时位移 ≡ Path ramp 曲线，ramp 末已到匀速）', turn.rampErr < 1e-4 && Math.abs(turn.vRamp - 1) < 1e-9, `误差 ${turn.rampErr.toExponential(2)} m，ramp 末速度 / 匀速 = ${turn.vRamp.toFixed(4)}`);
   ok('起步转身：170° 转身每帧 yaw 变化 < 15°（30 fps）', turn.maxStep < 15 && turn.turnFrames >= 10, `最大 ${turn.maxStep.toFixed(2)}°/帧，转身用 ${turn.turnFrames} 帧；停止后回手动朝向 ${turn.restored}`);
   // ---- 约束：lookAt 保留 roll；follow 刚性跟随且覆盖 pos 轨道 / 路径 ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
@@ -1647,9 +1651,10 @@ async function pathTest() {
   // 收尾 1 · 起步平滑转身（界面画的直线，朝 −X；角色手动朝向不同）
   const turn10 = await page.evaluate(async (pid, id) => {
     const a = window.__app, pb = a.playback;
-    const { Path } = await import('/src/anim/Path.js');
-    const P = new Path(a.timeline.toJSON().paths.find((p) => p.id === pid));
+    const { Path, rampFor } = await import('/src/anim/Path.js');
+    const { TURN_IN_DIST } = await import('/src/anim/PathTrack.js');
     const e = a.findEntity(id);
+    const P = new Path(a.timeline.toJSON().paths.find((p) => p.id === pid), { ramp: rampFor(e.type) });
     const R2D = 180 / Math.PI;
     const yaw = () => e.root.rotation.clone().reorder('YXZ').y * R2D;
     const d = (x, y) => Math.abs(((x - y) % 360 + 540) % 360 - 180);
@@ -1657,7 +1662,7 @@ async function pathTest() {
     const tan = P.tangentAt(P.length / 2);
     const tanYaw = Math.atan2(tan.x, tan.z) * R2D;
     let t06 = P.json.start;
-    while (P.distanceAt(t06) < 0.6) t06 += 1 / 120;
+    while (P.distanceAt(t06) < TURN_IN_DIST) t06 += 1 / 120;
     pb.seek(P.json.start); const s0 = d(yaw(), manual);
     pb.seek(t06); const s1 = d(yaw(), tanYaw);
     let maxStep = 0, prev = null;
@@ -1665,7 +1670,7 @@ async function pathTest() {
     pb.stop();
     return { manual, tanYaw, s0, s1, maxStep, t06 };
   }, p10.id, ids.B);
-  ok('起步转身（界面画的直线）：t=start ≡ 手动朝向、走过 0.6 m ≡ 切线（< 0.5°），每帧 < 15°', turn10.s0 < 0.5 && turn10.s1 < 0.5 && turn10.maxStep < 15 && turn10.manual !== turn10.tanYaw,
+  ok('起步转身（界面画的直线）：t=start ≡ 手动朝向、走过 0.8 m ≡ 切线（< 0.5°），每帧 < 15°', turn10.s0 < 0.5 && turn10.s1 < 0.5 && turn10.maxStep < 15 && turn10.manual !== turn10.tanYaw,
     JSON.stringify(Object.fromEntries(Object.entries(turn10).map(([k, v]) => [k, +v.toFixed(3)]))));
   // 收尾 1 · 停顿：点线插入一个中间顶点（自动选中）→ Inspector「在选中顶点处停顿」真实点击 → stops = [1]；该顶点处速度 0
   await page.evaluate((pid) => { const a = window.__app; const P = a.pathOverlay.pathOf(pid); a.pathEditor.insertAt(pid, P.length / 2); }, p10.id);

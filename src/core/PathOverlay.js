@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { Path } from '../anim/Path.js';
+import { Path, rampFor } from '../anim/Path.js';
 
 const ACCENT = 0x3b82f6;
 const LIFT = 0.01;            // 贴地抬高 1 cm，防 z-fighting
@@ -92,7 +92,8 @@ export class PathOverlay {
       const json = pv ? { ...json0, points: pv.points } : json0;
       if (json.points.length < 2) continue;
       const selected = selIds.has(json.target);
-      const item = { json, selected, path: new Path(json), vertices: [] };
+      const ramp = rampFor(this.app.findEntity(json.target)?.type);
+      const item = { json, selected, path: new Path(json, { ramp }), vertices: [] };
       item.samples = this._sample(item.path);
       this.group.add(this._line(item.samples, selected));
       if (selected) this._handles(item);

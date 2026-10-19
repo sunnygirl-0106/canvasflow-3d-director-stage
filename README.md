@@ -95,7 +95,7 @@ tl.updatePath(p.id, { stops: [2] });                      // 走到第 3 个顶�
 tl.updatePath(p.id, { stops: [2], stopTimes: [1.5] });     // 1.5 s 时到达第 3 个顶点
 ```
 
-`orient = tangent` 时朝向从手动朝向按已走路程插值到切线（走完 0.6 m 完全跟切线），起步不会一下子扭过去。
+`orient = tangent` 时朝向从手动朝向按已走路程插值到切线（走完 0.8 m 完全跟切线），起步不会一下子扭过去。角色 / 道具 / 组的 `speed = smooth` 是 0.8 s 起步加速 → 匀速 → 0.8 s 收步（不是整段缓入缓出，否则开头一两秒像慢动作）；机位的 smooth 仍是整段缓入缓出。
 
 运镜生成器 `src/anim/cameraMoves.js`（纯函数，调 pathGen）与写入入口 `__app.cameraMoves`：
 
