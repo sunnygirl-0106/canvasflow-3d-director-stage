@@ -1816,7 +1816,10 @@ async function camTest() {
     const cv = a.stage.renderer.domElement;
     a.stage.render();
     const view = cv.toDataURL('image/png');
-    const snap = a.withCleanRender(() => a.stage.snapshot(a.findEntity(camId).cam)).toDataURL('image/png');
+    // 视口画布里没有名牌（平时是 DOM 名牌），洁净渲染自阶段 G 起画精灵名牌：比机位画面时关掉名牌
+    a.beginCleanRender({ labels: false });
+    let snap;
+    try { snap = a.stage.snapshot(a.findEntity(camId).cam).toDataURL('image/png'); } finally { a.endCleanRender(); }
     return { view, snap, pov: a.povCameraId, t: a.playback.time };
   }, camId);
   const writePair = (r, name) => {
