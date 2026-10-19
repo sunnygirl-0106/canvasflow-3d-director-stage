@@ -2284,6 +2284,70 @@ async function exportTest() {
   const sp = ffprobe(`${OUT}/sample.mp4`) || mp4Info(fs.readFileSync(`${OUT}/sample.mp4`));
   ok('验收11 示例 sample.mp4：5 s · 1080p · 150 帧', sample.frames === 150 && Math.abs(sp.duration - 5) <= 0.05 && sp.frames === 150 && sp.width === 1920,
     `${(sample.size / 1048576).toFixed(2)} MB，用时 ${(sample.ms / 1000).toFixed(1)} s（headless swiftshader），${JSON.stringify(sp)}`);
+
+  // ---- 收尾 1 · 名牌避让（DOM 与精灵同一个 layoutLabels）----
+  const rectsHit = (rs) => rs.some((a, i) => rs.some((b, j) => j > i && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h));
+  // 无重叠：导出场景（两人左右分开）避让开 / 关两次快照逐像素相同、DOM 位置相同
+  const noOv = await page.evaluate(async () => {
+    const a = window.__app;
+    const { labelLayout } = await import('/src/app/Labels.js');
+    const cam = a.findCamera(a.timeline.mainCameraId);
+    a.playback.stop();
+    const shot = () => { cam.cam.aspect = 16 / 9; cam.cam.updateProjectionMatrix(); return a.withCleanRender(() => a.stage.snapshot(cam.cam, { width: 1280, height: 720 })).toDataURL('image/png'); };
+    const dom = () => { a.labels.update(a.entities, a.getRenderCamera(), { worldScale: a.stage.world.scale.y, hideCameras: a.cameraView }); return JSON.stringify(a.labels.debugRects()); };
+    const on = shot(), domOn = dom();
+    labelLayout.enabled = false;
+    const off = shot(), domOff = dom();
+    labelLayout.enabled = true;
+    return { same: on === off, domSame: domOn === domOff, n: JSON.parse(domOn).length };
+  });
+  ok('名牌避让：无重叠时 快照（避让开 / 关）逐像素相同、DOM 名牌位置相同', noOv.same && noOv.domSame && noOv.n >= 2, JSON.stringify(noOv));
+  // 前后站成一线：截图 / DOM 两处名牌矩形都不相交（关掉避让时相交）
+  const ov = await page.evaluate(async () => {
+    const { createEmptyDocument } = await import('/src/doc/schema.js');
+    const { labelLayout } = await import('/src/app/Labels.js');
+    const a = window.__app;
+    a.playback.stop();
+    await a.loadDocument(createEmptyDocument());
+    const near = await a.addCharacter('male');
+    const far = await a.addCharacter('female');
+    near.root.position.x = 0; near.root.position.z = 0;
+    far.root.position.x = 0.15; far.root.position.z = -2.5;
+    const c = a.addCamera('front_full');
+    const w = (x, y, z) => a.stage.world.localToWorld(near.root.position.clone().set(x, y, z));
+    // 机位与名牌锚点同高、平视：两人名牌落在同一水平线上，必然叠在一起
+    const { labelAnchor } = await import('/src/app/Labels.js');
+    const hy = a.stage.world.worldToLocal(labelAnchor(near, a.stage.world.scale.y, near.root.position.clone())).y;
+    c.root.position.copy(a.stage.world.worldToLocal(w(0, hy, 5)));
+    c.aimAt(w(0, hy, -1));
+    a.select(null);
+    a.rig.controls.target.copy(w(0, hy, -1)); a.stage.camera.position.copy(w(0, hy, 5)); a.rig.controls.update();
+    await new Promise((r) => setTimeout(r, 300));
+    const W = 1920, H = 1080;
+    const res = {};
+    for (const on of [false, true]) {
+      labelLayout.enabled = on;
+      c.cam.aspect = W / H; c.cam.updateProjectionMatrix();
+      const cv = a.withCleanRender(() => {
+        const out = a.stage.snapshot(c.cam, { width: W, height: H });
+        res[on ? 'sprite' : 'spriteOff'] = a.labelSprites.debugRects(c.cam, W, H);
+        return out;
+      });
+      await window.__saveFile(on ? '20_labels_overlap.png' : '20_labels_overlap_off.png', cv.toDataURL('image/png'));
+      a.labels.update(a.entities, a.getRenderCamera(), { worldScale: a.stage.world.scale.y, hideCameras: a.cameraView });
+      res[on ? 'dom' : 'domOff'] = a.labels.debugRects().filter((r) => !r.text.startsWith('机位'));
+    }
+    labelLayout.enabled = true;
+    a.stage.invalidate();
+    res.far = far.name;
+    return res;
+  });
+  await page.screenshot({ path: `${OUT}/20_labels_overlap_viewport.png` });
+  const sum = (rs) => rs.map((r) => `${r.text}@(${r.x.toFixed(0)},${r.y.toFixed(0)} ${r.w.toFixed(0)}×${r.h.toFixed(0)})`).join(' ');
+  ok('名牌避让：前后站位 —— 关避让时精灵 / DOM 名牌相交（构造有效）', rectsHit(ov.spriteOff) && rectsHit(ov.domOff), `精灵 ${sum(ov.spriteOff)}；DOM ${sum(ov.domOff)}`);
+  const farUp = (rs) => rs.length === 2 && rs.find((r) => r.text === ov.far).y < rs.find((r) => r.text !== ov.far).y;
+  ok('名牌避让：前后站位 —— 截图（精灵）与视口（DOM）名牌矩形都不相交，远的在上', farUp(ov.sprite) && farUp(ov.dom) && !rectsHit(ov.sprite) && !rectsHit(ov.dom),
+    `精灵 ${sum(ov.sprite)}；DOM ${sum(ov.dom)}；截图 ${OUT}/20_labels_overlap.png`);
 }
 
 /** ffprobe 读时长 / 帧数 / 编码 / 宽高；本机没有 ffprobe 返回 null。 */

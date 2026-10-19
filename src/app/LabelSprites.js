@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { labelAnchor } from './Labels.js';
+import { labelAnchor, layoutLabels } from './Labels.js';
+
+const _camPos = new THREE.Vector3();
 
 // 名牌样式：照抄 style.css 的 .label3d / .label3d.cam（单位 CSS px）
 const STYLE = {
@@ -36,6 +38,7 @@ export class LabelSprites {
     this._enabled = 0;
     this._clean = 0;
     this._tmp = new THREE.Vector3();
+    this._layoutKey = null;
   }
 
   get enabled() { return this._enabled > 0; }
@@ -99,13 +102,15 @@ export class LabelSprites {
     const sprite = new THREE.Sprite(mat);
     sprite.renderOrder = 1e6;
     sprite.frustumCulled = false; // 位置在 onBeforeRender 才写入
-    const it = { sprite, text: null, w: 0, h: 0 };
+    const it = { sprite, text: null, w: 0, h: 0, dy: 0 };
     const k = this;
     sprite.onBeforeRender = function (renderer, scene, camera) {
+      k._layout(renderer, camera);
       labelAnchor(t, k.app.stage.world.scale.y, this.position);
       // NDC 高 = scale.y × P[1][1]（透视 / 正交都成立）→ 像素高 = 画面高 × h/1080
       const s = 2 / (BASE_H * camera.projectionMatrix.elements[5]);
       this.scale.set(it.w * s, it.h * s, 1);
+      this.center.y = (MARGIN * SCALE - it.dy) / it.h; // 避让：框底上移 dy（1080p px）
       this.updateMatrixWorld();
     };
     this._draw(it, t);
@@ -145,6 +150,46 @@ export class LabelSprites {
     it.text = t.name;
     it.w = W * SCALE; it.h = H * SCALE;
     it.sprite.center.set(0.5, MARGIN / H); // 锚点 = 名牌框底边中点
+  }
+
+  /**
+   * 本次渲染（renderer 的一次 render 调用 × 相机）里所有出画名牌的避让，与 DOM 名牌同一个 layoutLabels。
+   * 在高 1080、宽 1080×aspect 的虚拟画面里算（名牌尺寸与画面高成比例，所以任何分辨率结果都按比例一致），间距 4 px@1080p。
+   * 由第一个被渲染的精灵触发，结果写进各 it.dy。
+   */
+  _layout(renderer, camera) {
+    const key = `${renderer.info.render.frame}|${camera.id}`;
+    if (key === this._layoutKey) return;
+    this._layoutKey = key;
+    const aspect = camera.isPerspectiveCamera ? camera.aspect : (camera.right - camera.left) / (camera.top - camera.bottom);
+    const p = this._tmp, ws = this.app.stage.world.scale.y, pad = MARGIN * SCALE * 2;
+    const items = [];
+    for (const [t, it] of this._items) {
+      it.dy = 0;
+      if (!it.sprite.visible) continue;
+      labelAnchor(t, ws, p);
+      const depth = p.distanceTo(_camPos.setFromMatrixPosition(camera.matrixWorld));
+      p.project(camera);
+      if (p.z >= 1) continue;
+      items.push({ it, x: (p.x * 0.5 + 0.5) * BASE_H * aspect, bottom: (-p.y * 0.5 + 0.5) * BASE_H, w: it.w - pad, h: it.h - pad, depth });
+    }
+    layoutLabels(items);
+    for (const x of items) x.it.dy = x.dy;
+  }
+
+  /** selftest：出画精灵名牌框在给定画面尺寸下的像素矩形（按最近一次渲染的避让结果）。 */
+  debugRects(camera, width, height) {
+    const p = this._tmp, ws = this.app.stage.world.scale.y, k = height / BASE_H, pad = MARGIN * SCALE * 2;
+    const out = [];
+    for (const [t, it] of this._items) {
+      if (!it.sprite.visible) continue;
+      labelAnchor(t, ws, p).project(camera);
+      if (p.z >= 1) continue;
+      const w = (it.w - pad) * k, h = (it.h - pad) * k;
+      const x = (p.x * 0.5 + 0.5) * width, bottom = (-p.y * 0.5 + 0.5) * height - it.dy * k;
+      out.push({ text: it.text, x: x - w / 2, y: bottom - h, w, h });
+    }
+    return out;
   }
 
   _dispose(t, it) {
