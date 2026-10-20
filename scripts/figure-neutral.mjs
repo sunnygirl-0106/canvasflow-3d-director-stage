@@ -2,8 +2,9 @@
 // 直接改 GLB 的 POSITION / NORMAL / 手臂节点平移 / inverseBindMatrices，其余（骨骼轴向、权重、索引）逐字节不动；法线按变形雅可比的逆转置变换。
 // 输入必须是【原始】模型（已处理过的再跑会叠加）：
 //   git show 1bb3f44:public/assets/figures/bodychan_female.glb > /tmp/orig.glb
-//   node scripts/figure-neutral.mjs /tmp/orig.glb public/assets/figures/bodychan_female.glb [chest=0.16 butt=0.2 …]
-// 参数：chest / butt = 胸 / 臀峰朝内部中心缩的比例（整体缩小，保持圆形）；hip / waist = 胯 / 腰宽度增量（高斯带峰值，-0.11 即外侧 ×0.89）；sh = 每侧肩外移（米）；chestW = 上胸加宽比例；tipK = 胸峰顶部再收的比例（小范围，让顶部弧度放缓、不显尖）；fold = 胸下沿折痕往外补的比例。
+//   node scripts/figure-neutral.mjs /tmp/orig.glb /tmp/stage.glb [chest=0.16 butt=0.2 …]
+//   然后跑 scripts/figure-bust.py（Blender）把胸形收圆，输出到 public/assets/figures/bodychan_female.glb
+// 参数：chest / butt = 胸 / 臀峰朝内部中心缩的比例（整体缩小，保持圆形）；hip / waist = 胯 / 腰宽度增量（高斯带峰值，-0.11 即外侧 ×0.89）；sh = 每侧肩外移（米）；chestW = 上胸加宽比例。
 import fs from 'node:fs';
 import { Buffer } from 'node:buffer';
 import process from 'node:process';
@@ -28,7 +29,7 @@ function writeGlb(path, json, bin) {
 
 import * as THREE from 'three';
 const [src, out, ...kv] = process.argv.slice(2);
-const K = { chest: 0.16, butt: 0.2, hip: -0.11, waist: 0.08, sh: 0.03, chestW: 0.05, tipK: 0.05, fold: 0.15, ...Object.fromEntries(kv.map((s) => s.split('=')).map(([k, v]) => [k, +v])) };
+const K = { chest: 0.16, butt: 0.2, hip: -0.11, waist: 0.08, sh: 0.03, chestW: 0.05, ...Object.fromEntries(kv.map((s) => s.split('=')).map(([k, v]) => [k, +v])) };
 const { json, bin, acc } = readGlb(src);
 const P = acc(0), N = acc(1), J = acc(2), W = acc(3), IBM = acc(5);
 const sk = json.skins[0], jn = sk.joints.map((n) => json.nodes[n].name.replace('mixamorig:', ''));
@@ -58,8 +59,8 @@ function f(p, inf) {
   if (inf.aw > 0) x += inf.side * K.sh * inf.aw; // 手臂整体外移（与骨骼同步）
   const torso = !/Arm|Hand|Fore|Head|Neck/.test(inf.dom);
   if (torso && inf.aw < 0.5) {
-    // 胸：同臀，每侧胸峰附近朝胸内中心点缩（σ 5.5 cm），整体变小、轮廓仍是圆的
-    // 臀 / 胸都用"朝内部中心整体缩"而不是只压前后厚度——只压厚度会把圆弧压成斜坡 + 平顶
+    // 胸 / 臀：朝内部中心整体缩而不是只压前后厚度——只压厚度会把圆弧压成斜坡 + 平顶
+    // （胸形的进一步收圆在 Blender 里做，见 scripts/figure-bust.py）
     const pull = (cx, cy, cz, ox, oy, oz, sg, k, kx = 1) => {
       let dx = 0, dy = 0, dz = 0;
       for (const sd of [1, -1]) {
@@ -69,10 +70,6 @@ function f(p, inf) {
       x += dx; y += dy; z += dz;
     };
     pull(0.070, 1.224, 0.154, 0.070, 1.21, 0.06, 0.055, K.chest);
-    // 胸峰顶部（σ 3.5 cm）再朝内收一点：顶部曲率变小、弧度放缓，看起来是圆顶而不是尖；整个是光滑函数，无折痕
-    pull(0.0705, 1.2218, 0.1387, 0.070, 1.21, 0.06, 0.035, K.tipK);
-    // 胸下沿折痕 (y≈1.175) 往外补（k 取负 = 背离中心推），胸底圆滑过渡到肋下，不再在侧面形成急转的下角
-    pull(0.070, 1.175, 0.119, 0.070, 1.20, 0.06, 0.02, -K.fold);
     // 臀：每侧臀峰 (±6.5, 89.5, −10.2 cm) 附近朝臀内中心点缩（σ 7 cm），左右叠加，往外自然衰减到 0，无边界
     pull(0.065, 0.895, -0.102, 0.065, 0.87, 0, 0.07, K.butt, 0); // 左右不收：否则大腿内侧被推向外，撞跑步摆臂的手
     // 宽度用宽高斯带（σ 6–8 cm）平滑过渡，不出台阶 / 鼓包：腰 (y≈1.075) 加宽、胯 + 大腿根 (y≈0.80) 外侧收窄、上胸随肩略加宽
