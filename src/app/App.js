@@ -56,8 +56,8 @@ export class App extends Emitter {
     this.cameraView = false;
     this.activeCameraId = null;    // 机位视角的当前机位（idle 时出画；active 时出画的是主机位，见 _syncPov）
     this.povCameraId = null;       // 机位视角下此刻实际出画的机位
-    this._mainPreview = false;     // 正透过主机位看成片（gizmo 隐藏）
-    this._povUnset = false;        // 机位视角 active 但没设主机位（视口提示）
+    this.mainPreview = false;     // 正透过主机位看成片（gizmo 隐藏）
+    this.povUnset = false;        // 机位视角 active 但没设主机位（视口提示）
     this.ratio = 'auto';           // 取景比例（默认自由）
     this.frameInsetRight = 0;      // 视口右侧被 AI 抽屉遮住的宽度（px），自动取景时扣掉
     this.labelPreview = false;     // 「预览名牌」：视口也用精灵名牌（会话态）
@@ -240,9 +240,9 @@ export class App extends Emitter {
     const res = edit.groupCharacters(this.toDocument({ view: false }), members.map((m) => m.id), { name: '组' + (++this._groupCount), pivot });
     const group = new THREE.Group();
     const crowd = new Crowd(res.group.name, group, members, {}, res.group.id);
-    crowd._applyTransform(res.group.transform);
+    crowd.applyTransform(res.group.transform);
     this.stage.add(group);
-    members.forEach((m, i) => { group.add(m.root); m._applyTransform(res.members[i].transform); });
+    members.forEach((m, i) => { group.add(m.root); m.applyTransform(res.members[i].transform); });
     this.timeline.dropTransformAnimation(members.map((m) => m.id)); // 成员改为相对组轴心的坐标系（同 edit.dropTransformAnim）
     this.entities = this.entities.filter((e) => !members.includes(e));
     this._registerEntity(crowd, { place: false });
@@ -293,7 +293,7 @@ export class App extends Emitter {
 
     const c = new CameraEntity('机位' + (++this._camCount), { fov, aspect: this.viewportAspect(), scene: this.stage.scene });
     c.root.position.copy(out.position);
-    c._roll = out.roll || 0;
+    c.rollRad = out.roll || 0;
     c.aimAt(out.target); // 相机约定看向 -Z，叠加荷兰角
     c.setHelpersVisible(!this.cameraView); // 机位视角下不应看到相机可视化
     this._registerEntity(c, { place: false, msg: '已添加机位：' + c.name + '（' + preset.label + '）' });
@@ -338,9 +338,9 @@ export class App extends Emitter {
   }
 
   /** gizmo 是否应显示：有可见的主选实体，且不是「POV 下正在透过它看的出画机位」。 */
-  _gizmoShouldShow() {
+  gizmoShouldShow() {
     const ent = this.selected;
-    if (!ent || !ent.visible || this._mainPreview || this._cleanDepth) return false; // 透过主机位 = 成片预览，不显示 gizmo
+    if (!ent || !ent.visible || this.mainPreview || this._cleanDepth) return false; // 透过主机位 = 成片预览，不显示 gizmo
     return !(this.cameraView && ent.id === this.povCameraId);
   }
 
@@ -351,7 +351,7 @@ export class App extends Emitter {
       this.gizmo.attach(ent.root);
       // 相机不支持缩放：若当前为 scale 则退回 rotate
       this.gizmo.setMode(ent.type === 'camera' && this.transformMode === 'scale' ? 'rotate' : this.transformMode);
-      this.gizmo.setVisible(this._gizmoShouldShow());
+      this.gizmo.setVisible(this.gizmoShouldShow());
     } else {
       this.gizmo.detach();
     }
@@ -418,7 +418,7 @@ export class App extends Emitter {
     if (!ent) return;
     ent.setVisible(!ent.visible);
     if (ent.id === this.selectedId) {
-      this.gizmo.setVisible(this._gizmoShouldShow());
+      this.gizmo.setVisible(this.gizmoShouldShow());
       this.selection.highlight(ent);
     }
     this.emit('entities');
@@ -465,7 +465,7 @@ export class App extends Emitter {
   setTransformMode(mode) {
     if (mode === 'scale' && this.selected?.type === 'camera') { toast('相机不支持缩放'); return; }
     this.transformMode = mode;
-    if (this.selected) { this.gizmo.setMode(mode); this.gizmo.setVisible(this._gizmoShouldShow()); }
+    if (this.selected) { this.gizmo.setMode(mode); this.gizmo.setVisible(this.gizmoShouldShow()); }
     this.emit('mode', mode);
   }
 
@@ -509,11 +509,11 @@ export class App extends Emitter {
     }
     const unset = this.cameraView && tl.active && !main;
     const id = ent?.id ?? null;
-    if (this.povCameraId === id && this._mainPreview === !!main && this._povUnset === unset) return;
+    if (this.povCameraId === id && this.mainPreview === !!main && this.povUnset === unset) return;
     this.povCameraId = id;
-    this._mainPreview = !!main;
-    this._povUnset = unset;
-    this.gizmo.setVisible(this._gizmoShouldShow()); // 只在出画状态变化时同步（绘制 / 顶点拖动期间工具自己藏 gizmo）
+    this.mainPreview = !!main;
+    this.povUnset = unset;
+    this.gizmo.setVisible(this.gizmoShouldShow()); // 只在出画状态变化时同步（绘制 / 顶点拖动期间工具自己藏 gizmo）
     this.emit('pov', { camera: ent, main: !!main, unset });
   }
 
@@ -656,8 +656,7 @@ export class App extends Emitter {
     this.stage.camera.position.fromArray(view.pos);
     this.rig.controls.target.fromArray(view.target);
     this.rig.controls.update();
-    this.rig._home.pos.copy(this.stage.camera.position); // 「重置视角」回到存档时的视角
-    this.rig._home.target.copy(this.rig.controls.target);
+    this.rig.saveHome(); // 「重置视角」回到存档时的视角
   }
 
   /** 起名计数器按已有名字推进（只增不减），避免导入后新建出重名的「角色A」「机位1」。 */
@@ -713,7 +712,7 @@ export class App extends Emitter {
     this.labelSprites.endClean();
     if (--this._cleanDepth <= 0) {
       this._cleanDepth = 0;
-      this.gizmo.setVisible(this._gizmoShouldShow());
+      this.gizmo.setVisible(this.gizmoShouldShow());
       this.selection.setRingVisible(true);
       this.setCameraHelpersVisible(!this.cameraView);
       this.pathOverlay.setHidden(false);

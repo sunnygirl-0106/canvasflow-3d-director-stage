@@ -5,6 +5,7 @@ import { worldBox } from '../util/measure.js';
 import { line, polar, toward, simplify, PATH_MODES, TOWARD_STOP, ARC_SWEEP, arcPoints } from '../anim/pathGen.js';
 import { pathStartPoint, setPath } from '../doc/edit.js';
 import { round4 } from '../util/math.js';
+import { onKey, KEY_PRIORITY } from '../util/keys.js';
 
 /** 某实体的绘制方式文案：机位的「走到」叫「推到」（同一个 toward）。 */
 export function pathModes(ent) {
@@ -58,7 +59,7 @@ export class PathTool extends Emitter {
     dom.addEventListener('pointermove', (e) => this._onMove(e));
     window.addEventListener('pointerup', (e) => this._onUp(e));
     dom.addEventListener('dblclick', (e) => this._onDblClick(e));
-    window.addEventListener('keydown', (e) => this._onKey(e), true); // 捕获：先于时间轴 / 全局快捷键
+    onKey((e) => this._onKey(e), { priority: KEY_PRIORITY.pathDraw }); // 先于时间轴 / 全局快捷键
     app.on('selection', (ent) => { if (this.mode && ent !== this.ent) this.cancel(); });
     app.on('view', (pov) => { if (this.mode && pov) this.cancel(); });
   }
@@ -115,7 +116,7 @@ export class PathTool extends Emitter {
     this.draft = [];
     this._down = null;
     app.rig.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
-    app.gizmo.setVisible(app._gizmoShouldShow());
+    app.gizmo.setVisible(app.gizmoShouldShow());
     this.hintEl.hidden = true;
     app.stage.viewport.classList.remove('path-drawing');
     app.pathOverlay.setDraft(null);
@@ -131,7 +132,7 @@ export class PathTool extends Emitter {
 
   /** 实体当前手动值的位置投到绘制平面（文档口径）：机位保留自身高度，其余落到地面。 */
   startPoint(ent) {
-    return pathStartPoint(ent.type, ent._transformJSON(this.app.timeline.baseOf(ent) || ent.root).pos, this.groundY);
+    return pathStartPoint(ent.type, ent.transformJSON(this.app.timeline.baseOf(ent) || ent.root).pos, this.groundY);
   }
 
   _setRay(e) {

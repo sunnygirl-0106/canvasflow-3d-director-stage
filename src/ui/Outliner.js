@@ -1,5 +1,6 @@
 import { el, clear } from '../util/dom.js';
 import { icon } from './icons.js';
+import { onKey, KEY_PRIORITY } from '../util/keys.js';
 
 const ICON = {
   camera: icon('video', 16, 1.8),
@@ -126,13 +127,13 @@ export class Outliner {
     this._ctxMenu = menu;
 
     this._ctxClose = (ev) => { if (!menu.contains(ev.target)) this._closeContextMenu(); };
-    this._ctxKey = (ev) => { if (ev.key === 'Escape') this._closeContextMenu(); };
-    // 延迟到下一拍再绑定，避免本次右键事件立即触发关闭
-    setTimeout(() => {
-      window.addEventListener('pointerdown', this._ctxClose, true);
-      window.addEventListener('contextmenu', this._ctxClose, true);
-      window.addEventListener('keydown', this._ctxKey);
-      window.addEventListener('blur', this._ctxClose);
+    this._ctxOffKey = onKey((ev) => { if (ev.key === 'Escape') this._closeContextMenu(); }, { priority: KEY_PRIORITY.menu, phase: 'bubble' });
+    // 延迟到下一拍再绑定，避免本次右键事件立即触发关闭；关得比这一拍还早时清掉定时器
+    const close = this._ctxClose;
+    this._ctxTimer = setTimeout(() => {
+      window.addEventListener('pointerdown', close, true);
+      window.addEventListener('contextmenu', close, true);
+      window.addEventListener('blur', close);
     }, 0);
   }
 
@@ -144,7 +145,8 @@ export class Outliner {
       window.removeEventListener('blur', this._ctxClose);
       this._ctxClose = null;
     }
-    if (this._ctxKey) { window.removeEventListener('keydown', this._ctxKey); this._ctxKey = null; }
+    clearTimeout(this._ctxTimer);
+    if (this._ctxOffKey) { this._ctxOffKey(); this._ctxOffKey = null; }
   }
 
   // ---- 群众组（父节点 + 成员子项）----

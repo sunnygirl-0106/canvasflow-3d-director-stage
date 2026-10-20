@@ -92,13 +92,13 @@ export class Prop extends Entity {
   toJSON({ base = null } = {}) {
     return {
       type: 'prop', id: this.id, name: this.name, kind: this.kind,
-      color: hexColor(this.color), visible: this.root.visible, transform: this._transformJSON(base || this.root),
+      color: hexColor(this.color), visible: this.root.visible, transform: this.transformJSON(base || this.root),
     };
   }
 
   static async fromJSON(json) {
     const p = new Prop(json.kind, json.name, json.id);
-    p._applyTransform(json.transform);
+    p.applyTransform(json.transform);
     p.setColor(json.color);
     p.setVisible(json.visible);
     return p;

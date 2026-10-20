@@ -14,7 +14,7 @@ import { aimPointWith, anchorWith } from './subject.js';
 //   follow 覆盖机位的 pos 轨道 / 路径；同时有 lookAt 时朝向由 lookAt 决定（follow 先于 lookAt）。
 //
 // 注视点 / 锚点的定义见 subject.js（与 AI 编译共用）；这里只提供从场景对象取数的适配器。
-//   角色脚底取站立基准（root.y − _rootY0），注视点不随步态抖动；道具几何中心按实体缓存。
+//   角色脚底取站立基准（root.y − rootY0），注视点不随步态抖动；道具几何中心按实体缓存。
 
 const _m = new THREE.Matrix4();
 const _v = new THREE.Vector3();
@@ -50,9 +50,9 @@ function propCenter(ent) {
   return c;
 }
 
-/** 角色脚底在 root 局部坐标下的位置（站立基准：root.y − _rootY0 为脚底，换成局部坐标）。 */
+/** 角色脚底在 root 局部坐标下的位置（站立基准：root.y − rootY0 为脚底，换成局部坐标）。 */
 function charFoot(ent, out) {
-  return out.set(0, -ent._rootY0 / ent.root.scale.y, 0);
+  return out.set(0, -ent.rootY0 / ent.root.scale.y, 0);
 }
 
 /** 运行时适配器：从场景对象取数。 */
@@ -108,7 +108,7 @@ export function applyConstraint(app, c, st, t = null, all = null) {
     st.quaternion.premultiply(_q);
     st.rotTouched = true;
   } else if (c.type === 'lookAt') {
-    const roll = st.ent._roll || 0;
+    const roll = st.ent.rollRad || 0;
     if (!aimQuat(app, c.subject, st.position, roll, _aim)) return;
     let w = 1, from = st.quaternion; // 约束前的朝向（关键帧 / 路径 / follow 之后）
     if (t != null) {

@@ -27,7 +27,7 @@ export class Crowd extends Entity {
   toJSON({ base = null } = {}) {
     return {
       type: 'group', id: this.id, name: this.name, visible: this.root.visible,
-      transform: this._transformJSON(base || this.root), members: this.members.map((m) => m.id),
+      transform: this.transformJSON(base || this.root), members: this.members.map((m) => m.id),
     };
   }
 
@@ -42,7 +42,7 @@ export class Crowd extends Entity {
     const root = new THREE.Group();
     for (const m of members) root.add(m.root);
     const crowd = new Crowd(json.name, root, members, {}, json.id);
-    crowd._applyTransform(json.transform);
+    crowd.applyTransform(json.transform);
     if (!json.visible) crowd.setVisible(false); // 成员各自的显隐已在 Character.fromJSON 里还原
     return crowd;
   }

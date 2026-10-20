@@ -1,6 +1,7 @@
 import { el, toastError } from '../../util/dom.js';
 import { keyId } from './TrackRows.js';
 import { round6 } from '../../util/math.js';
+import { onKey, KEY_PRIORITY } from '../../util/keys.js';
 
 const DRAG_PX = 3; // 移动超过此距离才算拖动（否则是点击）
 
@@ -158,12 +159,10 @@ export function popupMenu(x, y, items) {
   menu.style.left = Math.min(x, window.innerWidth - r.width - 8) + 'px';
   menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
   const close = (ev) => { if (!menu.contains(ev.target)) closePopup(); };
-  const key = (ev) => { if (ev.key === 'Escape') { ev.stopImmediatePropagation(); closePopup(); } };
-  setTimeout(() => {
-    window.addEventListener('pointerdown', close, true);
-    window.addEventListener('keydown', key, true);
-  }, 0);
-  _popup = { menu, close, key };
+  const offKey = onKey((ev) => { if (ev.key === 'Escape') { ev.stopImmediatePropagation(); closePopup(); } }, { priority: KEY_PRIORITY.popup });
+  // 下一拍再监听点击关闭，避免打开菜单的这次点击立刻把它关掉；关得比这一拍还早时清掉定时器
+  const timer = setTimeout(() => window.addEventListener('pointerdown', close, true), 0);
+  _popup = { menu, close, offKey, timer };
   return menu;
 }
 
@@ -171,7 +170,8 @@ let _popup = null;
 export function closePopup() {
   if (!_popup) return;
   _popup.menu.remove();
+  clearTimeout(_popup.timer);
   window.removeEventListener('pointerdown', _popup.close, true);
-  window.removeEventListener('keydown', _popup.key, true);
+  _popup.offKey();
   _popup = null;
 }

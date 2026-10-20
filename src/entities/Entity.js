@@ -60,23 +60,23 @@ export class Entity {
   // base：时间轴 active 期间该实体的手动值（Timeline.baseOf），有则导出 base 而不是 root 上的动画瞬时值。
 
   /** 文档 transform 与 root 变换之间的换算：pos = root.pos − posOffset，scale = root.scale ÷ scaleDiv。 */
-  _docTransformOpts() { return { posOffset: [0, 0, 0], scaleDiv: [1, 1, 1] }; }
+  docTransformOpts() { return { posOffset: [0, 0, 0], scaleDiv: [1, 1, 1] }; }
 
   /**
    * root 的局部变换 → 文档 transform（rot 为度）。
    * @param {{position, rotation, scale}} [src] 取值来源，默认 root；传 Timeline base 时导出手动值
    */
-  _transformJSON(src = this.root) {
-    const { posOffset, scaleDiv } = this._docTransformOpts();
+  transformJSON(src = this.root) {
+    const { posOffset, scaleDiv } = this.docTransformOpts();
     const r = src;
     const pos = xyz(r.position).map((v, i) => round6(v - posOffset[i]));
     const scale = [r.scale.x / scaleDiv[0], r.scale.y / scaleDiv[1], r.scale.z / scaleDiv[2]].map(round6);
     return { pos, rot: xyz(r.rotation, R2D), scale };
   }
 
-  /** 文档 transform → root 的局部变换（_transformJSON 的逆）。 */
-  _applyTransform({ pos, rot, scale }) {
-    const { posOffset, scaleDiv } = this._docTransformOpts();
+  /** 文档 transform → root 的局部变换（transformJSON 的逆）。 */
+  applyTransform({ pos, rot, scale }) {
+    const { posOffset, scaleDiv } = this.docTransformOpts();
     const r = this.root;
     r.position.set(pos[0] + posOffset[0], pos[1] + posOffset[1], pos[2] + posOffset[2]);
     r.rotation.set(rot[0] * D2R, rot[1] * D2R, rot[2] * D2R);

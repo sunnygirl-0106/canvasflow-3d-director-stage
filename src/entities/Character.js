@@ -75,7 +75,7 @@ export class Character extends Entity {
     this.body = spec.body ?? null; // 体型 key（BODY_TYPES），场景文档据此重建
     // 体型参数：目标身高 + 横向围度（girth=X/Z 缩放）。由单一 Xbot 素体派生高/矮/胖/瘦。
     this.height = spec.height || DEFAULT_HEIGHT;
-    this._girth = spec.girth || 1;
+    this.girth = spec.girth || 1;
 
     this.model = model;
     root.add(model);
@@ -126,12 +126,12 @@ export class Character extends Entity {
     this.autoGround = true;
 
     this._normalize(); // 在文件静止位(T-pose)下量身高 / 落地
-    this._rootY0 = root.position.y; // 站立基准：归一化后 root 的固有高度偏移（文档 pos.y=0 即站在地面）
+    this.rootY0 = root.position.y; // 站立基准：归一化后 root 的固有高度偏移（文档 pos.y=0 即站在地面）
     this._modelBaseY = model.position.y;
     this._groundY = this._lowestBoneY(); // 地面高度（root 局部坐标），自动贴地以此为准
     this._sole = this._buildSole();       // 脚底采样点（步态贴地用）
     this.applyPose();  // 默认即站立
-    this._standModelY = this.model.position.y; // 站立（自动贴地后）的 model 高度：步态的骨盆起伏以此为零点
+    this.standModelY = this.model.position.y; // 站立（自动贴地后）的 model 高度：步态的骨盆起伏以此为零点
     this.legGeom = this._buildLegGeom();       // 站立腿部几何（步态 IK 用）
   }
 
@@ -142,10 +142,10 @@ export class Character extends Entity {
   }
 
   // ---- 场景文档 ----
-  // pos 相对站立基准（减去 _rootY0），scale 相对素体自然尺寸（除以 baseScale·girth），二者都与模型文件单位无关。
-  _docTransformOpts() {
-    const b = this.baseScale, g = this._girth;
-    return { posOffset: [0, this._rootY0, 0], scaleDiv: [b * g, b, b * g] };
+  // pos 相对站立基准（减去 rootY0），scale 相对素体自然尺寸（除以 baseScale·girth），二者都与模型文件单位无关。
+  docTransformOpts() {
+    const b = this.baseScale, g = this.girth;
+    return { posOffset: [0, this.rootY0, 0], scaleDiv: [b * g, b, b * g] };
   }
 
   /** @param {{parent?:string|null, base?:object|null}} opts parent = 所属组 id（群众成员）；base 见 Entity */
@@ -156,7 +156,7 @@ export class Character extends Entity {
     return {
       type: 'character', id: this.id, name: this.name, body: this.body,
       color: hexColor(this.color), visible: this.root.visible,
-      transform: this._transformJSON(base || this.root),
+      transform: this.transformJSON(base || this.root),
       pose: { preset: this.currentPreset, values },
       parent,
     };
@@ -164,7 +164,7 @@ export class Character extends Entity {
 
   static async fromJSON(json) {
     const c = await Character.load(json.name, bodySpec(json.body), json.id);
-    c._applyTransform(json.transform);
+    c.applyTransform(json.transform);
     c.setColor(json.color);
     Object.assign(c.values, Pose.fromJSON(json.pose).values); // values 是 pose.values 的别名，原地写入
     c.currentPreset = json.pose.preset;
@@ -186,7 +186,7 @@ export class Character extends Entity {
     const size = box.getSize(new THREE.Vector3());
     const measured = size.y || Math.max(size.x, size.z) || this.height;
     const scale = this.height / measured;
-    root.scale.set(scale * this._girth, scale, scale * this._girth); // 胖瘦只改 X/Z
+    root.scale.set(scale * this.girth, scale, scale * this.girth); // 胖瘦只改 X/Z
     this.baseScale = scale;
 
     const box2 = worldBox(root, { useBones: true }); // worldBox 会先刷新 root 的世界矩阵
@@ -292,7 +292,7 @@ export class Character extends Entity {
    * 缺腿部关节或脚底采样点的模型返回 null（不做步态）。
    */
   _buildLegGeom() {
-    const sx = this.baseScale * this._girth, sy = this.baseScale;
+    const sx = this.baseScale * this.girth, sy = this.baseScale;
     this.root.updateMatrixWorld(true);
     _m.copy(this.root.matrixWorld).invert();
     const yz = (v) => [v.y * sy, v.z * sx];

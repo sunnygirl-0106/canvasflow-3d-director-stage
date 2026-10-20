@@ -159,7 +159,7 @@ export class Timeline extends Emitter {
   _state(ent, base) {
     return {
       ent, base,
-      opts: ent._docTransformOpts(),
+      opts: ent.docTransformOpts(),
       position: base.position.clone(),
       quaternion: new THREE.Quaternion().setFromEuler(base.rotation),
       rotTouched: false, // 未改旋转时写回 base 欧拉（避免四元数 → 欧拉的表示变化）
@@ -275,12 +275,12 @@ export class Timeline extends Emitter {
   }
 
   /**
-   * 实体此刻（root 上）某属性的值，口径同文档 / setKey（复用 _transformJSON 的换算：角色 pos 相对站立基准、
+   * 实体此刻（root 上）某属性的值，口径同文档 / setKey（复用 transformJSON 的换算：角色 pos 相对站立基准、
    * scale 相对素体自然尺寸、rot 为 XYZ 欧拉角度数）。fov 只对机位有意义。
    */
   valueOf(ent, prop) {
     if (prop === 'fov') return ent.type === 'camera' ? round6(ent.cam.fov) : undefined;
-    return ent._transformJSON(ent.root)[prop];
+    return ent.transformJSON(ent.root)[prop];
   }
 
   /**

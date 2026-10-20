@@ -5,6 +5,7 @@ import { Transport } from './Transport.js';
 import { Ruler } from './Ruler.js';
 import { TrackRows, keyId, PROP_LABEL } from './TrackRows.js';
 import { dragKeys, dragBar, popupMenu } from './keyDrag.js';
+import { onKey, KEY_PRIORITY } from '../../util/keys.js';
 
 const RULER_H = 24;
 const PAD_R = 24;            // 时长之后留白（末尾的键 / 播放头不贴边）
@@ -54,7 +55,7 @@ export class TimelinePanel extends Emitter {
     pb.on('state', () => this.transport.reflectState());
     app.on('entities', () => { this.transport.reflectCameras(); this.rebuild(); }); // 改名 / 删除
     app.on('selection', () => this.applySelection());
-    window.addEventListener('keydown', (e) => this._onKey(e), true); // 捕获阶段：先于全局快捷键（Del 删键而非删实体）
+    onKey((e) => this._onKey(e), { priority: KEY_PRIORITY.timeline }); // 先于全局快捷键（Del 删键而非删实体）
     // 点面板以外的地方 = 取消选键（之后 Del 删的是实体而不是键）
     window.addEventListener('pointerdown', (e) => {
       if (this.selKeys.size && !this.container.contains(e.target) && !e.target.closest?.('.tl-menu')) { this.selKeys.clear(); this.applySelection(); }

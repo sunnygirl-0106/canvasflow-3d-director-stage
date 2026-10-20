@@ -508,7 +508,7 @@ async function animTest() {
     pb.seek(2);
     out.charYaw = m.root.rotation.y * R2D;
     out.charDocY = a.toDocument().entities.find((e) => e.id === ids.m).transform.pos[1];
-    out.charRootY = m.root.position.y - m._rootY0;
+    out.charRootY = m.root.position.y - m.rootY0;
     out.charZ = m.root.position.z;
     // smooth：首尾速度为 0
     out.speeds = [M.speedAt(0), M.speedAt(2), M.speedAt(4), C.speedAt(0), C.speedAt(4)];
@@ -671,7 +671,7 @@ async function animTest() {
     const a = window.__app, tl = a.timeline, pb = a.playback;
     const c1 = a.findEntity(ids.c1), c2 = a.findEntity(ids.c2);
     const V = c1.root.position.constructor, Q = c1.root.quaternion.constructor;
-    c1._roll = 12 * Math.PI / 180; // 荷兰角
+    c1.rollRad = 12 * Math.PI / 180; // 荷兰角
     // f 沿弧线走（会转向）；c1 注视 f；c2 跟随 f，并且有自己的 pos 轨道和 rot 关键帧（应被 follow 覆盖 / 按 f 的 yaw 旋转）
     tl.addPath({ target: ids.f, points: [[1, 0, 0.6], [2.5, 0, -1], [1, 0, -3], [-1, 0, -2]], start: 0, duration: 5, speed: 'linear', orient: 'tangent' });
     tl.addConstraint({ type: 'lookAt', target: ids.c1, subject: ids.f });
@@ -707,7 +707,7 @@ async function animTest() {
     pb.seek(4);
     const trackX = c2.root.position.x; // pos 轨道 t=4：5 + (−10)×0.8 = −3
     pb.stop();
-    return { maxAim, maxRoll, maxOff, maxRot, trackX, rollKept: Math.abs(c1._roll * R2D - 12) < 1e-9 };
+    return { maxAim, maxRoll, maxOff, maxRot, trackX, rollKept: Math.abs(c1.rollRad * R2D - 12) < 1e-9 };
   }, ids);
   ok('约束：lookAt 机位 −Z 对准 subject（每 0.5 s 采样）', cons.maxAim < 0.1, `max ${cons.maxAim.toExponential(2)}°`);
   ok('约束：lookAt 保留荷兰角 roll', cons.maxRoll < 0.1 && cons.rollKept, `max 偏差 ${cons.maxRoll.toExponential(2)}°`);

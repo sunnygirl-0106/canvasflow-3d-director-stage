@@ -122,7 +122,11 @@ export class CameraRig {
       }
     }
 
-    // 重置视角回到该自动取景
+    this.saveHome(); // 重置视角回到该自动取景
+  }
+
+  /** 把当前视角记为「重置视角」的目标。 */
+  saveHome() {
     this._home.pos.copy(this.camera.position);
     this._home.target.copy(this.controls.target);
   }

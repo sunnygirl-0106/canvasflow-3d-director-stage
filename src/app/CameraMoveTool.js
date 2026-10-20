@@ -53,7 +53,7 @@ export class CameraMoveTool {
     return nearestSubject(doc, cam.id, this.context(cam).position, aimOf) ?? this._aheadPoint(cam);
   }
 
-  _aheadPoint(cam) { return aheadPoint(cam._transformJSON(this.app.timeline.baseOf(cam) || cam.root)); }
+  _aheadPoint(cam) { return aheadPoint(cam.transformJSON(this.app.timeline.baseOf(cam) || cam.root)); }
 
   /** 只含本机位条目 + 动画字段的文档视图（edit.moveContext 用；不必整份 toDocument）。 */
   _camDoc(cam) {

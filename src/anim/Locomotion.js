@@ -258,7 +258,7 @@ export function applyLocomotion(ch, base, motion, scale, phaseOffset = 0) {
   if (g.w > 0) {
     const yAuto = ch.model.position.y;
     ch.autoGround = false;
-    ch.model.position.y = lerp(yAuto, ch._standModelY + g.drop / ch.baseScale, g.w);
+    ch.model.position.y = lerp(yAuto, ch.standModelY + g.drop / ch.baseScale, g.w);
   }
   return { w: g.w, k: g.k, phase };
 }

@@ -13,6 +13,7 @@ import { toast, isTyping } from './util/dom.js';
 import { AutoSave } from './app/SceneFile.js';
 import { AiAgent } from './ai/agent.js';
 import { OpenAICompatProvider, loadSettings } from './ai/provider.js';
+import { onKey, KEY_PRIORITY } from './util/keys.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -30,7 +31,7 @@ const navGizmo = new NavGizmo($('navsvg'), stage.camera, () => app.resetView());
 app.ai = new AiAgent(app, { provider: new OpenAICompatProvider(loadSettings()) });
 
 // ---- ui（各自订阅 app 事件）----
-// 导出视频弹层：须先于时间轴面板创建 —— 它的 window 捕获阶段键盘监听要排在最前（导出中 / 弹层打开时拦下全部快捷键，Esc = 取消）
+// 导出视频弹层：打开 / 导出中拦下全部快捷键（Esc = 取消），优先级见 util/keys.js
 const exportModal = new ExportModal(app);
 new ScenePanel($('scenePanel'), app);
 new Inspector($('inspector'), app);
@@ -57,12 +58,12 @@ app.on('view', (on) => {
 // 机位视角旁的机位名：idle 灰字 = 当前机位；时间轴 active 透过主机位 = 强调色「▶ 主机位 · 名字」
 const renderPov = () => {
   const camera = app.findCamera(app.povCameraId);
-  const main = app._mainPreview;
+  const main = app.mainPreview;
   const label = $('povLabel');
   label.hidden = !camera;
   label.classList.toggle('main', main);
   label.textContent = camera ? (main ? `▶ 主机位 · ${camera.name}` : camera.name) : '';
-  $('povHint').hidden = !app._povUnset;
+  $('povHint').hidden = !app.povUnset;
 };
 app.on('pov', renderPov);
 app.on('entities', renderPov); // 改名
@@ -86,7 +87,7 @@ app.on('scene', () => history.schedule());
 new AutoSave(app); // 撤销栈变化后防抖 1s 写 localStorage
 
 // 键盘：输入控件内不拦截（文本框里的 ⌘Z 留给浏览器做文字撤销）
-window.addEventListener('keydown', (e) => {
+onKey((e) => {
   if (isTyping(e.target)) return;
   const k = e.key.toLowerCase();
   if (e.metaKey || e.ctrlKey) {
@@ -101,7 +102,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'r') app.setTransformMode('rotate');
   else if (k === 's') app.setTransformMode('scale');
   else if (e.key === 'Delete' || e.key === 'Backspace') { if (app.selectedId) app.remove(app.selectedId); }
-});
+}, { priority: KEY_PRIORITY.global, phase: 'bubble' });
 
 // 调试句柄（selftest 也通过它驱动）
 window.__app = app;

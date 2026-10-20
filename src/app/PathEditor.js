@@ -1,6 +1,7 @@
 import { toast, toastError, isTyping, CLICK_PX } from '../util/dom.js';
 import { stopsAfterInsert, stopsAfterDelete } from '../anim/pathGen.js';
 import { round4 } from '../util/math.js';
+import { onKey, KEY_PRIORITY } from '../util/keys.js';
 
 
 /**
@@ -25,8 +26,8 @@ export class PathEditor {
     dom.addEventListener('pointermove', (e) => this._onMove(e));
     dom.addEventListener('pointerup', (e) => this._onUp(e), true);
     dom.addEventListener('pointerleave', () => { if (!this.drag) this._setHover(null); });
-    window.addEventListener('keydown', (e) => this._onEscape(e), true); // 拖动中 Esc：先于时间轴的 Esc = 停止
-    window.addEventListener('keydown', (e) => this._onDelete(e));       // 冒泡：时间轴（捕获，选中键）之后、全局删实体之前
+    onKey((e) => this._onEscape(e), { priority: KEY_PRIORITY.pathDrag });                  // 拖动中 Esc：先于时间轴的 Esc = 停止
+    onKey((e) => this._onDelete(e), { priority: KEY_PRIORITY.pathVertex, phase: 'bubble' }); // 时间轴（选中键）之后、全局删实体之前
     app.on('selection', () => this.app.pathOverlay.setSelectedVertex(null));
   }
 
@@ -113,7 +114,7 @@ export class PathEditor {
     const d = this.drag;
     this.drag = null;
     this.app.pathOverlay.clearPreview();
-    this.app.gizmo.setVisible(this.app._gizmoShouldShow());
+    this.app.gizmo.setVisible(this.app.gizmoShouldShow());
     this.dom.style.cursor = '';
     return d;
   }

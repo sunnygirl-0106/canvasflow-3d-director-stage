@@ -1,6 +1,7 @@
 import { el, toast } from '../util/dom.js';
 import { icon } from './icons.js';
 import { downloadURL } from '../app/ShotManager.js';
+import { onKey, KEY_PRIORITY } from '../util/keys.js';
 import {
   EXPORT_RESOLUTIONS, exportSize, frameCount, exportCamera, hasWebCodecs, isExportSupported, UNSUPPORTED_MSG,
 } from '../app/exportSpec.js';
@@ -31,7 +32,7 @@ export class ExportModal {
       e.stopImmediatePropagation();
       if (this.app.exporting) e.preventDefault();
     };
-    window.addEventListener('keydown', this._onKey, true);
+    onKey(this._onKey, { priority: KEY_PRIORITY.modal });
   }
 
   get busy() { return !!this._abort; }

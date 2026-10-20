@@ -485,13 +485,13 @@ export class Inspector {
     const commit = (prop) => () => this.app.edited(ent, new Set([prop])); // 一次修改结束：按时间轴状态归属（3.3）
     root.appendChild(this._nameField(ent));
 
-    // 显示 / 输入都是文档口径（与导出 JSON、关键帧值一致）：pos 减站立基准偏移，scale 除以素体自然尺寸（_docTransformOpts）
-    const opts = () => ent._docTransformOpts();
+    // 显示 / 输入都是文档口径（与导出 JSON、关键帧值一致）：pos 减站立基准偏移，scale 除以素体自然尺寸（docTransformOpts）
+    const opts = () => ent.docTransformOpts();
     const pos = tripleRow({ label: '位置', step: 0.01, onCommit: commit('pos'), axes: ['x', 'y', 'z'].map((k, i) => ({ key: k, get: () => o.position[k] - opts().posOffset[i], set: (v) => { o.position[k] = v + opts().posOffset[i]; invalidate(); } })) });
     const rot = tripleRow({ label: '旋转', deg: true, onCommit: commit('rot'), axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.rotation[k] * R2D, set: (v) => { o.rotation[k] = v * D2R; invalidate(); } })) });
     const scl = tripleRow({ label: '缩放', step: 0.01, onCommit: commit('scale'), axes: ['x', 'y', 'z'].map((k, i) => ({ key: k, get: () => o.scale[k] / opts().scaleDiv[i], set: (v) => { o.scale[k] = Math.max(0.05, v) * opts().scaleDiv[i]; invalidate(); } })) });
 
-    const girth = ent._girth || 1; // 体型横向围度（胖瘦）；统一缩放时按 Y 为基准、保留 X/Z 比例
+    const girth = ent.girth || 1; // 体型横向围度（胖瘦）；统一缩放时按 Y 为基准、保留 X/Z 比例
     const uni = sliderRow({
       label: '统一缩放', min: 0.2, max: 3, step: 0.01, value: o.scale.y / ent.baseScale,
       format: (v) => v.toFixed(1),
@@ -537,10 +537,10 @@ export class Inspector {
     const targets = app.entities.filter((e) => e.type === 'character' || e.type === 'prop');
     let lookRow;
     root.appendChild(dropdownRow({
-      label: '注视目标', value: ent._aimRef || 'manual',
+      label: '注视目标', value: ent.aimRef || 'manual',
       options: [{ value: 'manual', label: '手动坐标' }, ...targets.map((t) => ({ value: t.id, label: t.name }))],
       onChange: (val) => {
-        ent._aimRef = val;
+        ent.aimRef = val;
         if (val === 'manual') return;
         if (app.aimCameraAtObject(ent.id, val)) { lookRow.syncAll(); pos.syncAll(); this.schedulePreview(); }
       },

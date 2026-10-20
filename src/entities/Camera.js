@@ -63,7 +63,7 @@ export class CameraEntity extends Entity {
     tintHelper(this.helper, FRUSTUM_COLOR);
     if (this._scene) this._scene.add(this.helper);
 
-    this._roll = 0;    // 荷兰角（弧度），aimAt 时叠加
+    this.rollRad = 0;    // 荷兰角（弧度），aimAt 时叠加
     this._helpersOn = true; // 相机体+视锥是否允许显示（机位视角/截图时关闭）
     this.lookTarget = new THREE.Vector3(0, 0, -1); // 注视坐标（世界系约定）
   }
@@ -83,15 +83,15 @@ export class CameraEntity extends Entity {
   toJSON({ base = null } = {}) {
     return {
       type: 'camera', id: this.id, name: this.name, visible: this.root.visible,
-      transform: this._transformJSON(base || this.root), fov: round6(base ? base.fov : this.cam.fov),
-      roll: round6(this._roll * 180 / Math.PI), lookAt: xyz(this.lookTarget),
+      transform: this.transformJSON(base || this.root), fov: round6(base ? base.fov : this.cam.fov),
+      roll: round6(this.rollRad * 180 / Math.PI), lookAt: xyz(this.lookTarget),
     };
   }
 
   static async fromJSON(json, { app }) {
     const c = new CameraEntity(json.name, { fov: json.fov, aspect: app.viewportAspect(), id: json.id });
-    c._applyTransform(json.transform);
-    c._roll = json.roll * Math.PI / 180;
+    c.applyTransform(json.transform);
+    c.rollRad = json.roll * Math.PI / 180;
     c.lookTarget.fromArray(json.lookAt);
     c.setVisible(json.visible);
     return c;
@@ -105,7 +105,7 @@ export class CameraEntity extends Entity {
     this.lookTarget.copy(point);
     const m = new THREE.Matrix4().lookAt(this.root.position, point, new THREE.Vector3(0, 1, 0));
     this.root.quaternion.setFromRotationMatrix(m);
-    if (this._roll) this.root.rotateZ(this._roll);
+    if (this.rollRad) this.root.rotateZ(this.rollRad);
     this.root.updateMatrixWorld(true);
     this.update();
   }
