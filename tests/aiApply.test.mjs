@@ -139,6 +139,14 @@ test('注视点：角色半身高 / 组成员平均 / 道具几何中心', () =>
   assert.deepEqual(docAimPoint(doc, byName(doc, '箱').id).map((v) => Math.round(v * 1e6) / 1e6), [5, 0.8, 0]);
 });
 
+test('跟随道具：默认偏移相对道具 root（与运行时 Constraint.anchorOf 同一锚点），机位不跳', () => {
+  const doc = run(createEmptyDocument(), [...GEN, { op: 'add_prop', name: '箱', kind: 'box', pos: [5, 0, 0], scale: 2 }], 'generate').doc;
+  const { doc: d2 } = run(doc, [{ op: 'follow', target: '机位1', subject: '箱' }]);
+  const f = d2.constraints.find((c) => c.type === 'follow');
+  // 机位 (0, 1.4, 3) − 箱 root (5, 0, 0)；箱 yaw 0
+  assert.deepEqual(f.offset.map((v) => Math.round(v * 1e4) / 1e4), [-5, 1.4, 3]);
+});
+
 test('摘要：每实体一行、含路径 / 注视 / 时间轴', () => {
   const doc = run(createEmptyDocument(), GEN, 'generate').doc;
   const s = summarize(doc);

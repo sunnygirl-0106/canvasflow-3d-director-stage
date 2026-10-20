@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { EASE, clamp01 } from './ease.js';
+import { aimPointWith, anchorWith } from './subject.js';
 
 // 约束（evaluate 的最后一步，作用在机位上）。坐标一律是场景根节点（stage.world）下的局部坐标，
 // 与文档 transform 同一口径：机位都是顶层实体，subject 若是群众成员则经组的变换换算过来。
@@ -12,15 +13,12 @@ import { EASE, clamp01 } from './ease.js';
 //   朝向 = Ry(subject yaw) × 机位原朝向（关键帧 / 路径 / 手动值都按 subject yaw=0 的坐标系解释）。
 //   follow 覆盖机位的 pos 轨道 / 路径；同时有 lookAt 时朝向由 lookAt 决定（follow 先于 lookAt）。
 //
-// 注视点 / 锚点：
-//   character 注视点 = 脚底位置上方半个身高（站立包围盒中心，不随步态抖动），锚点 = 脚底位置；
-//   prop 注视点 = 几何包围盒中心，锚点 = root 位置；camera 注视点 / 锚点 = 自身位置；
-//   group 注视点 = 各成员注视点的平均，锚点 = 轴心位置；subject 为坐标 [x,y,z] 时两者都是该点、yaw = 0。
+// 注视点 / 锚点的定义见 subject.js（与 AI 编译共用）；这里只提供从场景对象取数的适配器。
+//   角色脚底取站立基准（root.y − _rootY0），注视点不随步态抖动；道具几何中心按实体缓存。
 
 const _m = new THREE.Matrix4();
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
 const _up = new THREE.Vector3(0, 1, 0);
 const _box = new THREE.Box3();
 
@@ -57,37 +55,25 @@ function charFoot(ent, out) {
   return out.set(0, -ent._rootY0 / ent.root.scale.y, 0);
 }
 
+/** 运行时适配器：从场景对象取数（群众组运行时类型叫 crowd，文档里叫 group）。 */
+const sceneAdapter = (app) => ({
+  get: (id) => app.findEntity(id),
+  type: (ent) => (ent.type === 'crowd' ? 'group' : ent.type),
+  members: (ent) => ent.children,
+  matrix: (ent, out) => worldMatrix(app, ent, out),
+  aimLocal: (ent, out) => {
+    if (ent.type === 'character') { charFoot(ent, out); out.y += ent.height / ent.baseScale / 2; return out; } // 半个身高（root 局部单位）
+    if (ent.type === 'prop') return out.copy(propCenter(ent));
+    return out.set(0, 0, 0);
+  },
+  footLocal: (ent, out) => charFoot(ent, out),
+});
+
 /** subject 的注视点（场景根节点坐标）。 */
-export function aimPoint(app, subject, out = new THREE.Vector3()) {
-  if (Array.isArray(subject)) return out.fromArray(subject);
-  const ent = app.findEntity(subject);
-  if (!ent) return null;
-  if (ent.type === 'group' || ent.type === 'crowd') {
-    out.set(0, 0, 0);
-    const ms = ent.children;
-    for (const m of ms) out.add(aimPoint(app, m.id, new THREE.Vector3()));
-    return ms.length ? out.divideScalar(ms.length) : out.setFromMatrixPosition(worldMatrix(app, ent, _m));
-  }
-  const M = worldMatrix(app, ent, new THREE.Matrix4());
-  if (ent.type === 'character') {
-    charFoot(ent, out);
-    out.y += ent.height / ent.baseScale / 2; // 半个身高（root 局部单位）
-    return out.applyMatrix4(M);
-  }
-  if (ent.type === 'prop') return out.copy(propCenter(ent)).applyMatrix4(M);
-  return out.setFromMatrixPosition(M);
-}
+export const aimPoint = (app, subject, out) => aimPointWith(sceneAdapter(app), subject, out);
 
 /** subject 的锚点（场景根节点坐标）与 yaw（弧度）。 */
-export function anchorOf(app, subject) {
-  if (Array.isArray(subject)) return { pos: new THREE.Vector3().fromArray(subject), yaw: 0 };
-  const ent = app.findEntity(subject);
-  if (!ent) return null;
-  const M = worldMatrix(app, ent, new THREE.Matrix4());
-  const pos = ent.type === 'character' ? charFoot(ent, new THREE.Vector3()).applyMatrix4(M) : new THREE.Vector3().setFromMatrixPosition(M);
-  M.decompose(_v, _q, new THREE.Vector3());
-  return { pos, yaw: _e.setFromQuaternion(_q, 'YXZ').y };
-}
+export const anchorOf = (app, subject) => anchorWith(sceneAdapter(app), subject);
 
 /** lookAt 入场 / 退场混合时长（秒）。 */
 export const LOOK_BLEND = 0.5;

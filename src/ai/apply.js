@@ -9,6 +9,7 @@ import { BODY_TYPES, PROP_PALETTE } from '../config.js';
 import { propLocalCenter } from '../entities/Prop.js';
 import { aimRotation, MoveError, MOVE_LABEL } from '../anim/cameraMoves.js';
 import { line, polar, toward, pathLength, arcPoints, ARC_SWEEP, TOWARD_STOP } from '../anim/pathGen.js';
+import { aimPointWith, anchorWith } from '../anim/subject.js';
 import { hexColor } from '../entities/Entity.js';
 import { round6, clone, D2R } from '../util/math.js';
 
@@ -32,36 +33,33 @@ function worldMatrix(doc, e) {
   return parent ? m.premultiply(matrixOf(parent.transform)) : m;
 }
 
-/**
- * 注视点（与 Constraint.aimPoint 同口径）：角色 = 脚底上方半个身高，道具 = 几何中心，组 = 成员平均，机位 = 自身位置。
- * subject 为 [x,y,z] 时原样返回。
- */
+/** 文档适配器（注视点 / 锚点定义见 anim/subject.js，与运行时共用）：角色脚底 = root 原点（文档口径落地 y=0）。 */
+const docAdapter = (doc) => ({
+  get: (id) => edit.findEntity(doc, id),
+  type: (e) => e.type,
+  members: (e) => e.members.map((id) => edit.findEntity(doc, id)),
+  matrix: (e, out) => out.copy(worldMatrix(doc, e)),
+  aimLocal: (e, out) => (e.type === 'character' ? out.set(0, BODY_TYPES[e.body].height / 2, 0)
+    : e.type === 'prop' ? out.copy(propLocalCenter(e.kind)) : out.set(0, 0, 0)),
+  footLocal: (e, out) => out.set(0, 0, 0),
+});
+
+/** 注视点 [x,y,z]（subject 为 id 或坐标；不存在返回 null）。 */
 export function docAimPoint(doc, subject) {
-  if (Array.isArray(subject)) return subject.slice();
-  const e = edit.findEntity(doc, subject);
-  if (!e) return null;
-  if (e.type === 'group') {
-    const ms = e.members.map((id) => docAimPoint(doc, id));
-    return [0, 1, 2].map((k) => ms.reduce((s, p) => s + p[k], 0) / ms.length);
-  }
-  const local = e.type === 'character' ? new THREE.Vector3(0, BODY_TYPES[e.body].height / 2, 0)
-    : e.type === 'prop' ? propLocalCenter(e.kind) : new THREE.Vector3();
-  return local.clone().applyMatrix4(worldMatrix(doc, e)).toArray();
+  return aimPointWith(docAdapter(doc), subject)?.toArray() ?? null;
 }
 
-/** 锚点（路径「走到 / 环绕中心 / 直线终点」与跟随用，与 PathTool.anchorOf 同口径）：角色 / 组 = 脚底 / 轴心，其余 = 注视点。 */
+/** 路径吸附点（「走到 / 环绕中心 / 直线终点」，与 PathTool.anchorOf 同口径）：角色 / 组 = 脚底 / 轴心，其余 = 注视点。 */
 function docAnchor(doc, id) {
   const e = edit.findEntity(doc, id);
   if (e.type === 'character' || e.type === 'group') return new THREE.Vector3().setFromMatrixPosition(worldMatrix(doc, e)).toArray();
   return docAimPoint(doc, id);
 }
 
-/** 锚点 + yaw（弧度，与 Constraint.anchorOf 同口径）。 */
+/** 跟随锚点 + yaw（弧度）：与运行时 follow 同一锚点（道具 = root，不是几何中心）。 */
 function docAnchorYaw(doc, id) {
-  const m = worldMatrix(doc, edit.findEntity(doc, id));
-  const q = new THREE.Quaternion();
-  m.decompose(new THREE.Vector3(), q, new THREE.Vector3());
-  return { pos: docAnchor(doc, id), yaw: new THREE.Euler().setFromQuaternion(q, 'YXZ').y };
+  const a = anchorWith(docAdapter(doc), id);
+  return { pos: a.pos.toArray(), yaw: a.yaw };
 }
 
 // ---- 编译：在文档上逐条执行 ----
