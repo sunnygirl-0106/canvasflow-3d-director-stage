@@ -14,7 +14,7 @@ export default [
   },
   {
     // node 侧：自测 / 单测 / 脚本 / 配置（selftest 里 page.evaluate 的回调跑在浏览器，两套全局都要）
-    files: ['selftest.mjs', 'tests/**', 'scripts/**', '*.config.js'],
+    files: ['selftest.mjs', 'e2e/**', 'tests/**', 'scripts/**', '*.config.js'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
 ];

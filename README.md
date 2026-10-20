@@ -42,9 +42,9 @@ npm run dev          # 打开终端给出的 http://localhost:5173
 npm run build        # 生产构建 → dist/
 npm run preview      # 本地预览构建产物
 
-npm run lint         # ESLint
-npm run test:e2e     # 端到端自测（headless Chrome，自动起 dev server）
-                     # 非 macOS 需设 CHROME_PATH 指向 Chrome 可执行文件
+npm run check        # lint（ESLint + import 分层 / 循环依赖检查）+ 单元测试，CI 部署前同样跑这两项
+npm run test:e2e     # 端到端默认套件（headless Chrome，自动起 dev server；找不到 Chrome 时设 CHROME_PATH）
+npm run test:e2e:all # 全部端到端套件（默认 + 下面 7 个验收套件，各起一个子进程）
 
 # selftest 子命令（截图输出到 test-output/，不入库）
 node selftest.mjs poses <outDir> [bodyKey]   # 单角色逐个套姿势预设截图（默认 xbot）
@@ -58,7 +58,7 @@ node selftest.mjs path                       # 角色路径验收（真实点击
 node selftest.mjs export                     # 导出视频验收：精灵名牌 / 帧 ≡ 快照 / 逐帧确定性 / MP4（ffprobe 或盒子解析）/ 取消 / 不支持的浏览器 → test-output/export/
 node selftest.mjs ai                         # AI 生成验收（MockProvider，不依赖网络）：一句话生成 / 校验回路 / 三次失败不改场景 / 修改 + ⌘Z / 重名 / 识图 / 词汇表一致 → test-output/ai/
 node selftest.mjs cam                        # 机位运镜验收（真实操作）：半环绕盯人 / 推拉 / 横移升降 / 摇 / 追加 + 删末段 / 机位路径 / 主机位播放 / 往返 → test-output/cam/
-npm run test:unit                            # 路径 / 运镜生成器、文档纯函数、AI ops 校验 / 编译 / 提示词单元测试（node:test，不起浏览器）
+npm run test:unit                            # 单元测试（node:test，不起浏览器）：路径 / 运镜生成器、文档纯函数、时间轴、撤销栈、步态、AI ops、快捷键分发
 npm run docs:ai                              # 按代码重新生成 README「AI 生成」里的 ops / 词汇表块
 ```
 
@@ -347,8 +347,9 @@ src/
 └─ styles/             style.css · timeline.css
 public/assets/          Xbot.glb（中性素体，meshopt 压缩）
 public/assets/figures/  BodyKun / BodyChan 关节人偶 GLB
-tests/                  node 单元测试（pathGen / cameraMoves / docEdit / aiOps / aiApply）
-scripts/                gen-ai-vocab.mjs（README AI 词汇表块）
+tests/                  node 单元测试（*.test.mjs 自动发现；fixtures/ 为从浏览器导出的人偶数据）
+e2e/                    端到端自测：harness（服务 + 浏览器）/ helpers（共用操作）/ suites（各套件）/ tools（calib / collide / poses）
+scripts/                gen-ai-vocab.mjs（README AI 词汇表块）· check-imports.mjs（import 分层 / 循环依赖检查）
 docs/                   试用指南.md
 ```
 
