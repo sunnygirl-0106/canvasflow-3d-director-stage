@@ -173,6 +173,19 @@ export class Character extends Entity {
     return c;
   }
 
+  canApply(json) { return json.type === 'character' && json.body === this.body; }
+
+  applyJSON(json) {
+    this.name = json.name;
+    this.applyTransform(json.transform);
+    this.setColor(json.color);
+    Object.assign(this.values, Pose.fromJSON(json.pose).values); // 补齐全部关节，等同新建
+    this.currentPreset = json.pose.preset;
+    this.autoGround = true;
+    this.applyPose();
+    this.setVisible(json.visible);
+  }
+
   labelTargets() { return [this]; }
 
   /** 名牌在头顶上方；随角色自身缩放。 */

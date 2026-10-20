@@ -97,6 +97,18 @@ export class CameraEntity extends Entity {
     return c;
   }
 
+  canApply(json) { return json.type === 'camera'; }
+
+  applyJSON(json) {
+    this.name = json.name;
+    if (this.cam.fov !== json.fov) this.setFov(json.fov);
+    this.applyTransform(json.transform);
+    this.rollRad = json.roll * Math.PI / 180;
+    this.lookTarget.fromArray(json.lookAt);
+    this.setVisible(json.visible);
+    this.update();
+  }
+
   labelTargets() { return [this]; }
   labelOffset() { return 0.2; }
 

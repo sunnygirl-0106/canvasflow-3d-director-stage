@@ -592,8 +592,8 @@ export class App extends Emitter {
     return p;
   }
 
-  /** 清空场景专用路径：不经 remove()，因此不连带删截图、不切视角、不 toast。 */
-  _clearEntities() {
+  /** 清空场景专用路径：不经 remove()，因此不连带删截图、不切视角、不 toast。keep 里的实体只摘下、不销毁（加载文档时复用）。 */
+  _clearEntities(keep = new Set()) {
     this.selectedId = null;
     this.selectedIds = new Set();
     this.gizmo.detach();
@@ -601,15 +601,19 @@ export class App extends Emitter {
     for (const ent of this.entities) {
       this.stage.remove(ent.root);
       this.labels.detach(ent);
-      ent.dispose();
+      if (!keep.has(ent)) ent.dispose();
     }
     this.entities = [];
   }
 
-  /** 由 serialize.loadDocument 调用：实体与全景都已就绪，同步替换（中间不会渲染出半个场景）。 */
-  _commitDocument(doc, entities, panoHandle, { applyView = false, pruneShots = false } = {}) {
+  /**
+   * 由 serialize.loadDocument 调用：实体与全景都已就绪，同步替换（中间不会渲染出半个场景）。
+   * entities 里可能有当前场景复用的实体，apply 把文档值写进它们。
+   */
+  _commitDocument(doc, entities, panoHandle, { applyView = false, pruneShots = false, apply = [] } = {}) {
     const prevSel = this.selectedId;
-    this._clearEntities();
+    this._clearEntities(new Set(entities));
+    for (const fn of apply) fn();
     for (const ent of entities) {
       this.stage.add(ent.root);
       if (ent.type === 'camera') ent.attachScene(this.stage.scene);

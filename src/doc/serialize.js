@@ -73,20 +73,35 @@ export function toDocument(app, { view = true } = {}) {
 }
 
 /**
- * 文档 → 全部实体（尚未入场）。任一实体失败则销毁已建好的并抛错，保证不出现半个场景。
- * 群众成员由 group 的 fromJSON 负责创建，这里只建顶层实体，顺序 = 文档顺序。
+ * 文档 → 全部顶层实体（尚未入场），顺序 = 文档顺序；群众成员由 group 负责。
+ * 当前场景里同 id、结构没变的顶层实体直接复用（提交时 applyJSON 原地套用），其余新建。
+ * 任一新建失败则销毁已新建的并抛错，保证不出现半个场景。
+ * @returns {{entities: Entity[], fresh: Entity[], apply: Function[]}} apply：提交时依次调用，把文档值写进复用的实体
  */
 async function buildEntities(app, doc) {
   const byId = new Map(doc.entities.map((e) => [e.id, e]));
   const ctx = { app, assets: doc.assets, entity: (id) => byId.get(id) };
   const tops = doc.entities.filter((e) => !(e.type === 'character' && e.parent));
-  const settled = await Promise.allSettled(tops.map((json) => ENTITY_CLASSES[json.type].fromJSON(json, ctx)));
+  const reusable = (json) => {
+    const old = app.entities.find((e) => e.id === json.id); // 只在顶层里找：原来是组成员的不复用
+    return old && old.canApply(json, ctx) ? old : null;
+  };
+  const apply = [];
+  const reused = new Set();
+  const settled = await Promise.allSettled(tops.map((json) => {
+    const old = reusable(json);
+    if (!old) return ENTITY_CLASSES[json.type].fromJSON(json, ctx);
+    reused.add(old);
+    apply.push(() => old.applyJSON(json, ctx));
+    return old;
+  }));
+  const fresh = settled.filter((r) => r.status === 'fulfilled' && !reused.has(r.value)).map((r) => r.value);
   const failed = settled.find((r) => r.status === 'rejected');
   if (failed) {
-    for (const r of settled) if (r.status === 'fulfilled') r.value.dispose();
+    fresh.forEach((e) => e.dispose());
     throw failed.reason;
   }
-  return settled.map((r) => r.value);
+  return { entities: settled.map((r) => r.value), fresh, apply };
 }
 
 /**
@@ -104,10 +119,11 @@ export async function loadDocument(app, input, opts = {}) {
   const panoRef = doc.scene.panorama && { id: doc.scene.panorama.assetId, ...doc.assets[doc.scene.panorama.assetId] };
   const [ents, pano] = await Promise.allSettled([buildEntities(app, doc), app.panorama.prepare(panoRef)]);
   if (ents.status === 'rejected' || pano.status === 'rejected') {
-    if (ents.status === 'fulfilled') ents.value.forEach((e) => e.dispose());
+    if (ents.status === 'fulfilled') ents.value.fresh.forEach((e) => e.dispose());
     if (pano.status === 'fulfilled') pano.value?.discard();
     throw ents.reason || pano.reason;
   }
-  app._commitDocument(doc, ents.value, pano.value, opts);
+  const { entities, apply } = ents.value;
+  app._commitDocument(doc, entities, pano.value, { ...opts, apply });
   return doc;
 }

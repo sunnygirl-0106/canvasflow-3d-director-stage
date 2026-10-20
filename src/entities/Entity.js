@@ -58,6 +58,13 @@ export class Entity {
   // ---- 场景文档 ----
   // 子类实现 toJSON({ base }) 与 static async fromJSON(json, ctx)（ctx = { app, assets, entity(id) }）。
   // base：时间轴 active 期间该实体的手动值（Timeline.baseOf），有则导出 base 而不是 root 上的动画瞬时值。
+  // 撤销 / 重做等加载文档时，结构没变的实体不重建：canApply 为真就 applyJSON 原地套用（效果与 fromJSON 新建相同）。
+
+  /** 文档条目能否原地套用到本实体（同类型且结构相同：道具种类 / 体型 / 组成员不变）。 */
+  canApply(json, ctx) { return false; }
+
+  /** 原地套用文档条目（canApply 为真时才调用）。 */
+  applyJSON(json, ctx) {}
 
   /** 文档 transform 与 root 变换之间的换算：pos = root.pos − posOffset，scale = root.scale ÷ scaleDiv。 */
   docTransformOpts() { return { posOffset: [0, 0, 0], scaleDiv: [1, 1, 1] }; }

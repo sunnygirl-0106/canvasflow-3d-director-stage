@@ -141,5 +141,22 @@ export async function run() {
     seq.push([`重做→状态${i}`, pixelDiff(states[i], f, `${OUT}/_diff_redo${i}.png`)]);
   }
   for (const [name, r] of seq) ok(`撤销重做：${name} 画面一致`, r < MAX, pct(r));
+
+  // ---- 5 撤销不重建：结构没变的实体原地更新（对象不变），只有增删的实体新建 / 销毁 ----
+  const reuse = await page.evaluate(async () => {
+    const a = window.__app;
+    a.history.reset();
+    const before = new Map(a.entities.map((e) => [e.id, e]));
+    const ch = a.entities.find((e) => e.type === 'character');
+    ch.setColor('#ff3366'); a.edited(ch); a.history.capture();
+    const t0 = performance.now();
+    await a.history.undo();
+    const ms = performance.now() - t0;
+    const same = a.entities.every((e) => before.get(e.id) === e);
+    const color = a.findEntity(ch.id).color;
+    await a.history.redo();
+    return { same, ms, colorBack: color !== 0xff3366, redone: a.findEntity(ch.id).color === 0xff3366 };
+  });
+  ok('撤销不重建：改颜色后撤销，全部实体还是原对象、颜色回到原值', reuse.same && reuse.colorBack && reuse.redone, `${reuse.ms.toFixed(1)} ms`);
   console.log(`📁 产物：${OUT}/`);
 }

@@ -104,6 +104,15 @@ export class Prop extends Entity {
     return p;
   }
 
+  canApply(json) { return json.type === 'prop' && json.kind === this.kind; }
+
+  applyJSON(json) {
+    this.name = json.name;
+    this.applyTransform(json.transform);
+    this.setColor(json.color);
+    this.setVisible(json.visible);
+  }
+
   setColor(hex) {
     const c = new THREE.Color(hex);
     this.root.traverse((n) => { if (n.isMesh) n.material.color.copy(c); });

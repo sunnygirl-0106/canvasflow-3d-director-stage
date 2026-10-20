@@ -47,6 +47,19 @@ export class Crowd extends Entity {
     return crowd;
   }
 
+  canApply(json, ctx) {
+    return json.type === 'group' && json.members.length === this.members.length
+      && this.members.every((m, i) => m.id === json.members[i] && m.canApply(ctx.entity(m.id)));
+  }
+
+  applyJSON(json, ctx) {
+    for (const m of this.members) m.applyJSON(ctx.entity(m.id));
+    this.name = json.name;
+    this.applyTransform(json.transform);
+    if (json.visible) { this.visible = true; this.root.visible = true; } // 成员各自的显隐已由成员条目还原
+    else this.setVisible(false);
+  }
+
   labelTargets() { return this.members; }
 
   /** 代表色（取首个成员），供 Inspector 颜色行初值。 */
