@@ -9,7 +9,7 @@ import { ScenePanel } from './ui/ScenePanel.js';
 import { TimelinePanel } from './ui/timeline/TimelinePanel.js';
 import { ExportModal } from './ui/ExportModal.js';
 import { AiPanel } from './ui/AiPanel.js';
-import { toast } from './util/dom.js';
+import { toast, isTyping } from './util/dom.js';
 import { AutoSave } from './app/SceneFile.js';
 import { AiAgent } from './ai/agent.js';
 import { OpenAICompatProvider, loadSettings } from './ai/provider.js';
@@ -74,15 +74,20 @@ $('closeBtn').onclick = () => toast('（演示）关闭');
 // 拖动类操作（gizmo / 轴标签拖动 / 滑条）只在 pointerup / change 时记录，不按帧记录；
 // 异步完成的操作（加角色 / 群众 / 复制 / 全景）在 'entities' / 'scene' 事件时记录。
 const history = app.history;
-for (const t of ['pointerup', 'click', 'change', 'keyup']) window.addEventListener(t, () => history.schedule());
+const isTextInput = (t) => t && (t.isContentEditable || t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'color'].includes(t.type)));
+for (const t of ['pointerup', 'click', 'change', 'keyup']) {
+  window.addEventListener(t, (e) => {
+    if (t === 'keyup' && isTextInput(e.target)) return; // 文本框里逐字输入不快照：改动在 change（失焦 / 回车）时记一步
+    history.schedule();
+  });
+}
 app.on('entities', () => history.schedule());
 app.on('scene', () => history.schedule());
 new AutoSave(app); // 撤销栈变化后防抖 1s 写 localStorage
 
 // 键盘：输入控件内不拦截（文本框里的 ⌘Z 留给浏览器做文字撤销）
 window.addEventListener('keydown', (e) => {
-  const t = e.target;
-  if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+  if (isTyping(e.target)) return;
   const k = e.key.toLowerCase();
   if (e.metaKey || e.ctrlKey) {
     // ⌘Z / Ctrl+Z 撤销；⌘⇧Z / Ctrl+Shift+Z / Ctrl+Y 重做

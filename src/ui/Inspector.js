@@ -11,9 +11,8 @@ import { pathLength, defaultDuration, stopsAfterReverse, toggleStop, WALK_PACE }
 import { rampFor } from '../anim/Path.js';
 import { popupMenu } from './timeline/keyDrag.js';
 import { CAMERA_MOVES, MOVE_PARAMS, MOVE_DIRS, MOVE_LABEL } from '../anim/cameraMoves.js';
+import { D2R, R2D } from '../util/math.js';
 
-const D2R = Math.PI / 180;
-const R2D = 180 / Math.PI;
 const FOV_TIP = '控制镜头视野范围。数值越小，画面越近、越聚焦；数值越大，画面越广、能看到更多环境。';
 const PREVIEW_W = 248, PREVIEW_H = 140;
 const RUN_SPEED = 2.6; // m/s：平均速度超过它标「跑」（步态 ≥ 2.6 纯跑）
@@ -424,7 +423,7 @@ export class Inspector {
     const { app } = this;
     if (this._activeHint) this._activeHint.hidden = !app.timeline.active;
     if (!this._animRows.length) return;
-    const anim = app.timeline.toJSON();
+    const anim = app.timeline.view(); // 播放时每帧都会走到这里：只读视图，不深拷贝
     const t = app.timeline.active ? app.playback.time : 0;
     for (const r of this._animRows) {
       const st = propState(app, anim, r.ent.id, r.prop, t);

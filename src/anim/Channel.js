@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { EASE } from './ease.js';
+import { D2R } from '../util/math.js';
 
-const D2R = Math.PI / 180;
 const _qa = new THREE.Quaternion();
 const _qb = new THREE.Quaternion();
 const _e = new THREE.Euler();

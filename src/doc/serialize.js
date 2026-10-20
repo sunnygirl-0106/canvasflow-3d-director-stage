@@ -6,7 +6,7 @@ import { Character } from '../entities/Character.js';
 import { Prop } from '../entities/Prop.js';
 import { CameraEntity } from '../entities/Camera.js';
 import { Crowd } from '../entities/Crowd.js';
-import { round6, xyz } from '../util/round.js';
+import { round6, xyz } from '../util/math.js';
 
 /* global __APP_VERSION__ */
 export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';

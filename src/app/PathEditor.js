@@ -1,10 +1,8 @@
-import { toast } from '../util/dom.js';
+import { toast, isTyping, CLICK_PX } from '../util/dom.js';
 import { toastError } from '../ui/timeline/Transport.js';
 import { stopsAfterInsert, stopsAfterDelete } from '../anim/pathGen.js';
+import { round4 } from '../util/math.js';
 
-const CLICK_PX = 4;  // 按下到松开移动不超过它算点击（与 Selection 一致）
-const isTyping = (t) => t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
-const r4 = (x) => { const v = Math.round(x * 1e4) / 1e4; return v === 0 ? 0 : v; };
 
 /**
  * 顶点编辑（阶段 E）：选中实体后直接在视口操作，不需要进绘制态。
@@ -90,9 +88,9 @@ export class PathEditor {
     const nx = g[0] + d.offset[0], nz = g[2] + d.offset[1];
     if (d.all) {
       const dx = nx - v[0], dz = nz - v[2];
-      d.points = d.orig.map((p) => [r4(p[0] + dx), p[1], r4(p[2] + dz)]);
+      d.points = d.orig.map((p) => [round4(p[0] + dx), p[1], round4(p[2] + dz)]);
     } else {
-      d.points = d.orig.map((p, i) => (i === d.index ? [r4(nx), p[1], r4(nz)] : p));
+      d.points = d.orig.map((p, i) => (i === d.index ? [round4(nx), p[1], round4(nz)] : p));
     }
     this.app.pathOverlay.setPreview(d.pathId, d.points);
   }
@@ -157,7 +155,7 @@ export class PathEditor {
     const seg = path.edgeAt(s);
     const p = path.positionAt(s);
     const pts = json.points.slice();
-    pts.splice(seg + 1, 0, [r4(p.x), json.points[seg][1], r4(p.z)]);
+    pts.splice(seg + 1, 0, [round4(p.x), json.points[seg][1], round4(p.z)]);
     if (this._write(pathId, { points: pts, ...stopsAfterInsert(json, seg + 1) })) this.app.pathOverlay.setSelectedVertex({ pathId, index: seg + 1 });
   }
 

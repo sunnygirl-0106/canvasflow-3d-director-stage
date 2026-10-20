@@ -117,7 +117,7 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 810, deviceScaleFactor: 1 });
 const errs = [];
 const warns = [];
-page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); if (m.type() === 'warn') warns.push(m.text()); });
+page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text() + (m.location()?.url ? ` @ ${m.location().url.slice(0, 120)}` : '')); if (m.type() === 'warn') warns.push(m.text()); });
 page.on('pageerror', (e) => errs.push('PAGEERROR: ' + e.message));
 
 if (CMD === 'calib') {

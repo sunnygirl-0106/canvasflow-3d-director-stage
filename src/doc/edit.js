@@ -12,10 +12,8 @@ import { POSE_PRESET_MAP } from '../entities/posePresets.js';
 import { defaultDuration, fitStops } from '../anim/pathGen.js';
 import { rampFor } from '../anim/Path.js';
 import { cameraMove, appendMove, lookAtWindows, pathEnd, MoveError } from '../anim/cameraMoves.js';
-import { round6 } from '../util/round.js';
+import { round6, clone, round4 } from '../util/math.js';
 
-const clone = (v) => JSON.parse(JSON.stringify(v));
-const r4 = (x) => Math.round(x * 1e4) / 1e4;
 const T_EPS = 1e-9; // 同一时刻判定（与 Timeline.setKey 一致）
 
 /** 群众阵列行列数 / 间距的范围与默认间距（界面与 AI 校验共用）。 */
@@ -273,8 +271,8 @@ export function moveContext(doc, camId, { time = 0, lastPan = null } = {}) {
   const { pos, rot } = cam.transform;
   const roll = cam.roll;
   const { path } = camAnim(doc, camId);
-  if (path) return { position: pathEnd(path), rot, roll, time: r4(path.start + path.duration), append: true, path };
-  if (lastPan) return { position: pos, rot: lastPan.rotEnd, roll, time: r4(lastPan.start + lastPan.duration), append: true, path: null };
+  if (path) return { position: pathEnd(path), rot, roll, time: round4(path.start + path.duration), append: true, path };
+  if (lastPan) return { position: pos, rot: lastPan.rotEnd, roll, time: round4(lastPan.start + lastPan.duration), append: true, path: null };
   return { position: pos, rot, roll, time, append: false, path: null };
 }
 
@@ -282,7 +280,7 @@ export function moveContext(doc, camId, { time = 0, lastPan = null } = {}) {
 export function aheadPoint(transform, dist = 3) {
   const e = new THREE.Euler(...transform.rot.map((d) => d * Math.PI / 180));
   const dir = new THREE.Vector3(0, 0, -1).applyEuler(e);
-  return new THREE.Vector3(...transform.pos).addScaledVector(dir, dist).toArray().map(r4);
+  return new THREE.Vector3(...transform.pos).addScaledVector(dir, dist).toArray().map(round4);
 }
 
 /**
@@ -337,7 +335,7 @@ export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, t
       tl.tracks = [...tl.tracks, track];
       undo.track = track.id;
     }
-    const end = r4(start + move.duration);
+    const end = round4(start + move.duration);
     const keys = track.keys.filter((k) => Math.abs(k.t - start) > T_EPS && Math.abs(k.t - end) > T_EPS);
     keys.push({ t: start, value: clone(move.rotKeys[0]), ease: 'smooth' }, { t: end, value: clone(move.rotKeys[1]), ease: 'smooth' });
     keys.sort((a, b) => a.t - b.t);
@@ -348,7 +346,7 @@ export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, t
   }
 
   // 2 注视窗口：带路径的段从 start 开始注视，摇镜头摇完（start + duration）才开始
-  const lookStart = move.points ? start : r4(start + move.duration);
+  const lookStart = move.points ? start : round4(start + move.duration);
   const w = lookAtWindows(before.lookAts, { subject, cut: start, start: lookStart });
   undo.removed = before.lookAts.filter((c) => w.remove.includes(c.id));
   undo.patched = w.patch.map((p) => ({ id: p.id, end: before.lookAts.find((c) => c.id === p.id).end }));

@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 
 // 用户交互事件：任何一次都可能改变画面，标记需要重绘。
-const INVALIDATING_EVENTS = ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'input', 'change'];
+// 离散事件（点击 / 按键 / 表单）在 window 上监听；高频的 pointermove / wheel 只在视口内监听 ——
+// 鼠标划过侧栏 / 时间轴不该让整个场景按帧重绘。视口外的拖拽（滑条、拖键）经 input 事件或 app.emit 重绘。
+const INVALIDATING_EVENTS = ['pointerdown', 'pointerup', 'keydown', 'input', 'change'];
+const VIEWPORT_EVENTS = ['pointermove', 'wheel'];
 
 // 场景 / 渲染器 / 光照 / 地面 / 网格 / 按需渲染循环 / resize
 export class Stage {
@@ -38,6 +41,7 @@ export class Stage {
     this._dirty = true;
     const invalidate = () => this.invalidate();
     for (const t of INVALIDATING_EVENTS) window.addEventListener(t, invalidate, { passive: true, capture: true });
+    for (const t of VIEWPORT_EVENTS) viewportEl.addEventListener(t, invalidate, { passive: true, capture: true });
 
     // 视口尺寸变化（窗口缩放、全屏、侧栏变化）统一由 ResizeObserver 感知
     this._resizeHandlers = [];
@@ -172,6 +176,7 @@ export class Stage {
     const loop = () => {
       requestAnimationFrame(loop);
       const dt = this.clock.getDelta();
+      if (this.suspended) return; // 离线导出期间由导出器自己逐帧渲染，主视口不重复渲染
       let moving = false;
       try { moving = !!tick?.(dt); } catch (e) { console.error(e); }
       if (!this._dirty && !moving) return;

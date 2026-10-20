@@ -1,9 +1,9 @@
 import { el } from '../../util/dom.js';
 import { keyId } from './TrackRows.js';
 import { toastError } from './Transport.js';
+import { round6 } from '../../util/math.js';
 
 const DRAG_PX = 3; // 移动超过此距离才算拖动（否则是点击）
-const r6 = (t) => Math.round(t * 1e6) / 1e6;
 
 /** 在 pointer 按下的元素上跟踪一次拖动：onMove(dx, ev) / onEnd(dragged, ev)。 */
 function track(node, e, { onMove, onEnd }) {
@@ -83,7 +83,7 @@ export function dragKeys(panel, e, anchorEl, { collapseOnClick = false } = {}) {
       try {
         if (!copy) for (const k of sel) tl.removeKey(k.trackId, k.t);
         for (const k of sel) {
-          const t = r6(k.t + delta);
+          const t = round6(k.t + delta);
           tl.setKey(k.trackId, t, k.value, k.ease);
           next.add(keyId(k.trackId, t));
         }
@@ -134,10 +134,10 @@ export function dragBar(panel, e, barEl, edge) {
       if (!dragged) return;
       try {
         if (kind === 'path') {
-          if (edge === 'end') tl.updatePath(id, { duration: r6(b - a) });
-          else tl.updatePath(id, { start: r6(a) });
-        } else if (edge === 'end') tl.updateConstraint(id, { end: r6(b) });
-        else tl.updateConstraint(id, { start: r6(a) });
+          if (edge === 'end') tl.updatePath(id, { duration: round6(b - a) });
+          else tl.updatePath(id, { start: round6(a) });
+        } else if (edge === 'end') tl.updateConstraint(id, { end: round6(b) });
+        else tl.updateConstraint(id, { start: round6(a) });
       } catch (err) { toastError(err); }
       panel.rebuild();
     },

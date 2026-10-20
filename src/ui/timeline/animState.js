@@ -2,7 +2,7 @@ const T_EPS = 1e-6; // "当前时刻有键"的判定容差（播放头吸附到�
 
 /**
  * 实体某属性在 t 时刻的动画状态（Inspector 菱形 / 灰字用）。
- * @param {object} anim timeline.toJSON() 的结果（同一次刷新里复用）
+ * @param {object} anim timeline.view() 的结果（只读；同一次刷新里复用）
  * @returns {{ track: object|null, key: object|null, forced: string|null, driven: boolean }}
  *   forced：该时刻被 '路径' / '跟随' / '注视' 强制驱动；driven：显示的是求值结果（有键的轨道或 forced）。
  */
@@ -23,7 +23,7 @@ export function toggleKey(app, ent, prop) {
   const tl = app.timeline, pb = app.playback;
   const idle = !tl.active;
   const t = idle ? 0 : pb.time;
-  const st = propState(app, tl.toJSON(), ent.id, prop, t);
+  const st = propState(app, tl.view(), ent.id, prop, t);
   if (st.key) tl.removeKey(st.track.id, st.key.t);
   else {
     const value = tl.valueOf(ent, prop); // 此刻显示的值（idle = 手动值，active = 求值结果）

@@ -1,10 +1,8 @@
-import { round6, xyz } from '../util/round.js';
+import { round6, xyz, D2R, R2D } from '../util/math.js';
 
 // 实体基类：gizmo 与选择都作用于 root。
 // 各类型差异通过覆盖下列钩子表达，App 不再按 type 字符串逐个分支。
 
-const D2R = Math.PI / 180;
-const R2D = 180 / Math.PI;
 
 /**
  * 实体 id：8 位 base36 随机串。场景文档按 id 互相引用（parent / members / activeCameraId），

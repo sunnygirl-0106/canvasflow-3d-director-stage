@@ -9,6 +9,7 @@ import { TRACK_TARGETS, PATH_TARGETS, FOV_RANGE } from '../doc/schema.js';
 import { MOVE_PARAMS, MOVE_DIRS } from '../anim/cameraMoves.js';
 import { WALK_PACE } from '../anim/pathGen.js';
 import { CROWD_LIMITS, CROWD_SPACING } from '../doc/edit.js';
+import { isObj, isNum } from '../util/math.js';
 
 /** 三种模式：生成新场景 / 修改当前场景 / 识图导入。 */
 export const MODES = ['generate', 'modify', 'image'];
@@ -27,8 +28,6 @@ export const LIMITS = {
 
 export const TYPE_LABEL = { character: '角色', prop: '道具', camera: '机位', group: '组' };
 
-const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isName = (v) => typeof v === 'string' && v.trim() !== '';
 const fmt = (v) => (v === undefined ? 'undefined' : JSON.stringify(v));
 const HEX_RE = /^#[0-9a-f]{6}$/i;

@@ -1,4 +1,4 @@
-import { el } from '../../util/dom.js';
+import { el, isTyping } from '../../util/dom.js';
 import { Emitter } from '../../util/Emitter.js';
 import { Transport } from './Transport.js';
 import { Ruler } from './Ruler.js';
@@ -22,7 +22,6 @@ function savePrefs(p) {
   try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch { /* 隐私模式等：忽略 */ }
 }
 
-const isTyping = (t) => t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
 
 /**
  * 底部时间轴面板（阶段 D）。

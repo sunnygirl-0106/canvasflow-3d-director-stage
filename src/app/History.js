@@ -14,6 +14,7 @@ export class History extends Emitter {
     this.app = app;
     this.limit = limit;
     this.entries = [];   // JSON 字符串
+    this._refs = [];     // 与 entries 一一对应：该快照引用的全景 assetId（或 null），资源回收用
     this.index = -1;     // 当前状态在 entries 里的位置
     this.enabled = false; // 种子场景加载完成后由 reset() 打开
     this._assets = new Map(); // assetId → asset
@@ -23,19 +24,22 @@ export class History extends Emitter {
   get canUndo() { return this.index > 0; }
   get canRedo() { return this.index < this.entries.length - 1; }
 
+  /** → { json, ref }：ref = 快照引用的全景 assetId（或 null）。 */
   _snapshot() {
     const doc = this.app.toDocument({ view: false });
     doc.meta.updatedAt = '';
     for (const [id, a] of Object.entries(doc.assets)) this._assets.set(id, a);
     doc.assets = {};
-    return JSON.stringify(doc);
+    return { json: JSON.stringify(doc), ref: doc.scene.panorama?.assetId ?? null };
   }
 
   /** 以当前场景为唯一起点清空栈（启动完成时）。 */
   reset() {
     this.enabled = true;
     this._assets.clear();
-    this.entries = [this._snapshot()];
+    const snap = this._snapshot();
+    this.entries = [snap.json];
+    this._refs = [snap.ref];
     this.index = 0;
     this.emit('change', 'reset');
   }
@@ -44,10 +48,15 @@ export class History extends Emitter {
   capture() {
     if (!this.enabled || this._restoring || this.app.loadingDocument) return false;
     const snap = this._snapshot();
-    if (snap === this.entries[this.index]) return false;
-    this.entries.length = this.index + 1; // 丢弃重做分支
-    this.entries.push(snap);
-    if (this.entries.length > this.limit) this.entries.splice(0, this.entries.length - this.limit);
+    if (snap.json === this.entries[this.index]) return false;
+    this.entries.length = this._refs.length = this.index + 1; // 丢弃重做分支
+    this.entries.push(snap.json);
+    this._refs.push(snap.ref);
+    if (this.entries.length > this.limit) {
+      const drop = this.entries.length - this.limit;
+      this.entries.splice(0, drop);
+      this._refs.splice(0, drop);
+    }
     this.index = this.entries.length - 1;
     this._gcAssets();
     this.emit('change', 'capture');
@@ -85,11 +94,7 @@ export class History extends Emitter {
   /** 丢掉不再被任何快照引用的资源缓存。 */
   _gcAssets() {
     if (!this._assets.size) return;
-    const used = new Set();
-    for (const s of this.entries) {
-      const m = /"panorama":\{"assetId":"([^"]+)"/.exec(s);
-      if (m) used.add(m[1]);
-    }
+    const used = new Set(this._refs);
     for (const id of this._assets.keys()) if (!used.has(id)) this._assets.delete(id);
   }
 }

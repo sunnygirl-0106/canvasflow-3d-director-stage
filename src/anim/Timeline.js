@@ -9,11 +9,10 @@ import { rampFor } from './Path.js';
 import { fitStops } from './pathGen.js';
 import { applyLocomotion } from './Locomotion.js';
 import { applyConstraint, constraintActive } from './Constraint.js';
-import { round6 } from '../util/round.js';
+import { round6, clone } from '../util/math.js';
 
 const GOLDEN = 0.6180339887; // 群众成员步伐错开：第 i 个成员相位偏移 frac(i·φ)
 
-const clone = (v) => JSON.parse(JSON.stringify(v));
 const T_EPS = 1e-9; // 同一时刻判定（setKey 覆盖 / removeKey）
 
 /**
@@ -51,13 +50,19 @@ export class Timeline extends Emitter {
   }
 
   // ---- 场景文档 ----
-  /** → { timeline, paths, constraints }（深拷贝，可直接并入文档）。 */
-  toJSON() {
-    return clone({
+  /** → { timeline, paths, constraints }（深拷贝，可直接并入文档 / 随意修改）。 */
+  toJSON() { return clone(this.view()); }
+
+  /**
+   * 与 toJSON 同形状的只读视图（不拷贝，直接引用内部数据）。文档对象只整体替换、不原地改，
+   * 所以可以放心长期持有；调用方绝不能修改它。供每帧刷新的界面（菱形状态等）用，避免逐帧深拷贝。
+   */
+  view() {
+    return {
       timeline: { duration: this.duration, fps: this.fps, mainCameraId: this.mainCameraId, tracks: this.tracks },
       paths: this.paths,
       constraints: this.constraints,
-    });
+    };
   }
 
   /**
@@ -379,7 +384,7 @@ export class Timeline extends Emitter {
     doc.timeline = { duration: n.duration, fps: n.fps, mainCameraId: n.mainCameraId, tracks: n.tracks };
     doc.paths = n.paths;
     doc.constraints = n.constraints;
-    const { ok, errors } = validate(clone(doc));
+    const { ok, errors } = validate(doc); // validate 只读不改；不再整份深拷贝（文档里可能带几 MB 的全景 dataURL）
     if (!ok) throw new DocumentError(errors);
     Object.assign(this, n);
     if (this.active) this.evaluate(this.time);

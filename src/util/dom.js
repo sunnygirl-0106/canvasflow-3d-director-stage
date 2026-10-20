@@ -56,3 +56,9 @@ export function toast(msg, { duration, action, actions } = {}) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), duration ?? (btns.length ? 10000 : 1700));
 }
+
+/** 焦点在输入控件里（快捷键此时不拦截，留给控件自己处理）。 */
+export const isTyping = (t) => !!t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
+
+/** 指针按下到松开移动不超过它（px）算点击，否则算拖动（视口拾取 / 路径绘制 / 顶点编辑共用）。 */
+export const CLICK_PX = 4;

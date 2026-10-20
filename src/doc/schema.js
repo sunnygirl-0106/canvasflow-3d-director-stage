@@ -59,6 +59,7 @@
 import { BODY_TYPES, PROP_KINDS, RATIO_OPTIONS } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
 import { JOINT_SCHEMA } from '../rig/jointSchema.js';
+import { clone, isObj, isNum } from '../util/math.js';
 
 export const SCHEMA_VERSION = 'director-stage/0.1';
 export const APP_ID = 'director-stage-demo';
@@ -95,7 +96,6 @@ export const DEFAULT_SCENE = Object.freeze({
 export const DEFAULT_TIMELINE = Object.freeze({ duration: 10, fps: 30, mainCameraId: null, tracks: [] });
 export const DEFAULT_TRANSFORM = Object.freeze({ pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] });
 
-const clone = (v) => JSON.parse(JSON.stringify(v));
 
 /** 一份空场景文档（全部字段齐全）。 */
 export function createEmptyDocument({ name = '未命名场景', app = APP_ID } = {}) {
@@ -129,8 +129,6 @@ const PATH_KEYS = ['id', 'target', 'points', 'closed', 'start', 'duration', 'spe
 const PATH_OPTIONAL = ['stops', 'stopTimes'];
 const CONSTRAINT_KEYS = ['id', 'type', 'target', 'subject', 'offset', 'start', 'end'];
 
-const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isStr = (v) => typeof v === 'string';
 const fmt = (v) => (v === undefined ? 'undefined'
   : JSON.stringify(v, (k, x) => (typeof x === 'number' && !Number.isFinite(x) ? String(x) : x)));

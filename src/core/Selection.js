@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { worldBox } from '../util/measure.js';
+import { CLICK_PX } from '../util/dom.js';
 
 // Raycaster 选择 + 高亮。
 // 点击画布 → 命中后向上回溯到挂 userData.entityId 的 root → onSelect(id)；点空白取消选中。
@@ -44,7 +45,7 @@ export class Selection {
     dom.addEventListener('pointerup', (e) => {
       // 只把"几乎没移动"的按下当作点选，避免与环绕/拖拽冲突
       const moved = Math.hypot(e.clientX - this._down.x, e.clientY - this._down.y);
-      if (moved > 4) return;
+      if (moved > CLICK_PX) return;
       if (this._shouldSkip()) return;
       this._pick(e);
     });

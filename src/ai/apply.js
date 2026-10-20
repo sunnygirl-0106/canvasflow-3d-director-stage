@@ -11,10 +11,8 @@ import { aimRotation, MoveError, MOVE_LABEL } from '../anim/cameraMoves.js';
 import { line, polar, toward, pathLength } from '../anim/pathGen.js';
 import { arcPoints, ARC_SWEEP, TOWARD_STOP } from '../app/PathTool.js';
 import { hexColor } from '../entities/Entity.js';
-import { round6 } from '../util/round.js';
+import { round6, clone, D2R } from '../util/math.js';
 
-const clone = (v) => JSON.parse(JSON.stringify(v));
-const D2R = Math.PI / 180;
 const DEFAULT_FOV = 40;
 const r2 = (x) => Math.round(x * 100) / 100;
 

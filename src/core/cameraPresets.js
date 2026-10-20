@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { D2R } from '../util/math.js';
 
 // 机位预设：给定主体（选中角色，否则场景中心）与导演相机，
 // 算出机位的位姿与 fov 的纯函数表。约定主体正面朝 +Z。
@@ -7,7 +8,6 @@ import * as THREE from 'three';
 // build(ctx) -> { position:Vector3, target:Vector3, fov?:number, roll?:number(弧度) }
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const DEG = Math.PI / 180;
 
 export const CAMERA_PRESETS = [
   // ---- 视角 ----
@@ -113,7 +113,7 @@ export const CAMERA_PRESETS = [
     build: (c) => ({
       position: c.subjectCenter.clone().add(V(c.subjectHeight * 0.6, c.subjectHeight * 0.15, c.subjectHeight * 1.9)),
       target: c.subjectCenter.clone().add(V(0, c.subjectHeight * 0.1, 0)),
-      roll: 13 * DEG,
+      roll: 13 * D2R,
     }),
   },
 ];

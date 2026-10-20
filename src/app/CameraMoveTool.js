@@ -4,8 +4,8 @@ import { cameraMove, defaultParams, MoveError, MOVE_LABEL } from '../anim/camera
 import { moveContext, aheadPoint, nearestSubject, applyCameraMove, clearCameraMoves } from '../doc/edit.js';
 import { toastError } from '../ui/timeline/Transport.js';
 import { confirmToast } from './PathTool.js';
+import { round4 } from '../util/math.js';
 
-const r4 = (x) => Math.round(x * 1e4) / 1e4;
 const fmt = (s) => (Math.round(s * 10) / 10).toString();
 
 /**
@@ -108,7 +108,7 @@ export class CameraMoveTool {
   context(cam) {
     const { app } = this;
     const segs = this.segments(cam);
-    return moveContext(this._camDoc(cam), cam.id, { time: app.timeline.active ? r4(app.playback.time) : 0, lastPan: segs[segs.length - 1] || null });
+    return moveContext(this._camDoc(cam), cam.id, { time: app.timeline.active ? round4(app.playback.time) : 0, lastPan: segs[segs.length - 1] || null });
   }
 
   /** 表单参数（缺省项 = 默认值，按当前起点与主体计算）。 */

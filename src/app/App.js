@@ -20,7 +20,7 @@ import { Labels } from './Labels.js';
 import { LabelSprites } from './LabelSprites.js';
 import { toDocument, loadDocument } from '../doc/serialize.js';
 import * as edit from '../doc/edit.js';
-import { xyz } from '../util/round.js';
+import { xyz } from '../util/math.js';
 import { History } from './History.js';
 import { Timeline } from '../anim/Timeline.js';
 import { Playback } from '../anim/Playback.js';

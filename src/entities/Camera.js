@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Entity } from './Entity.js';
-import { round6, xyz } from '../util/round.js';
+import { round6, xyz } from '../util/math.js';
 
 const BODY_COLOR = 0xff8a3d;   // 橙色相机体（对齐截图）
 const FRUSTUM_COLOR = 0x35a7ff; // 青蓝色视锥线

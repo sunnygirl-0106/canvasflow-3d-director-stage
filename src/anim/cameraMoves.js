@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { line, arc, polar } from './pathGen.js';
 import { Path } from './Path.js';
+import { D2R, R2D, round6 } from '../util/math.js';
 
 // 运镜预设（阶段 F）：纯函数，不依赖 DOM / App。输入机位当前位姿 + 主体注视点 + 参数，输出文档口径的
 // 路径点 / 旋转关键帧，由调用方写成 path + lookAt 约束（+ pan 的 rot 轨道）。
@@ -53,8 +54,6 @@ export const MIN_SUBJECT_DIST = 0.3; // 推镜头至少离主体保留的水平�
 // 端段偏离圆最多（5 m 半径均匀 11.25° 时 1.4 cm），加点后 0.25 cm（验收要求半径恒定 ± 1 cm）。
 const ORBIT_STEP = 11.25;
 const MIN_RADIUS = 0.1;
-const D2R = Math.PI / 180, R2D = 180 / Math.PI;
-const r6 = (x) => { const v = Math.round(x * 1e6) / 1e6; return v === 0 ? 0 : v; };
 const hdist = (a, b) => Math.hypot(b[0] - a[0], b[2] - a[2]);
 
 /** 运镜参数不合法 / 几何上做不出来（文案直接给用户看）。 */
@@ -87,7 +86,7 @@ export function aimRotation(position, aim, rollDeg = 0) {
   const q = new THREE.Quaternion().setFromRotationMatrix(m);
   if (rollDeg) q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), rollDeg * D2R));
   const e = new THREE.Euler().setFromQuaternion(q);
-  return [e.x, e.y, e.z].map((v) => r6(v * R2D));
+  return [e.x, e.y, e.z].map((v) => round6(v * R2D));
 }
 
 /** 水平单位方向 position → aim（太近 / 正上方时抛错）。 */
@@ -137,7 +136,7 @@ export function cameraMove(name, { position, rot = [0, 0, 0], roll = 0, aim, par
     case 'pan': {
       const dx = aim[0] - x, dy = aim[1] - y, dz = aim[2] - z;
       if (Math.hypot(dx, dy, dz) < 1e-3) throw new MoveError('主体与机位重合，无法摇镜头');
-      out.rotKeys = [rot.map(r6), aimRotation(position, aim, roll)];
+      out.rotKeys = [rot.map(round6), aimRotation(position, aim, roll)];
       break;
     }
     case 'half_orbit':
@@ -155,7 +154,7 @@ export function cameraMove(name, { position, rot = [0, 0, 0], roll = 0, aim, par
         r.points.splice(1, 0, at(deg + q));
         r.points.splice(r.points.length - 1, 0, at(deg + sweep - q));
       }
-      r.points[0] = position.map(r6); // 首点 = 机位当前位置（消除 cos/sin 的舍入差）
+      r.points[0] = position.map(round6); // 首点 = 机位当前位置（消除 cos/sin 的舍入差）
       out.points = r.points;
       out.closed = r.closed;
       break;
@@ -188,10 +187,10 @@ export function appendMove(path, next) {
   const points = [...prev, ...openPoints(next.points, next.closed).slice(1)];
   // 已有停顿沿用（闭合路径展开后索引不变）；没有 stopTimes 的按当前（弧长比例）分配取到达时刻
   const stops = [...(path.stops || [])];
-  const times = path.stops?.length ? (path.stopTimes?.length ? path.stopTimes.slice() : new Path(path).segmentTimes.slice(0, -1).map(r6)) : [];
+  const times = path.stops?.length ? (path.stopTimes?.length ? path.stopTimes.slice() : new Path(path).segmentTimes.slice(0, -1).map(round6)) : [];
   stops.push(prev.length - 1);
-  times.push(r6(path.duration));
-  return { ...path, points, closed: false, duration: r6(path.duration + next.duration), stops, stopTimes: times };
+  times.push(round6(path.duration));
+  return { ...path, points, closed: false, duration: round6(path.duration + next.duration), stops, stopTimes: times };
 }
 
 const sameSubject = (a, b) => JSON.stringify(a) === JSON.stringify(b);

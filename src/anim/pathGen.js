@@ -1,14 +1,12 @@
 import { Path, WALK_RAMP } from './Path.js';
+import { D2R, R2D, round6, round4 } from '../util/math.js';
 
 // 路径生成器（阶段 E）：纯函数，不依赖 DOM。输入 / 输出都是文档口径的 [x,y,z]（实体父坐标系，角色 / 组的 y = 地面高度）。
 // 同时是阶段 F 运镜预设、阶段 H AI 生成的积木（词汇表：line / arc / toward）。点的 y 一律由调用方给。
 //
 // 角度约定（arc）：从 +X 轴起算，从上往下看（−Y 方向）逆时针为正：θ → (cx + r·cosθ, y, cz − r·sinθ)。
 
-const D2R = Math.PI / 180;
-const R2D = 180 / Math.PI;
-const r6 = (x) => { const v = Math.round(x * 1e6) / 1e6; return v === 0 ? 0 : v; };
-const pt = (x, y, z) => [r6(x), r6(y), r6(z)];
+const pt = (x, y, z) => [round6(x), round6(y), round6(z)];
 
 /** 直线：[from, to]。 */
 export function line(from, to) {
@@ -92,7 +90,6 @@ export function pathLength(points, closed = false, stops = null) {
 }
 
 // ---- 停顿 stops / stopTimes（收尾 1）：文档口径的纯函数 ----
-const r4 = (x) => Math.round(x * 1e4) / 1e4;
 
 /**
  * 路径改动后让 stops / stopTimes 仍然合法（Timeline.updatePath / edit.setPath 用）：
@@ -113,7 +110,7 @@ export function fitStops(old, next, patch = {}) {
       stops = stops.filter((_, j) => keep[j]);
       if (times?.length === keep.length) times = times.filter((_, j) => keep[j]);
     }
-    if (times?.length && old && !('stopTimes' in patch) && out.duration !== old.duration) times = times.map((t) => r4(t * out.duration / old.duration));
+    if (times?.length && old && !('stopTimes' in patch) && out.duration !== old.duration) times = times.map((t) => round4(t * out.duration / old.duration));
     if (times && (times.length !== stops.length || times.some((t, j) => !(t > 0 && t < out.duration && (j === 0 || t > times[j - 1]))))) times = undefined;
   }
   delete out.stops; delete out.stopTimes;
@@ -146,7 +143,7 @@ export function stopsAfterReverse(path) {
   const n = path.points.length;
   return {
     stops: path.stops.map((i) => n - 1 - i).reverse(),
-    ...(path.stopTimes ? { stopTimes: path.stopTimes.map((t) => r4(path.duration - t)).reverse() } : {}),
+    ...(path.stopTimes ? { stopTimes: path.stopTimes.map((t) => round4(path.duration - t)).reverse() } : {}),
   };
 }
 
@@ -173,7 +170,7 @@ export function toggleStop(path, index, on) {
   let lo = 0, hi = path.duration; // 到达该顶点的时刻：distanceAt 单调，二分
   for (let n = 0; n < 50; n++) { const mid = (lo + hi) / 2; if (P.distanceAt(path.start + mid) < s) lo = mid; else hi = mid; }
   const lo2 = k ? times[k - 1] : 0, hi2 = k < times.length ? times[k] : path.duration;
-  times.splice(k, 0, r4(Math.min(Math.max(hi, lo2 + 0.05), hi2 - 0.05)));
+  times.splice(k, 0, round4(Math.min(Math.max(hi, lo2 + 0.05), hi2 - 0.05)));
   return { stops, stopTimes: times };
 }
 

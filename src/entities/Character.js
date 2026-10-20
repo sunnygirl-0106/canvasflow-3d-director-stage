@@ -10,7 +10,7 @@ import { resolveRig } from '../rig/RigProfile.js';
 import { Pose } from '../rig/Pose.js';
 import { buildBoneMap, norm } from '../util/boneUtil.js';
 import { worldBox } from '../util/measure.js';
-import { round6 } from '../util/round.js';
+import { round6 } from '../util/math.js';
 import { bodySpec, CHARACTER_COLOR } from '../config.js';
 
 const DEFAULT_HEIGHT = 1.7;

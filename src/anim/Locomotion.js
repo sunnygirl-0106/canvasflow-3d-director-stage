@@ -11,6 +11,7 @@
 // - 关节一律写语义关节 values（jointSchema 键），不直接转骨头；骨盆起伏由调用方写到 model.position.y。
 import { JOINT_KEYS, JOINT_SCHEMA } from '../rig/jointSchema.js';
 import { clamp01, EASE } from './ease.js';
+import { D2R, R2D } from '../util/math.js';
 
 export const WALK_MAX = 1.8;    // m/s，≤ 纯走
 export const RUN_MIN = 2.6;     // m/s，≥ 纯跑
@@ -35,8 +36,6 @@ const PELVIS_GRID = 48; // 骨盆曲线在一个周期内的采样数
 const PELVIS_WIN = 4;   // 平滑窗口半宽（采样数）：先滑动最小、再同宽均值
 const START_PHASE = 0.3; // 路程 0 处的相位：左腿支撑中段（骨盆最高），从站立起步时骨盆下沉最少
 
-const D2R = Math.PI / 180;
-const R2D = 180 / Math.PI;
 const JOINT_RANGE = Object.fromEntries(JOINT_SCHEMA.map((j) => [j.key, [j.min, j.max]]));
 
 const lerp = (a, b, k) => a + (b - a) * k;

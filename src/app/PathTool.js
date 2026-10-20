@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { el, toast } from '../util/dom.js';
+import { el, toast, isTyping, CLICK_PX } from '../util/dom.js';
 import { Emitter } from '../util/Emitter.js';
 import { worldBox } from '../util/measure.js';
 import { line, arc, polar, toward, simplify } from '../anim/pathGen.js';
 import { pathStartPoint, setPath } from '../doc/edit.js';
 import { toastError } from '../ui/timeline/Transport.js';
+import { round4 } from '../util/math.js';
 
 /** 五种绘制方式：[key, 文案]。key 与 AI 词汇表一致（points / freehand / line / arc / toward）。 */
 export const PATH_MODES = [
@@ -28,7 +29,6 @@ const HINTS = {
   arc: '点击地面或对象作为环绕中心 · Esc 取消',
   toward: '点击目标对象（⇧ + 点击地面取点）· Esc 取消',
 };
-const CLICK_PX = 4;       // 按下到松开移动不超过它算点击
 const DBL_EPS = 0.05;     // 双击结束时，与上一点距离小于它的点视为双击的第二下，丢掉
 const STROKE_STEP = 0.02; // 手绘采样间隔（米）
 const SIMPLIFY_TOL = 0.05;
@@ -42,7 +42,6 @@ export function arcPoints({ center, radius, startDeg, sweepDeg }, y) {
   return arc({ center, radius, startDeg, sweepDeg, y, segments });
 }
 
-const isTyping = (t) => t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
 
 /**
  * 路径绘制工具（阶段 E；阶段 F 放开机位）：Dock「路径」/ Inspector「新建路径」进入绘制态，在视口里画出 points[]，
@@ -398,6 +397,5 @@ export function confirmToast(msg, okLabel, onOk) {
   toast(msg, { actions: [{ label: okLabel, onClick: onOk }, { label: '取消', secondary: true }] });
 }
 
-const round4 = (x) => Math.round(x * 1e4) / 1e4;
 const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 const fmt = (s) => (Math.round(s * 10) / 10).toString();
