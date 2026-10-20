@@ -28,7 +28,7 @@ function writeGlb(path, json, bin) {
 
 import * as THREE from 'three';
 const [src, out, ...kv] = process.argv.slice(2);
-const K = { chest: 0.6, butt: 0.5, hip: -0.1, waist: 0.08, sh: 0.025, chestW: 0.05, c: 0.004, ...Object.fromEntries(kv.map((s) => s.split('=')).map(([k, v]) => [k, +v])) };
+const K = { chest: 0.6, butt: 0.7, hip: -0.1, waist: 0.08, sh: 0.025, chestW: 0.05, c: 0.004, ...Object.fromEntries(kv.map((s) => s.split('=')).map(([k, v]) => [k, +v])) };
 const { json, bin, acc } = readGlb(src);
 const P = acc(0), N = acc(1), J = acc(2), W = acc(3), IBM = acc(5);
 const sk = json.skins[0], jn = sk.joints.map((n) => json.nodes[n].name.replace('mixamorig:', ''));
