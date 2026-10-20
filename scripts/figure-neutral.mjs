@@ -1,9 +1,9 @@
-// 把 bodychan_female 调得中性一点：胸压平、臀收、胯收窄、腰略宽、肩加宽（手臂骨骼 + 网格同步外移）。
+// 把 bodychan_female 调得中性一点：胸 / 臀等比缩小（仍圆润）、胯收窄、腰略宽、肩加宽（手臂骨骼 + 网格同步外移）。
 // 直接改 GLB 的 POSITION / NORMAL / 手臂节点平移 / inverseBindMatrices，其余（骨骼轴向、权重、索引）逐字节不动；法线按变形雅可比的逆转置变换。
 // 输入必须是【原始】模型（已处理过的再跑会叠加）：
 //   git show 1bb3f44:public/assets/figures/bodychan_female.glb > /tmp/orig.glb
 //   node scripts/figure-neutral.mjs /tmp/orig.glb public/assets/figures/bodychan_female.glb [chest=0.15 butt=0.3 …]
-// 参数：chest / butt = 胸 / 臀凸出保留比例；hip / waist = 胯 / 腰宽度倍数；sh = 每侧肩外移（米）；chestW = 上胸加宽比例；c = 软压缩余量（米）。
+// 参数：chest / butt = 胸 / 臀凸出高度保留比例（等比缩小，形状仍圆）；hip / waist = 胯 / 腰宽度倍数；sh = 每侧肩外移（米）；chestW = 上胸加宽比例；c = 凸起根部过渡宽度（米）。
 import fs from 'node:fs';
 import { Buffer } from 'node:buffer';
 import process from 'node:process';
@@ -28,7 +28,7 @@ function writeGlb(path, json, bin) {
 
 import * as THREE from 'three';
 const [src, out, ...kv] = process.argv.slice(2);
-const K = { chest: 0.15, butt: 0.3, hip: 0.88, waist: 1.12, sh: 0.025, chestW: 0.18, c: 0.012, ...Object.fromEntries(kv.map((s) => s.split('=')).map(([k, v]) => [k, +v])) };
+const K = { chest: 0.55, butt: 0.6, hip: 0.88, waist: 1.12, sh: 0.025, chestW: 0.18, c: 0.004, ...Object.fromEntries(kv.map((s) => s.split('=')).map(([k, v]) => [k, +v])) };
 const { json, bin, acc } = readGlb(src);
 const P = acc(0), N = acc(1), J = acc(2), W = acc(3), IBM = acc(5);
 const sk = json.skins[0], jn = sk.joints.map((n) => json.nodes[n].name.replace('mixamorig:', ''));
@@ -36,8 +36,9 @@ const nodeJoint = new Map(sk.joints.map((n, j) => [n, j]));
 const nv = P.length / 3;
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-// 软压缩：超出量 e ≥ 0 → s·e + (1−s)·c·(1 − e^(−e/c))。e=0 处值与斜率都连续（斜率 1），不起折痕；远处保留比例 s，外加 ≤ c 的余量
-const soft = (e, s, c) => (e <= 0 ? e : s * e + (1 - s) * c * (1 - Math.exp(-e / c)));
+// 等比缩小凸起：超出量 e ≥ 0 → e·(s + (1−s)·e^(−e/c))。远处 ≈ s·e（整体按比例变矮，圆弧轮廓不变，不是压平）；
+// e=0 处值与斜率都连续（斜率 1），根部过渡宽约 c，不起折痕
+const soft = (e, s, c) => (e <= 0 ? e : e * (s + (1 - s) * Math.exp(-e / c)));
 const band = (y, a, b, c, d) => smooth(a, b, y) * (1 - smooth(c, d, y)); // a↗b 平台 c↘d
 // 手臂链（含 Shoulder 之后的所有骨）：左 / 右
 const armSet = { 1: new Set(), [-1]: new Set() };
@@ -64,13 +65,13 @@ function f(p, inf) {
   if (inf.aw > 0) x += inf.side * K.sh * inf.aw; // 手臂整体外移（与骨骼同步）
   const torso = !/Arm|Hand|Fore|Head|Neck/.test(inf.dom);
   if (torso && inf.aw < 0.5) {
-    // 胸：前表面向胸壁压
+    // 胸：前表面超出胸壁的部分等比缩小
     if (/Spine/.test(inf.dom)) {
       const m = band(y, 1.12, 1.17, 1.28, 1.32) * (1 - smooth(0.12, 0.15, ax));
       const ex = z - chestWall(y);
       z = chestWall(y) + ex + (soft(ex, K.chest, K.c) - ex) * m;
     }
-    // 臀：后表面向臀线收
+    // 臀：后表面超出臀线的部分等比缩小
     if (/Hips|UpLeg/.test(inf.dom)) {
       const m = band(y, 0.70, 0.76, 0.97, 1.02);
       const ex = buttWall(y) - z;
