@@ -25,12 +25,12 @@ stage.onViewportResize(() => rig.onResize());
 const app = new App({ stage, rig, labelLayer: $('labelLayer') });
 const navGizmo = new NavGizmo($('navsvg'), stage.camera, () => app.resetView());
 
-// AI 操作者（阶段 H）：__app.ai.run({ input, mode }) 走模型 + 重试回路；__app.ai.applyOps([...], { mode }) 直接应用 ops。
+// AI 操作者：__app.ai.run({ input, mode }) 走模型 + 重试回路；__app.ai.applyOps([...], { mode }) 直接应用 ops。
 // 失败场景不变，成功 = 一步撤销。模型接口设置只存本机 localStorage。
 app.ai = new AiAgent(app, { provider: new OpenAICompatProvider(loadSettings()) });
 
 // ---- ui（各自订阅 app 事件）----
-// 导出视频弹层（阶段 G）：须先于时间轴面板创建 —— 它的 window 捕获阶段键盘监听要排在最前（导出中 / 弹层打开时拦下全部快捷键，Esc = 取消）
+// 导出视频弹层：须先于时间轴面板创建 —— 它的 window 捕获阶段键盘监听要排在最前（导出中 / 弹层打开时拦下全部快捷键，Esc = 取消）
 const exportModal = new ExportModal(app);
 new ScenePanel($('scenePanel'), app);
 new Inspector($('inspector'), app);
@@ -54,7 +54,7 @@ app.on('view', (on) => {
   $('navg').style.display = on ? 'none' : 'block';
   for (const b of $('viewtabs').querySelectorAll('button')) b.classList.toggle('on', (b.dataset.v === 'camera') === on);
 });
-// 机位视角旁的机位名：idle 灰字 = 当前机位；时间轴 active 透过主机位 = 强调色「▶ 主机位 · 名字」（阶段 F）
+// 机位视角旁的机位名：idle 灰字 = 当前机位；时间轴 active 透过主机位 = 强调色「▶ 主机位 · 名字」
 const renderPov = () => {
   const camera = app.findCamera(app.povCameraId);
   const main = app._mainPreview;
@@ -125,6 +125,6 @@ stage.startLoop({
     app.frameSubjects(); // 自动对准主体，主体占满画面
     app.select(null);
   } catch (e) { console.error('seed failed', e); }
-  history.reset(); // 种子场景作为撤销起点（之前的添加不进撤销栈）
+  history.reset(); // 种子场景作为撤销起点（种子角色的添加不进撤销栈）
   AutoSave.offerRestore(app); // 有上次存档：提示可恢复（不自动恢复）
 })();

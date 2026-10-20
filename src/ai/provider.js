@@ -1,4 +1,4 @@
-// 模型调用（阶段 H 第 4 步）：纯前端，fetch 直接调接口，不引依赖。
+// 模型调用：纯前端，fetch 直接调接口，不引依赖。
 // - OpenAICompatProvider：OpenAI 兼容的 /chat/completions（DeepSeek / 通义 / Kimi / OpenRouter / 本地 vLLM 等都能接）。
 // - MockProvider：按请求里的关键字返回预录回复；selftest 用它，验收不依赖网络。
 // 两者接口相同：chat(messages, { signal }) → 模型回复的文本。

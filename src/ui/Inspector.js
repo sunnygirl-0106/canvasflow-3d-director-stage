@@ -23,7 +23,7 @@ const fmtS = (x) => (Math.round(x * 10) / 10).toFixed(1);
 // 每种实体的标签页：[key, 文案]
 const TABS = {
   character: [['attr', '属性'], ['pose', '姿势']],
-  crowd: [['attr', '属性'], ['pose', '姿势']],
+  group: [['attr', '属性'], ['pose', '姿势']],
   camera: [['attr', '属性'], ['shots', '摄像机截图']],
 };
 
@@ -32,7 +32,7 @@ export class Inspector {
   constructor(container, app) {
     this.app = app;
     this.container = container;
-    this.tabs = { character: 'attr', crowd: 'attr', camera: 'attr' }; // 各类型记住上次的标签页
+    this.tabs = { character: 'attr', group: 'attr', camera: 'attr' }; // 各类型记住上次的标签页
     this._reset();
 
     app.on('selection', (ent) => this.show(ent));
@@ -72,12 +72,12 @@ export class Inspector {
     const root = el('div', { class: 'rp rp-pad' });
     this._activeHint = el('div', { class: 'tl-active-hint', text: '时间轴激活中：修改会写入当前时刻的关键帧', hidden: true });
     root.appendChild(this._activeHint);
-    const title = { character: '角色', camera: '摄像机', crowd: `${entity.name} (${entity.children.length})` }[entity.type] || '道具';
+    const title = { character: '角色', camera: '摄像机', group: `${entity.name} (${entity.children.length})` }[entity.type] || '道具';
     root.appendChild(el('h2', { text: title }));
 
     const tab = this._tabBar(root, entity);
     switch (entity.type) {
-      case 'crowd':
+      case 'group':
         root.appendChild(el('div', { class: 'multi-note', text: `已选中 ${entity.members.length} 个角色，修改将同步应用到全部选中对象` }));
         root.appendChild(el('button', { class: 'minibtn', text: '⊟ 解组（拆为独立角色）', onclick: () => this.app.ungroupCrowd(entity.id) }));
         if (tab === 'attr') this._attr(root, entity); else this._pose(root, entity.members);

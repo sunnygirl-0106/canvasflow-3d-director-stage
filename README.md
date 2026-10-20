@@ -335,7 +335,7 @@ src/
 │  └─ ease.js           linear / smooth / step
 ├─ rig/                 姿势与模型解耦层
 │  ├─ jointSchema.js    语义关节表（与模型无关；min/max 相对站立）
-│  ├─ profiles/         骨骼档案：每个模型一份（骨头 / 轴向 / 正负 / 站立偏移）
+│  ├─ profiles/         骨骼档案注册表（三个 Mixamo 人偶共用一张关节表：骨头 / 轴向 / 正负 / 站立偏移）
 │  ├─ RigProfile.js     resolveRig：档案 → 模型骨头，返回缺失关节
 │  └─ Pose.js           姿势数据（values，0 = 站立）
 ├─ calib.js             骨骼档案校准页（calib.html，开发用）

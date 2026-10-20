@@ -1,4 +1,4 @@
-/* ===== 底部时间轴面板（阶段 D）===== */
+/* ===== 底部时间轴面板===== */
 #timeline {
   --tl-purple: #a78bfa;
   --tl-red: #ff453a;
@@ -203,7 +203,7 @@
 .anim-btns .minibtn.danger:hover { color: #ff8a80; }
 .anim-sub { font-size: 12.5px; color: var(--txt); font-weight: 600; margin: 4px 0 10px; }
 
-/* 运镜段（阶段 F） */
+/* 运镜段 */
 .anim-btns .minibtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .anim-btns .minibtn.primary:hover { filter: brightness(1.1); }
 .anim-btns .minibtn[disabled] { opacity: .45; cursor: default; filter: none; }

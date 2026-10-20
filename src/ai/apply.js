@@ -1,11 +1,11 @@
-// ops → 场景（阶段 H 第 3 步）：validateOps → 在文档拷贝上逐条执行（src/doc/edit.js 的纯函数）→ 现有校验器 →
+// ops → 场景：validateOps → 在文档拷贝上逐条执行（src/doc/edit.js 的纯函数）→ 现有校验器 →
 // 全部通过才 loadDocument，History 记一步。任何一步失败都返回错误列表，场景不变。
 import * as THREE from 'three';
 import { validateOps, sceneIndex, uniqueName } from './ops.js';
 import { DEFAULT_POSE } from './vocab.js';
 import * as edit from '../doc/edit.js';
 import { validate, DEFAULT_TIMELINE } from '../doc/schema.js';
-import { BODY_TYPES, PROP_PALETTE } from '../config.js';
+import { BODY_TYPES, PROP_PALETTE, CAMERA_FOV } from '../config.js';
 import { propLocalCenter } from '../entities/Prop.js';
 import { aimRotation, MoveError, MOVE_LABEL } from '../anim/cameraMoves.js';
 import { line, polar, toward, pathLength, arcPoints, ARC_SWEEP, TOWARD_STOP } from '../anim/pathGen.js';
@@ -13,7 +13,6 @@ import { aimPointWith, anchorWith } from '../anim/subject.js';
 import { hexColor } from '../entities/Entity.js';
 import { round6, clone, D2R } from '../util/math.js';
 
-const DEFAULT_FOV = 40;
 const r2 = (x) => Math.round(x * 100) / 100;
 
 /** ops 执行期的错误（带定位，原文喂回模型）。 */
@@ -130,7 +129,7 @@ export function compileOps(base, ops, { mode = 'modify', charSeq = 0 } = {}) {
       doc.entities.push({
         type: 'camera', id, name: nameFor(o.name), visible: true,
         transform: { pos: o.pos.map(round6), rot: aimRotation(o.pos, aim, 0), scale: [1, 1, 1] },
-        fov: o.fov ?? DEFAULT_FOV, roll: 0, lookAt: aim.map(round6),
+        fov: o.fov ?? CAMERA_FOV, roll: 0, lookAt: aim.map(round6),
       });
       if (!doc.scene.activeCameraId) doc.scene.activeCameraId = id;
     },
@@ -286,7 +285,7 @@ export async function applyOps(app, ops, { mode = 'modify' } = {}) {
   const base = app.toDocument({ view: false });
   const v = validateOps(ops, sceneIndex(base), { mode });
   if (!v.ok) return { ok: false, applied: 0, renames: v.renames, warnings: [], errors: v.errors };
-  const r = compileOps(base, ops, { mode, charSeq: app._charSeq });
+  const r = compileOps(base, ops, { mode, charSeq: app.charSeq });
   if (r.errors.length) return { ok: false, applied: 0, renames: r.renames, warnings: r.warnings, errors: r.errors };
   const check = validate(r.doc);
   if (!check.ok) return { ok: false, applied: 0, renames: r.renames, warnings: r.warnings, errors: check.errors.map((e) => `场景文档：${e}`) };

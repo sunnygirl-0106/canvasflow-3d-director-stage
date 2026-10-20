@@ -10,7 +10,8 @@ import { PathOverlay } from '../core/PathOverlay.js';
 import { PathTool } from './PathTool.js';
 import { PathEditor } from './PathEditor.js';
 import { CameraMoveTool } from './CameraMoveTool.js';
-import { BODY_TYPES, PROP_LABEL, RATIO_OPTIONS } from '../config.js';
+import { BODY_TYPES, PROP_LABEL, RATIO_OPTIONS, CAMERA_FOV } from '../config.js';
+import { DEFAULT_SCENE, DEFAULT_SCENE_NAME } from '../doc/schema.js';
 import { Emitter } from '../util/Emitter.js';
 import { toast } from '../util/dom.js';
 import { worldBox } from '../util/measure.js';
@@ -62,27 +63,29 @@ export class App extends Emitter {
     this.labelPreview = false;     // 「预览名牌」：视口也用精灵名牌（会话态）
     this._cleanDepth = 0;          // 洁净渲染嵌套层数（>0 时 gizmo 等不显示）
 
-    this._charSeq = 0;
+    this.charSeq = 0; // 下一个自动角色名的序号（edit.charName）；AI 编译也从这里接着起名
     this._propCount = {};
     this._camCount = 0;
     this._groupCount = 0;
 
     // 场景级状态（供 ScenePanel 读取/回写）
+    const d = DEFAULT_SCENE;
+    const vec = ([x, y, z]) => ({ x, y, z });
     this.sceneState = {
-      scale: 1, pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0 },
-      sky: 0x060608, labels: true,
-      ground: { visible: true, opacity: 0.4, height: 0 },
+      scale: d.scale, pos: vec(d.pos), rot: vec(d.rot),
+      sky: parseInt(d.sky.slice(1), 16), labels: d.labels,
+      ground: { ...d.ground },
     };
 
     // 场景文档：元信息；动画三字段（timeline / paths / constraints）由 Timeline 持有
-    this.docMeta = { name: '未命名场景', createdAt: new Date().toISOString() };
+    this.docMeta = { name: DEFAULT_SCENE_NAME, createdAt: new Date().toISOString() };
     this.timeline = new Timeline(this);
     this.playback = new Playback(this.timeline, { invalidate: () => stage.invalidate() });
     this.autoKey = false;               // 自动打键（会话偏好，由时间轴面板写入）
     this._docChain = Promise.resolve(); // 文档加载串行化（连续撤销不会交错重建）
     this.loadingDocument = false;       // 加载期间为 true：history / 自动保存据此屏蔽
     this.history = new History(this);
-    // 主机位播放（阶段 F）：机位视角下时间轴 active ↔ idle、主机位变化时切换出画机位
+    // 主机位播放：机位视角下时间轴 active ↔ idle、主机位变化时切换出画机位
     this.timeline.on('active', () => this._syncPov());
     this.timeline.on('change', () => this._syncPov());
 
@@ -102,16 +105,16 @@ export class App extends Emitter {
     this.gizmo.onChange(() => stage.invalidate());
     this.selection = new Selection(stage.renderer, stage.camera, stage.scene, () => this.entities, (id) => this.select(id));
     rig.controls.addEventListener('change', () => stage.invalidate());
-    this.pathOverlay = new PathOverlay(this); // 视口路径可视化（阶段 E）
+    this.pathOverlay = new PathOverlay(this); // 视口路径可视化
     this.pathTool = new PathTool(this);       // 路径绘制
     this.pathEditor = new PathEditor(this);   // 顶点编辑
     this.pathMeta = {};                       // 会话态：pathId → 生成器参数（环绕三参数），不进文档
-    this.moveMeta = {};                       // 会话态：cameraId → 运镜段列表（阶段 F），不进文档
+    this.moveMeta = {};                       // 会话态：cameraId → 运镜段列表，不进文档
     this.cameraMoves = new CameraMoveTool(this); // 机位运镜
     this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis || this.pathTool.busy || this.pathEditor.busy);
 
     this.labels = new Labels(labelLayer);
-    this.labelSprites = new LabelSprites(this); // 3D 精灵名牌：截图 / 导出 / 「预览名牌」（阶段 G）
+    this.labelSprites = new LabelSprites(this); // 3D 精灵名牌：截图 / 导出 / 「预览名牌」
     this.shots = new ShotManager(this);
     this.panorama = new Panorama(stage, {
       getSky: () => this.sceneState.sky,
@@ -151,7 +154,7 @@ export class App extends Emitter {
 
   // ---- 新增 ----
   /** A…Z，之后 A2…Z2，依此类推（不会溢出成标点符号）。 */
-  _nextCharName() { return edit.charName(this._charSeq++); }
+  _nextCharName() { return edit.charName(this.charSeq++); }
 
   /** 加载一个角色（不入场）。所有角色都经此创建，保证 spec 完整、可复制。 */
   _loadCharacter(spec) { return Character.load(this._nextCharName(), spec); }
@@ -249,7 +252,7 @@ export class App extends Emitter {
 
   /** 解组：把群众拆为独立角色（保留各自世界位姿），轴心组移除。 */
   ungroupCrowd(id) {
-    const crowd = this.entities.find((e) => e.id === id && e.type === 'crowd');
+    const crowd = this.entities.find((e) => e.id === id && e.type === 'group');
     if (!crowd) return;
     this.timeline.release([crowd.id, ...crowd.members.map((m) => m.id)]); // 先写回手动值，再改父节点
     for (const m of crowd.release()) {
@@ -286,7 +289,7 @@ export class App extends Emitter {
     const preset = CAMERA_PRESETS.find((p) => p.key === presetKey) || CAMERA_PRESETS[0];
     const subject = this.selected?.type === 'character' ? this.selected : null;
     const out = preset.build(this._cameraContext(subject));
-    const fov = out.fov || preset.fov || 40;
+    const fov = out.fov || preset.fov || CAMERA_FOV;
 
     const c = new CameraEntity('机位' + (++this._camCount), { fov, aspect: this.viewportAspect(), scene: this.stage.scene });
     c.root.position.copy(out.position);
@@ -490,7 +493,7 @@ export class App extends Emitter {
   }
 
   /**
-   * 机位视角下实际出画的机位（阶段 F 主机位播放）：时间轴 active（播放或拖播放头）→ 主机位，
+   * 机位视角下实际出画的机位（主机位播放）：时间轴 active（播放或拖播放头）→ 主机位，
    * 未设主机位则用当前机位并提示；idle → 当前机位（activeCameraId）。导演视角不切换。
    * 透过主机位时 gizmo 隐藏（画面是成片预览），仍可选中其他实体。
    */
@@ -663,10 +666,9 @@ export class App extends Emitter {
     const propKind = Object.fromEntries(Object.entries(PROP_LABEL).map(([k, v]) => [v, k]));
     for (const { name } of all) {
       let m;
-      if ((m = /^角色([A-Z])(\d*)$/.exec(name))) {
-        const n = ((m[2] ? +m[2] : 1) - 1) * 26 + (m[1].charCodeAt(0) - 65) + 1;
-        this._charSeq = Math.max(this._charSeq, n);
-      } else if ((m = /^机位(\d+)$/.exec(name))) this._camCount = Math.max(this._camCount, +m[1]);
+      const ci = edit.parseCharName(name);
+      if (ci >= 0) this.charSeq = Math.max(this.charSeq, ci + 1);
+      else if ((m = /^机位(\d+)$/.exec(name))) this._camCount = Math.max(this._camCount, +m[1]);
       else if ((m = /^组(\d+)$/.exec(name))) this._groupCount = Math.max(this._groupCount, +m[1]);
       else if ((m = /^(\D+?)(\d+)$/.exec(name)) && propKind[m[1]]) {
         const k = propKind[m[1]];
@@ -732,7 +734,7 @@ export class App extends Emitter {
 
   /**
    * 实体被 gizmo / 面板修改后（一次操作结束时）调用。时间轴 idle：什么都不做（root 就是手动值）。
-   * 时间轴 active（阶段 D 3.3）：
+   * 时间轴 active：
    * - props 含 'pos' / 'rot' / 'scale' / 'fov' → Timeline.editAt：有轨道写当前时刻的键，无轨道按「自动打键」
    *   新建轨道写键或改手动值；被路径 / 跟随 / 注视驱动的属性不记并提示；
    * - props 省略（姿势 / 颜色等）→ refreshBase：改手动值。群众组连同成员一起（组面板的姿势广播到全部成员）。

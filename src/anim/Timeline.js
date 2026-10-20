@@ -19,7 +19,7 @@ const T_EPS = 1e-9; // 同一时刻判定（setKey 覆盖 / removeKey）
  * 时间轴：持有场景文档里的 timeline / paths / constraints 三个字段（文档形状的纯数据，是唯一的源），
  * 并由它们算出任意时刻的场景状态 evaluate(t)。
  *
- * 手动值与动画值共存（任务说明 3.3）：
+ * 手动值与动画值共存：
  * - idle：不碰任何实体，场景完全是手动值。evaluate() / seek() / play() 进入 active，stop() 回到 idle。
  * - active：对每个被驱动的实体记一份 base（transform / fov / pose.values 的拷贝）。evaluate(t) 每次都从 base 出发，
  *   按固定顺序 关键帧轨道 → 路径轨道 → 约束 叠加，最后写入 root / camera。内部没有"上一帧"状态，
@@ -259,7 +259,7 @@ export class Timeline extends Emitter {
   /**
    * active 期间实体被修改且不涉及可打键属性（姿势 / 颜色等）：把它没被动画驱动的属性记进 base（视为改手动值），
    * 再按当前时刻重新求值。被驱动的属性不记（否则会把动画瞬时值固化成手动值）。
-   * 位置 / 旋转 / 缩放 / FOV 的修改走 editAt（打键或改手动值，见阶段 D 3.3）。
+   * 位置 / 旋转 / 缩放 / FOV 的修改走 editAt（打键或改手动值，见 editAt）。
    */
   refreshBase(ent) {
     const base = ent && this._base.get(ent);
@@ -303,7 +303,7 @@ export class Timeline extends Emitter {
   }
 
   /**
-   * active 期间实体被 gizmo / 面板修改后的归属（阶段 D 任务说明 3.3）。props 为刚改过的属性：
+   * active 期间实体被 gizmo / 面板修改后的归属。props 为刚改过的属性：
    * 'pos' | 'rot' | 'scale' | 'fov' 按下面规则处理；其它（'pose' / 'color' …）视为改手动值。
    * - 被路径 / 生效中的约束驱动 → 不记（下一次求值覆盖），列入 blocked；
    * - 有轨道（含空轨道）→ 在 t 写键：同刻已有键则覆盖，ease 沿用被覆盖键，否则 linear；
@@ -358,7 +358,7 @@ export class Timeline extends Emitter {
     return out;
   }
 
-  // ---- 编辑 API（阶段 D 面板 / 阶段 H AI 调用）：全部返回文档形状的拷贝；每次变更记一步撤销 ----
+  // ---- 编辑 API（时间轴面板 / AI 调用）：全部返回文档形状的拷贝；每次变更记一步撤销 ----
   _allIds() {
     const ids = new Set();
     for (const e of this.app.entities) { ids.add(e.id); for (const c of e.children) ids.add(c.id); }

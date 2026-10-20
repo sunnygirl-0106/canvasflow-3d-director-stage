@@ -19,7 +19,7 @@ export const hexColor = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0').sli
 
 export class Entity {
   /**
-   * @param {'character'|'prop'|'camera'|'crowd'} type
+   * @param {'character'|'prop'|'camera'|'group'} type（与文档的 type 同名）
    * @param {string} name
    * @param {THREE.Object3D} root
    * @param {string} [id] 从文档重建时传入原 id；新建时随机生成

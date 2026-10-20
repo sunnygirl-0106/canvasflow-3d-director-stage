@@ -1,5 +1,4 @@
-// 全局配置（单一事实来源）：素体体型、道具、取景比例、全景图规则。
-// App 与 UI 都从这里读，UI 不再反向 import App.js。
+// 全局配置（单一事实来源）：素体体型、道具、取景比例、全景图规则、机位默认视场角。
 
 // 体型素体注册表：每项绑定一份骨骼档案（src/rig/profiles），模型文件取自档案的 file。
 // male / female 为真实人偶模型；tall/small/broad/slim 暂由 bodykun_male 按 height(身高) +
@@ -24,6 +23,9 @@ export function bodySpec(key) {
 
 export const PROP_KINDS = [['box', '方块'], ['cylinder', '圆柱'], ['sphere', '球体'], ['mannequin', '人体素模']];
 export const PROP_LABEL = Object.fromEntries(PROP_KINDS);
+
+/** 新机位的默认视场角（度）。 */
+export const CAMERA_FOV = 40;
 
 // 角色默认颜色（截图同款素体绿）
 export const CHARACTER_COLOR = 0x34c759;

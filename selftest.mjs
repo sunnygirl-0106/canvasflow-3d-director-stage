@@ -3142,9 +3142,9 @@ ok('坐姿自动贴地：整体下沉 / 脚着地 / root 不动 / 复位还原',
 
 // 4b 角色命名超过 26 个不溢出成标点
 const names = await page.evaluate(() => {
-  const a = window.__app; const saved = a._charSeq;
-  a._charSeq = 25; const z = a._nextCharName(); const a2 = a._nextCharName();
-  a._charSeq = saved; return { z, a2 };
+  const a = window.__app; const saved = a.charSeq;
+  a.charSeq = 25; const z = a._nextCharName(); const a2 = a._nextCharName();
+  a.charSeq = saved; return { z, a2 };
 });
 ok('角色命名：Z 之后为 A2', names.z === '角色Z' && names.a2 === '角色A2', JSON.stringify(names));
 
@@ -3327,14 +3327,14 @@ const crowdT = await page.evaluate(async () => {
   const after = wp(m.root);
   const synced = Math.abs((after.x - before.x) - D) < 1e-6 && Math.abs((after.z - before.z) + D) < 1e-6 && Math.abs(after.y - before.y) < 1e-6;
   crowd.root.position.x -= D; crowd.root.position.z += D;
-  return { isCrowd: crowd.type === 'crowd', countMatch, synced, labels: crowd.members.every((x) => x.labelEl) };
+  return { isCrowd: crowd.type === 'group', countMatch, synced, labels: crowd.members.every((x) => x.labelEl) };
 });
 ok('群众阵列：建组/成员数=行×列/整组位移同步/成员名牌', crowdT.isCrowd && crowdT.countMatch && crowdT.synced && crowdT.labels, JSON.stringify(crowdT));
 
 // 20 删除群众成员 + 解组后成员可创建副本（保留世界位姿）
 const memberT = await page.evaluate(async () => {
   const a = window.__app;
-  const crowd = a.entities.find((e) => e.type === 'crowd');
+  const crowd = a.entities.find((e) => e.type === 'group');
   const victim = crowd.members[0];
   a.select(victim.id); a.remove(victim.id);
   const memberRemoved = !crowd.members.includes(victim) && !victim.labelEl && a.selectedId === null;

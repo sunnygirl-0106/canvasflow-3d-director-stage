@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Entity } from './Entity.js';
 import { round6, xyz } from '../util/math.js';
+import { CAMERA_FOV } from '../config.js';
 
 const BODY_COLOR = 0xff8a3d;   // 橙色相机体（对齐截图）
 const FRUSTUM_COLOR = 0x35a7ff; // 青蓝色视锥线
@@ -40,7 +41,7 @@ function tintHelper(helper, color) {
  * - helper 必须挂到 scene（非 root），每帧 update()。
  */
 export class CameraEntity extends Entity {
-  constructor(name, { fov = 40, aspect = 16 / 9, near = 0.1, far = 1000, scene, id } = {}) {
+  constructor(name, { fov = CAMERA_FOV, aspect = 16 / 9, near = 0.1, far = 1000, scene, id } = {}) {
     const root = new THREE.Group();
     super('camera', name, root, id);
     this._scene = scene || null;

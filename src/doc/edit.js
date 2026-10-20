@@ -1,4 +1,4 @@
-// 作用于场景文档的纯函数（阶段 H 第 2 步）：新建角色 / 群众 / 打组 / 路径 / 运镜的"数据部分"。
+// 作用于场景文档的纯函数：新建角色 / 群众 / 打组 / 路径 / 运镜的"数据部分"。
 // 界面入口（App / PathTool / CameraMoveTool）与 AI（src/ai/apply.js）调用同一份函数：
 // 界面先在 toDocument() 的拷贝上算出结果，再按结果建场景对象（Character.fromJSON 等）或整体提交动画字段；
 // AI 在临时文档上连续调用，最后整份 loadDocument。
@@ -52,6 +52,12 @@ export function spawnPoint(n) {
 export function charName(n) {
   const round = Math.floor(n / 26);
   return '角色' + String.fromCharCode(65 + (n % 26)) + (round ? round + 1 : '');
+}
+
+/** charName 的反解：「角色A2」→ 26；不是自动角色名返回 -1。 */
+export function parseCharName(name) {
+  const m = /^角色([A-Z])(\d*)$/.exec(name);
+  return m ? ((m[2] ? +m[2] : 1) - 1) * 26 + (m[1].charCodeAt(0) - 65) : -1;
 }
 
 /** 顶层实体个数（群众成员不算），= 界面里的实体列表长度。 */

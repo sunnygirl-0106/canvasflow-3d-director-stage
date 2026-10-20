@@ -22,13 +22,13 @@
 //   - group 成员（parent 非 null）的 transform 是相对组轴心的局部变换；
 //   - camera 的 rot 已包含荷兰角；roll 单独存一份，供"改注视坐标后重新瞄准"时叠加。
 // camera.lookAt 与 transform 同时存在时以 transform + roll 为准，lookAt 只回写面板显示（不触发瞄准），
-// 校验器不检查二者一致（阶段 F 升级为注视约束时再统一）。
+// 校验器不检查二者一致。
 //
-// 动画（阶段 C）—— 时间单位一律为秒；坐标与 entities[].transform 同一口径（场景根节点下的局部坐标）：
+// 动画—— 时间单位一律为秒；坐标与 entities[].transform 同一口径（场景根节点下的局部坐标）：
 // timeline: {
 //   duration: 10,            // 秒，> 0
 //   fps: 30,                 // 只影响吸附与导出
-//   mainCameraId: null,      // 阶段 F 使用，本阶段只存
+//   mainCameraId: null,      // 主机位（机位视角下播放时透过它看）
 //   tracks: [ Track ],
 // }
 // Track = {
@@ -44,7 +44,7 @@
 //   start: 0, duration: 4,   // 秒；start ≥ 0，duration > 0
 //   speed: 'linear' | 'smooth',      // 弧长随时间的曲线：匀速 / 缓入缓出
 //   orient: 'tangent' | 'keep',      // 朝向跟随切线（只改 yaw）/ 保持手动朝向
-//   stops: [i, ...],                 // 可选（收尾 1）：停顿的顶点索引，升序、不含首尾（闭合路径可到 n−1）；缺省 = 无停顿
+//   stops: [i, ...],                 // 可选：停顿的顶点索引，升序、不含首尾（闭合路径可到 n−1）；缺省 = 无停顿
 //   stopTimes: [秒, ...],            // 可选：到达各停顿顶点的时刻（相对 start），与 stops 等长、递增、在 (0, duration) 内；
 // }                                  //   缺省 = 各段按弧长比例分配时长。有 stops 时每段各自缓入缓出（停顿处速度 0）
 // Constraint = {
@@ -94,11 +94,11 @@ export const DEFAULT_SCENE = Object.freeze({
   ratio: 'auto', activeCameraId: null, panorama: null,
 });
 export const DEFAULT_TIMELINE = Object.freeze({ duration: 10, fps: 30, mainCameraId: null, tracks: [] });
-export const DEFAULT_TRANSFORM = Object.freeze({ pos: [0, 0, 0], rot: [0, 0, 0], scale: [1, 1, 1] });
+export const DEFAULT_SCENE_NAME = '未命名场景';
 
 
 /** 一份空场景文档（全部字段齐全）。 */
-export function createEmptyDocument({ name = '未命名场景', app = APP_ID } = {}) {
+export function createEmptyDocument({ name = DEFAULT_SCENE_NAME, app = APP_ID } = {}) {
   const now = new Date().toISOString();
   return {
     schema: SCHEMA_VERSION,

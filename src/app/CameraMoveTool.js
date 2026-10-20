@@ -7,7 +7,7 @@ import { round4 } from '../util/math.js';
 const fmt = (s) => (Math.round(s * 10) / 10).toString();
 
 /**
- * 机位运镜（阶段 F）：把 cameraMoves 的生成结果写成 path + lookAt 约束（+ pan 的 rot 轨道），一次撤销。
+ * 机位运镜：把 cameraMoves 的生成结果写成 path + lookAt 约束（+ pan 的 rot 轨道），一次撤销。
  * Inspector「运镜」段只管显示，写操作全在这里（selftest 也直接调）。
  *
  * 会话态（不进文档）：app.moveMeta[cameraId] = { segments: [...] }，每段记 预设名 / 参数 / 主体 / 时间窗，

@@ -1,8 +1,8 @@
 import { Path, WALK_RAMP } from './Path.js';
 import { D2R, R2D, round6, round4 } from '../util/math.js';
 
-// 路径生成器（阶段 E）：纯函数，不依赖 DOM。输入 / 输出都是文档口径的 [x,y,z]（实体父坐标系，角色 / 组的 y = 地面高度）。
-// 同时是阶段 F 运镜预设、阶段 H AI 生成的积木（词汇表：line / arc / toward）。点的 y 一律由调用方给。
+// 路径生成器：纯函数，不依赖 DOM。输入 / 输出都是文档口径的 [x,y,z]（实体父坐标系，角色 / 组的 y = 地面高度）。
+// 同时是运镜预设、AI 生成的积木（词汇表：line / arc / toward）。点的 y 一律由调用方给。
 //
 // 角度约定（arc）：从 +X 轴起算，从上往下看（−Y 方向）逆时针为正：θ → (cx + r·cosθ, y, cz − r·sinθ)。
 
@@ -89,7 +89,7 @@ export function pathLength(points, closed = false, stops = null) {
   return new Path({ points, closed, start: 0, duration: 1, speed: 'linear', ...(stops?.length ? { stops } : {}) }).length;
 }
 
-// ---- 停顿 stops / stopTimes（收尾 1）：文档口径的纯函数 ----
+// ---- 停顿 stops / stopTimes：文档口径的纯函数 ----
 
 /**
  * 路径改动后让 stops / stopTimes 仍然合法（Timeline.updatePath / edit.setPath 用）：

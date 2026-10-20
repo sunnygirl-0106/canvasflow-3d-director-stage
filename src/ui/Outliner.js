@@ -56,7 +56,7 @@ export class Outliner {
     const tree = el('div', { class: 'tree' });
 
     for (const ent of app.entities) {
-      if (ent.type === 'crowd') { this._renderCrowd(tree, ent); continue; }
+      if (ent.type === 'group') { this._renderCrowd(tree, ent); continue; }
       if (!this._matches(ent.name)) continue;
 
       const sel = app.selectedIds.has(ent.id);

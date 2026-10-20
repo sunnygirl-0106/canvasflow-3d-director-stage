@@ -130,3 +130,10 @@ test('nearestSubject / aheadPoint', () => {
   const aims = { [a.id]: [0, 0.9, 0], [b.id]: [0, 0.9, 3] };
   assert.equal(edit.nearestSubject(doc, 'cam00001', [0, 1.6, 5], (id) => aims[id]), b.id);
 });
+
+test('charName / parseCharName 互为反函数', () => {
+  for (const n of [0, 1, 25, 26, 27, 51, 52, 700]) assert.equal(edit.parseCharName(edit.charName(n)), n);
+  assert.equal(edit.charName(26), '角色A2');
+  assert.equal(edit.parseCharName('小红'), -1);
+  assert.equal(edit.parseCharName('角色a'), -1);
+});

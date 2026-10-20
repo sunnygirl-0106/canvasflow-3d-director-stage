@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DEFAULT_SCENE } from '../doc/schema.js';
 
 // 用户交互事件：任何一次都可能改变画面，标记需要重绘。
 // 离散事件（点击 / 按键 / 表单）在 window 上监听；高频的 pointermove / wheel 只在视口内监听 ——
@@ -12,8 +13,8 @@ export class Stage {
     this.viewport = viewportEl;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x060608);
-    this.scene.fog = new THREE.Fog(0x060608, 18, 46);
+    this.scene.background = new THREE.Color(DEFAULT_SCENE.sky);
+    this.scene.fog = new THREE.Fog(DEFAULT_SCENE.sky, 18, 46);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }) // 截图在渲染后同步读取，无需 preserveDrawingBuffer;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));

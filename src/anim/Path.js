@@ -9,7 +9,7 @@ const GAIT_SAMPLES = 512; // 步态相位积分表的采样数
 /**
  * 角色 / 组 speed=smooth 的起步 / 收步时长（秒）。整段 smoothstep 会把加速拉满全程（5 s 的路第 1 s 才到均速，
  * 步频跟着减半 = 慢动作），人起步 1 秒内就到步速，所以改成「加速 RAMP → 匀速 → 减速 RAMP」。机位不用（整段缓入缓出是运镜手感）。
- * 0.8 s 仍反馈「起步慢动作」，缩到 0.4 s（加上 Locomotion 的起步短步，步频从第一步起就正常）。
+ * 配合 Locomotion 的起步短步，步频从第一步起就正常。
  */
 export const WALK_RAMP = 0.4;
 
@@ -78,7 +78,7 @@ class Curve {
  * 时间 → 弧长：progress(t) 把 (t − start) / duration 夹到 [0,1] 后按 speed 曲线映射（linear 匀速 / smooth 缓入缓出），
  * distanceAt(t) = progress × 全长。start 之前停在起点、结束之后停在终点。纯函数，无内部状态。
  *
- * 停顿 stops（收尾 1，可选）：顶点索引升序、不含首尾。有 stops 时路径在这些顶点处断成几段，
+ * 停顿 stops（可选）：顶点索引升序、不含首尾。有 stops 时路径在这些顶点处断成几段，
  * 每段是独立的 Catmull-Rom（停顿处速度为 0，允许折角，所以推镜头那段是严格的直线）；
  * 每段各自缓入缓出（无论 speed），各段时长 = stopTimes（相对 start 的到达时刻，可选）或按弧长比例分配。
  * 起步 / 收步（ramp 选项，角色 / 组）：smooth 不再整段缓入缓出，而是 ramp 秒加速 → 匀速 → ramp 秒减速（见 profile）。

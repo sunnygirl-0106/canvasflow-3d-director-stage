@@ -6,10 +6,10 @@ import { aimPointWith, anchorWith } from './subject.js';
 // 与文档 transform 同一口径：机位都是顶层实体，subject 若是群众成员则经组的变换换算过来。
 //
 // - lookAt：机位 −Z 对准 subject 的注视点，再叠加机位自身的荷兰角 roll（与 CameraEntity.aimAt 一致）。
-//   入场 / 退场混合（收尾 1）：start > 0 时在 [start, start+0.5 s] 内从"约束前的朝向"slerp 到注视朝向（进度 smoothstep）；
+//   入场 / 退场混合：start > 0 时在 [start, start+0.5 s] 内从"约束前的朝向"slerp 到注视朝向（进度 smoothstep）；
 //   end 非空时在 [end−0.5 s, end] 内从注视朝向 slerp 回约束前的朝向。start 为 null / 0 时直接全量生效（t=0 之前没有"约束前"）。
 //   接力：同一机位上一条 lookAt 的 end 恰好等于这条的 start 时，上一条不做退场，这一条从上一条的注视朝向转过来。
-// - follow（产品确认为刚性跟随）：位置 = subject 锚点 + Ry(subject yaw)·offset；
+// - follow（刚性跟随）：位置 = subject 锚点 + Ry(subject yaw)·offset；
 //   朝向 = Ry(subject yaw) × 机位原朝向（关键帧 / 路径 / 手动值都按 subject yaw=0 的坐标系解释）。
 //   follow 覆盖机位的 pos 轨道 / 路径；同时有 lookAt 时朝向由 lookAt 决定（follow 先于 lookAt）。
 //
@@ -55,10 +55,10 @@ function charFoot(ent, out) {
   return out.set(0, -ent._rootY0 / ent.root.scale.y, 0);
 }
 
-/** 运行时适配器：从场景对象取数（群众组运行时类型叫 crowd，文档里叫 group）。 */
+/** 运行时适配器：从场景对象取数。 */
 const sceneAdapter = (app) => ({
   get: (id) => app.findEntity(id),
-  type: (ent) => (ent.type === 'crowd' ? 'group' : ent.type),
+  type: (ent) => ent.type,
   members: (ent) => ent.children,
   matrix: (ent, out) => worldMatrix(app, ent, out),
   aimLocal: (ent, out) => {

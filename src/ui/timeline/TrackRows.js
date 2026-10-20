@@ -5,7 +5,7 @@ import { toggleKey } from './animState.js';
 /** 轨道行名（词汇表 → 中文）。 */
 export const PROP_LABEL = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视野' };
 const CONSTRAINT_LABEL = { lookAt: '注视', follow: '跟随' };
-const TYPE_ICON = { character: 'person', prop: 'cube', camera: 'video', crowd: 'group' };
+const TYPE_ICON = { character: 'person', prop: 'cube', camera: 'video', group: 'group' };
 const PROP_ORDER = ['pos', 'rot', 'scale', 'fov'];
 
 /** 设置 CSS 自定义属性（el() 的 style 对象不支持 --var）。 */

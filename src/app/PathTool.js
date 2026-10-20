@@ -27,10 +27,10 @@ const MIN_RADIUS = 0.1;   // 环绕：当前位置离中心太近时无法定半
 
 
 /**
- * 路径绘制工具（阶段 E；阶段 F 放开机位）：Dock「路径」/ Inspector「新建路径」进入绘制态，在视口里画出 points[]，
+ * 路径绘制工具：Dock「路径」/ Inspector「新建路径」进入绘制态，在视口里画出 points[]，
  * 结束时一次写入（addPath 或替换现有路径的 updatePath，一次撤销）。
  *
- * 绘制态下视口左键归绘制：OrbitControls 的左键动作临时置空，⌥ + 左键拖动仍可环绕（产品确认）；
+ * 绘制态下视口左键归绘制：OrbitControls 的左键动作临时置空，⌥ + 左键拖动仍可环绕；
  * 右键平移、滚轮缩放不变。gizmo 隐藏、视口点选暂停。
  *
  * 起点规则：首点 = 实体当前手动值（Timeline base，active 时也不取动画瞬时值）投到绘制平面，所以创建后 t=0 不跳。
@@ -64,7 +64,7 @@ export class PathTool extends Emitter {
   }
 
   /** 实体能否画路径：角色 / 道具 / 组 / 机位。 */
-  canDraw(ent) { return !!ent && ['character', 'prop', 'crowd', 'camera'].includes(ent.type); }
+  canDraw(ent) { return !!ent && ['character', 'prop', 'group', 'camera'].includes(ent.type); }
 
   // ---- 入口 ----
   /**
@@ -177,7 +177,7 @@ export class PathTool extends Emitter {
     const world = this.app.stage.world;
     world.updateMatrixWorld(true);
     const box = worldBox(ent.root, { useBones: ent.type === 'character' });
-    const c = ent.type === 'character' || ent.type === 'crowd' || box.isEmpty()
+    const c = ent.type === 'character' || ent.type === 'group' || box.isEmpty()
       ? ent.root.getWorldPosition(new THREE.Vector3())
       : box.getCenter(new THREE.Vector3());
     world.worldToLocal(c);

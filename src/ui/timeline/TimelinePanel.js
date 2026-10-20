@@ -22,7 +22,7 @@ function savePrefs(p) {
 
 
 /**
- * 底部时间轴面板（阶段 D）。
+ * 底部时间轴面板。
  * - 面板不持有文档状态：行在 timeline 'change' 时按 toJSON() 重建；写操作一律走 timeline API。
  * - 播放头在 playback 'tick' 时只改 transform，不重建行。
  * 事件：'collapse'(bool)。

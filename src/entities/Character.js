@@ -121,7 +121,7 @@ export class Character extends Entity {
     this.pose = Pose.create(JOINT_SCHEMA);
     this.values = this.pose.values;
     this.currentPreset = null; // 当前静态姿势预设 key（null=未选/已手动微调）
-    // 自动贴地开关（见 _ground）。阶段 C 程序化步行时需关闭：走路抬脚时最低骨头逐帧变化，
+    // 自动贴地开关（见 _ground）。程序化步行时需关闭：走路抬脚时最低骨头逐帧变化，
     // 贴地会让模型上下跳，届时改由步行逻辑自行控制高度。现阶段恒为 true，行为不变。
     this.autoGround = true;
 
@@ -216,7 +216,7 @@ export class Character extends Entity {
   /**
    * 自动贴地：摆姿后最低的骨头回到地面高度（如坐姿时整体下沉）。
    * 只平移 model（root 的子节点），root 的位置 / gizmo / 用户摆放不受影响。
-   * TODO(阶段C)：程序化步行时此逻辑要可关闭（this.autoGround=false），否则抬脚帧会导致模型上下跳。
+   * 程序化步行时此逻辑要关闭（this.autoGround=false），否则抬脚帧会导致模型上下跳。
    */
   _ground() {
     this.model.position.y = this._modelBaseY;

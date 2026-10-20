@@ -534,12 +534,12 @@ select.dropdown:focus { border-color: var(--line2); }
 .path-hint[hidden] { display: none; }
 #viewport.path-drawing canvas { cursor: crosshair; }
 
-/* 机位视角：当前出画机位名 / 未设主机位提示（阶段 F） */
+/* 机位视角：当前出画机位名 / 未设主机位提示 */
 .pov-label { align-self: center; font-size: 12px; color: var(--dim); padding: 0 10px 0 6px; white-space: nowrap; }
 .pov-label.main { color: var(--accent); font-weight: 600; }
 .pov-hint { position: absolute; left: 14px; top: 12px; z-index: 5; font-size: 12px; color: var(--dim); pointer-events: none; }
 
-/* ===== 导出视频弹层（阶段 G，沿用历史记录弹层外框）===== */
+/* ===== 导出视频弹层（沿用历史记录弹层外框）===== */
 .export-box { width: min(460px, 94vw); height: auto; max-height: 92vh; }
 .export-box [hidden] { display: none !important; }
 .ex-body { padding: 4px 24px 8px; border-top: 1px solid var(--line); }
@@ -570,7 +570,7 @@ select.dropdown:focus { border-color: var(--line2); }
 body.exporting #timeline, body.exporting .side, body.exporting #dock { opacity: .4; pointer-events: none; }
 body.exporting #viewport { pointer-events: none; }
 
-/* ===== AI 抽屉（阶段 H）===== */
+/* ===== AI 抽屉===== */
 .ai-drawer {
   position: absolute; top: 12px; right: 12px; bottom: 12px; width: 360px; z-index: 12;
   display: flex; flex-direction: column; background: rgba(14,14,17,.97); border: 1px solid var(--line2);

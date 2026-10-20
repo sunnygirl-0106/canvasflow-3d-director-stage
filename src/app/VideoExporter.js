@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { DEFAULT_SCENE_NAME } from '../doc/schema.js';
 
-// 导出视频（阶段 G）：第 i 帧 = timeline.evaluate(t0 + i/fps) 后用主机位离屏渲染。
+// 导出视频：第 i 帧 = timeline.evaluate(t0 + i/fps) 后用主机位离屏渲染。
 // evaluate 是纯函数，所以导出完全离线、逐帧，与机器快慢无关；不动主 canvas 尺寸，不改文档。
 
 /** 短边可选值；1440p 标「实验」（集成显卡上可能内存不够）。 */
@@ -38,7 +39,7 @@ export function exportCamera(app) {
   return ent ? { ent, source: 'current' } : null;
 }
 
-// H.264 级别按每帧宏块数选（Baseline 3.1 / Main 4.2 是任务说明的默认；21:9、1440p 超出该级别的帧尺寸上限时升级）
+// H.264 级别按每帧宏块数选（默认 Baseline 3.1 / Main 4.2；21:9、1440p 超出该级别的帧尺寸上限时升级）
 const AVC_LEVELS = [[3600, '1f'], [8192, '2a'], [22080, '32'], [36864, '33']];
 
 /** 编码参数：720p Baseline 6 Mbps，1080p Main 12 Mbps，1440p Main 20 Mbps；关键帧每 2 秒（encode 时指定）。 */
@@ -220,7 +221,7 @@ export async function exportVideo(app, { width, height, fps, range, labels = tru
     await encoder.flush();
     if (encErr) throw encErr;
     muxer.finalize();
-    const name = (app.docMeta.name || '未命名场景').replace(/[\\/:*?"<>|]/g, '_');
+    const name = (app.docMeta.name || DEFAULT_SCENE_NAME).replace(/[\\/:*?"<>|]/g, '_');
     return { blob: new Blob([target.buffer], { type: 'video/mp4' }), filename: `${name}_${width}x${height}_${fps}fps.mp4`, frames: n, width, height, fps };
   } finally {
     if (encoder.state !== 'closed') encoder.close();

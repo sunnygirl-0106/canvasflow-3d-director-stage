@@ -3,14 +3,14 @@ import { line, arc, polar } from './pathGen.js';
 import { Path } from './Path.js';
 import { D2R, R2D, round6 } from '../util/math.js';
 
-// 运镜预设（阶段 F）：纯函数，不依赖 DOM / App。输入机位当前位姿 + 主体注视点 + 参数，输出文档口径的
+// 运镜预设：纯函数，不依赖 DOM / App。输入机位当前位姿 + 主体注视点 + 参数，输出文档口径的
 // 路径点 / 旋转关键帧，由调用方写成 path + lookAt 约束（+ pan 的 rot 轨道）。
 // 预设名与参数名是 AI 词汇表（定了不改）：push_in / pull_out / truck / crane / pan / half_orbit / circle；
 // amount / dir / sweep / subject / duration。预设参数不进文档，文档只存生成结果。
 //
 // 几何约定：
 // - "距离 / 连线"一律取水平分量（机位→主体注视点投到水平面）：除 crane 外路径点 y = 机位当前高度。
-// - truck 的 left / right 以机位视角为准（产品确认）：机位往自己左边移 = left。
+// - truck 的 left / right 以机位视角为准：机位往自己左边移 = left。
 // - 环绕：圆心 = 主体注视点的水平位置，半径 = 当前水平距离，高度 = 机位当前高度；
 //   dir 以俯视为准，ccw = 逆时针（pathGen.arc 的正方向），cw = 顺时针。
 // - pan：机位不动，生成两个 rot 关键帧（起 = 当前朝向，止 = 对准主体并保留荷兰角 roll，与 Constraint lookAt 一致）。
@@ -197,7 +197,7 @@ const sameSubject = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
  * 新运镜段的注视窗口怎么并入机位已有的 lookAt 约束（只看 lookAt；时间单位秒）。
- * 新段的注视从 start 开始、一直保持到全程结束（end = null，产品确认：运镜结束后继续盯着主体）。
+ * 新段的注视从 start 开始、一直保持到全程结束（end = null：运镜结束后继续盯着主体）。
  * cut = 已有注视在哪一刻让位给新段（带路径的段 cut = start；pan 的 cut = 摇的起点、start = 摇完那一刻）。
  * - 起点 ≥ cut 的旧约束整条删除（被新段覆盖）；
  * - 跨过 cut 的旧约束：同主体且 cut = start（中间无空档）→ 合并（沿用旧约束，end 改为 null，不新增）；否则 end 截到 cut。

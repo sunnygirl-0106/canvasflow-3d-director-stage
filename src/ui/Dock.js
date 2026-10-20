@@ -114,7 +114,7 @@ export class Dock {
     const full = this._btn('expand', '全屏', () => this._toggleFullscreen());
     this.fullBtn = full;
 
-    // 10 AI（阶段 H）：右侧抽屉开合
+    // 10 AI：右侧抽屉开合
     const ai = this.aiPanel;
     const aiBtn = ai ? this._btn('sparkle', 'AI 导演（一句话生成 / 对话修改 / 识图导入）', () => ai.toggle()) : null;
     if (aiBtn) { aiBtn.classList.add('ai-dockbtn'); aiBtn.classList.toggle('on', ai.open); ai.onToggle = (v) => this.aiBtn?.classList.toggle('on', v); }
