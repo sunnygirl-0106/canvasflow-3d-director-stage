@@ -2,16 +2,19 @@ import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
-  { ignores: ['dist/', 'node_modules/'] },
+  { ignores: ['dist/', 'node_modules/', 'test-output/', '_assets_src/'] },
   js.configs.recommended,
   {
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: globals.browser },
     rules: {
-      'no-unused-vars': ['error', { args: 'none' }],
+      'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }],
+      eqeqeq: ['error', 'smart'],
+      'prefer-const': ['error', { destructuring: 'all', ignoreReadBeforeAssign: true }],
     },
   },
   {
-    files: ['selftest.mjs', 'eslint.config.js', 'vite.config.js'],
+    // node 侧：自测 / 单测 / 脚本 / 配置（selftest 里 page.evaluate 的回调跑在浏览器，两套全局都要）
+    files: ['selftest.mjs', 'tests/**', 'scripts/**', '*.config.js'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
 ];

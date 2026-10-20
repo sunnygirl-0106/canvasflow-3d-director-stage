@@ -1,7 +1,7 @@
 // 端到端自测：headless Chrome 驱动真实 dev server，覆盖核心功能 + 已修复问题的回归。
 // 运行：npm run test:e2e
 //   - 默认自动起一个 Vite dev server；也可用 TEST_URL=http://localhost:5173/ 指向已有服务
-//   - Chrome 路径：CHROME_PATH 环境变量，默认 macOS 安装位置
+//   - Chrome 路径：CHROME_PATH 环境变量，缺省时依次找 macOS / Linux 常见安装位置
 // 子命令：
 //   node selftest.mjs poses [outDir] [bodyKey]
 //     对单个角色逐个套用全部姿势预设并截图到 outDir/<preset>.png（默认 test-output/poses，
@@ -35,7 +35,9 @@
 //   node selftest.mjs ai
 //     AI 生成验收（阶段 H，全部 MockProvider、不依赖网络）：一句话生成 / 校验回路（错误原文喂回）/ 三次失败场景不变 /
 //     修改模式 + ⌘Z / 重名改名 / 识图（合成站位图）与越权拒绝 / 词汇表一致 / 设置只存本机。产物在 test-output/ai/。
-//   pathGen / cameraMoves / AI ops / 文档纯函数单元测试不起浏览器：npm run test:unit
+//   node selftest.mjs all
+//     依次跑默认套件与上面全部验收套件（各起一个子进程），任一失败退出码 1。
+//   纯函数单元测试不起浏览器：npm run test:unit
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -71,18 +73,44 @@ function poseDiff(dirA, dirB, maxRatio) {
   return bad ? 1 : 0;
 }
 
-const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+// all：逐个套件各起一个子进程（套件之间不共享页面状态），汇总退出码
+if (CMD === 'all') {
+  let bad = 0;
+  for (const suite of ['default', 'doc', 'anim', 'tl', 'path', 'cam', 'export', 'ai']) {
+    console.log(`\n##### ${suite} #####`);
+    try { execFileSync(process.execPath, [process.argv[1], ...(suite === 'default' ? [] : [suite])], { stdio: 'inherit' }); }
+    catch { bad++; console.log(`##### ${suite} 失败 #####`); }
+  }
+  console.log(`\n##### all：${bad ? bad + ' 个套件失败' : '全部通过'} #####`);
+  process.exit(bad ? 1 : 0);
+}
+
+const CHROME_CANDIDATES = [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+];
+const CHROME = process.env.CHROME_PATH || CHROME_CANDIDATES.find((p) => fs.existsSync(p));
+if (!CHROME) { console.error('找不到 Chrome：请设置 CHROME_PATH'); process.exit(2); }
 
 let server = null;
 let URL_ = process.env.TEST_URL;
 if (!URL_) {
-  server = await createServer({ server: { port: 5181, strictPort: false, open: false }, logLevel: 'error' });
+  server = await createServer({ server: { port: 5181, strictPort: false, open: false, hmr: false, watch: null }, logLevel: 'error' });
   await server.listen();
   URL_ = server.resolvedUrls.local[0];
 }
 
 const results = [];
 const ok = (name, pass, detail = '') => { results.push({ pass }); console.log(`${pass ? '✅' : '❌'} ${name}${detail ? ' — ' + detail : ''}`); };
+/** 套件统一收尾：查 console 错误、关浏览器与服务、打印汇总并以失败数决定退出码。 */
+async function finish() {
+  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
+  await browser.close();
+  await server?.close();
+  const failed = results.filter((r) => !r.pass).length;
+  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
+  process.exit(failed ? 1 : 0);
+}
 
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage();
@@ -163,74 +191,10 @@ if (CMD === 'poses') {
   process.exit(errs.length ? 1 : 0);
 }
 
-if (CMD === 'anim') {
-  await animTest();
-  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
-  await browser.close();
-  await server?.close();
-  const failed = results.filter((r) => !r.pass).length;
-  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
-  process.exit(failed ? 1 : 0);
-}
-
-if (CMD === 'tl') {
-  await tlTest();
-  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
-  await browser.close();
-  await server?.close();
-  const failed = results.filter((r) => !r.pass).length;
-  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
-  process.exit(failed ? 1 : 0);
-}
-
-if (CMD === 'path') {
-  await pathTest();
-  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
-  await browser.close();
-  await server?.close();
-  const failed = results.filter((r) => !r.pass).length;
-  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
-  process.exit(failed ? 1 : 0);
-}
-
-if (CMD === 'cam') {
-  await camTest();
-  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
-  await browser.close();
-  await server?.close();
-  const failed = results.filter((r) => !r.pass).length;
-  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
-  process.exit(failed ? 1 : 0);
-}
-
-if (CMD === 'export') {
-  await exportTest();
-  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
-  await browser.close();
-  await server?.close();
-  const failed = results.filter((r) => !r.pass).length;
-  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
-  process.exit(failed ? 1 : 0);
-}
-
-if (CMD === 'ai') {
-  await aiTest();
-  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
-  await browser.close();
-  await server?.close();
-  const failed = results.filter((r) => !r.pass).length;
-  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
-  process.exit(failed ? 1 : 0);
-}
-
-if (CMD === 'doc') {
-  await docTest();
-  ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
-  await browser.close();
-  await server?.close();
-  const failed = results.filter((r) => !r.pass).length;
-  console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
-  process.exit(failed ? 1 : 0);
+const SUITES = { doc: docTest, anim: animTest, tl: tlTest, path: pathTest, cam: camTest, export: exportTest, ai: aiTest };
+if (SUITES[CMD]) {
+  await SUITES[CMD]();
+  await finish();
 }
 
 /** 视口截图（含名牌 / 取景框叠加层），先等两帧让按需渲染出图。 */
@@ -3423,17 +3387,12 @@ ok('UI：清单条目/机位预览出图/菜单开合', ui.rows === ui.entities 
 // 截图便于人工对齐
 await page.evaluate(() => { window.__app.setCameraView(false); window.__app.select(null); });
 await new Promise((r) => setTimeout(r, 400));
-await page.screenshot({ path: 'selftest_view.png' });
-console.log('📸 已保存 selftest_view.png（未选中态）');
+fs.mkdirSync('test-output', { recursive: true });
+await page.screenshot({ path: 'test-output/selftest_view.png' });
+console.log('📸 已保存 test-output/selftest_view.png（未选中态）');
 await page.evaluate(() => { const c = window.__app.entities.find((e) => e.type === 'character'); window.__app.select(c.id); });
 await new Promise((r) => setTimeout(r, 300));
-await page.screenshot({ path: 'selftest_selected.png' });
-console.log('📸 已保存 selftest_selected.png（选中角色态）');
+await page.screenshot({ path: 'test-output/selftest_selected.png' });
+console.log('📸 已保存 test-output/selftest_selected.png（选中角色态）');
 
-ok('运行期无 console 错误', errs.length === 0, errs.slice(0, 3).join(' | '));
-
-await browser.close();
-await server?.close();
-const failed = results.filter((r) => !r.pass).length;
-console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
-process.exit(failed ? 1 : 0);
+await finish();

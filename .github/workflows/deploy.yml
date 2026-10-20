@@ -23,6 +23,8 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - run: npm run lint
+      - run: npm run test:unit
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
