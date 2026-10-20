@@ -559,7 +559,7 @@ async function animTest() {
   ok('路径：机位镜头方向沿切线、高度取路径 y', pt.camDirErr < 1e-3 && pt.camHeight > 1.6 && pt.camHeight < 1.81, `误差 ${pt.camDirErr.toExponential(2)}°，y=${pt.camHeight.toFixed(3)}`);
   ok('路径：角色沿 +Z 朝向切线、贴路径高度（root.y − 站立基准 = 0）', Math.abs(pt.charYaw) < 1e-6 && Math.abs(pt.charRootY) < 1e-9 && Math.abs(pt.charZ - 1.5) < 1e-4, JSON.stringify({ yaw: pt.charYaw, z: pt.charZ }));
   ok('路径：active 时导出的仍是手动位置', pt.charDocY === 0);
-  ok('路径：smooth 首尾速度为 0、中段匀速（角色 0.8 s 起步：3 m / (4 − 0.8) s）', pt.speeds[0] === 0 && pt.speeds[2] === 0 && pt.speeds[3] === 0 && pt.speeds[4] === 0 && Math.abs(pt.speeds[1] - 3 / (4 - 0.8)) < 1e-6 && pt.startCreep < 1e-4, JSON.stringify(pt.speeds.map((v) => +v.toFixed(4))) + ` 起步=${pt.startCreep.toExponential(2)}m`);
+  ok('路径：smooth 首尾速度为 0、中段匀速（角色 0.4 s 起步：3 m / (4 − 0.4) s）', pt.speeds[0] === 0 && pt.speeds[2] === 0 && pt.speeds[3] === 0 && pt.speeds[4] === 0 && Math.abs(pt.speeds[1] - 3 / (4 - 0.4)) < 1e-6 && pt.startCreep < 1e-4, JSON.stringify(pt.speeds.map((v) => +v.toFixed(4))) + ` 起步=${pt.startCreep.toExponential(2)}m`);
   ok('路径：stop() 回到手动位置', pt.stopped);
   // ---- 步态：6 m 直线 smooth 4 s；压到 1.5 s 为跑步；组沿路径成员一起走 ----
   await buildAnimScene().then((v) => Object.assign(ids, v));

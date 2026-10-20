@@ -110,13 +110,13 @@ test('simplify：≤ 2 点原样返回（拷贝）', () => {
   assert.notEqual(simplify(one)[0], one[0]);
 });
 
-test('defaultDuration：匀速段速度 = 步速（含 0.8 s 起步 / 收步），向上取 0.1 s，最短 1 s', () => {
+test('defaultDuration：匀速段速度 = 步速（含 0.4 s 起步 / 收步），向上取 0.1 s，最短 1 s', () => {
   assert.ok(close(pathLength(line([0, 0, 0], [6, 0, 0])), 6, 1e-6));
-  assert.equal(defaultDuration(line([0, 0, 0], [6.8, 0, 0])), 4.8);            // 6.8/1.7 + 0.8 = 4.8
-  assert.equal(defaultDuration(line([0, 0, 0], [6, 0, 0]), { speed: 3 }), 2.8); // 2 + 0.8
+  assert.equal(defaultDuration(line([0, 0, 0], [6.8, 0, 0])), 4.4);            // 6.8/1.7 + 0.4 = 4.4
+  assert.equal(defaultDuration(line([0, 0, 0], [6, 0, 0]), { speed: 3 }), 2.4); // 2 + 0.4
   assert.equal(defaultDuration(line([0, 0, 0], [6.5, 0, 0]), { speed: 1, ramp: 0 }), 6.5); // 机位：长 ÷ 速度
-  assert.equal(defaultDuration(line([0, 0, 0], [1.2, 0, 0]), { speed: 1 }), 2); // 1.2 ≥ 0.8 → 1.2 + 0.8
-  assert.equal(defaultDuration(line([0, 0, 0], [1.02, 0, 0])), 1.2);            // 0.6 < 0.8 → 2×0.6 = 1.2
+  assert.equal(defaultDuration(line([0, 0, 0], [1.2, 0, 0]), { speed: 1 }), 1.6); // 1.2 ≥ 0.4 → 1.2 + 0.4
+  assert.equal(defaultDuration(line([0, 0, 0], [1.02, 0, 0]), { ramp: 0.8 }), 1.2); // 0.6 < 0.8 → 2×0.6 = 1.2
   assert.equal(defaultDuration(line([0, 0, 0], [0.3, 0, 0])), 1);              // 最短 1 s
   assert.equal(defaultDuration([[0, 0, 0]]), 1);
   { // 生成的时长下，匀速段速度 ≈ 步速（只差向上取整）

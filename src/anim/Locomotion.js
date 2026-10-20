@@ -15,6 +15,10 @@ import { clamp01, EASE } from './ease.js';
 export const WALK_MAX = 1.8;    // m/s，≤ 纯走
 export const RUN_MIN = 2.6;     // m/s，≥ 纯跑
 export const BLEND_SPEED = 0.5; // m/s，w 达到 1 的速度
+// 起步短步：速度低于 STRIDE_FULL 时步幅（周期长度 / 支撑行程 / 抬脚）按 v / STRIDE_FULL 缩短（下限 STRIDE_MIN），
+// 步频保持正常步速的水平。周期长度固定的话步频 ∝ 速度，起步加速段腿会像慢动作；人起步是小步快迈。
+export const STRIDE_FULL = 1.6; // m/s，≥ 全步幅（取高些让步幅在起步段里慢慢长开；1.2 时骨盆一帧掉 2.8 cm）
+export const STRIDE_MIN = 0.4;
 
 // 两套步态参数。cycle：周期长度 / 身高；reach：支撑期内支撑脚相对髋的前后行程 / 身高
 // （决定支撑期占比 = reach / cycle，走 > 0.5 有双支撑，跑 < 0.5 有腾空；直接混合行程而不是占比，
@@ -45,13 +49,19 @@ export const runMix = (speed) => clamp01((speed - WALK_MAX) / (RUN_MIN - WALK_MA
 /** 与原姿势的混合权重。 */
 export const gaitWeight = (speed) => clamp01(speed / BLEND_SPEED);
 
-/** 周期长度 / 身高（随走跑混合变化）。 */
-export const cycleFactor = (speed) => lerp(GAIT.walk.cycle, GAIT.run.cycle, runMix(speed));
+/** 起步短步的步幅缩放（≤ 1）。 */
+export const strideScale = (speed) => Math.min(1, Math.max(STRIDE_MIN, speed / STRIDE_FULL));
 
-/** 两套参数按 k 混合。 */
-function params(k) {
+/** 周期长度 / 身高（随走跑混合、起步短步变化）。 */
+export const cycleFactor = (speed) => lerp(GAIT.walk.cycle, GAIT.run.cycle, runMix(speed)) * strideScale(speed);
+
+/** 两套参数按 k 混合；σ = 起步短步缩放（周期、支撑行程、抬脚同比缩，支撑期占比不变）。 */
+function params(k, sigma = 1) {
   const P = {};
   for (const key of Object.keys(GAIT.walk)) P[key] = lerp(GAIT.walk[key], GAIT.run[key], k);
+  P.cycle *= sigma;
+  P.reach *= sigma;
+  P.lift *= sigma;
   P.stance = Math.min(0.7, P.reach / P.cycle);
   return P;
 }
@@ -180,10 +190,11 @@ function pelvisDrop(S, feetAt, phase) {
  * @param {object} geom Character.legGeom
  * @param {number} phase 周期数（可大于 1）
  * @param {number} k 跑步占比
+ * @param {number} [speed] 速度（m/s；决定起步短步缩放，省略 = 全步幅）
  * @returns {{values:Object<string,number>, drop:number}} drop：骨盆相对站立的高度变化（米，≤ 0，相对素体尺寸）
  */
-export function gaitPose(geom, phase, k) {
-  const P = params(k);
+export function gaitPose(geom, phase, k, speed = Infinity) {
+  const P = params(k, strideScale(speed));
   const S = legStatics(geom);
   const stride = P.cycle * geom.height;
   const feetAt = (ph) => S.map((L, i) => footAt(frac(ph + i * 0.5), L, P, stride, L.lt + L.ls));
@@ -222,7 +233,7 @@ export function gaitPose(geom, phase, k) {
 export function locomotionPose(base, geom, { speed, phase }) {
   const w = gaitWeight(speed);
   const k = runMix(speed);
-  const g = geom ? gaitPose(geom, phase, k) : { values: {}, drop: 0 };
+  const g = geom ? gaitPose(geom, phase, k, speed) : { values: {}, drop: 0 };
   const values = {};
   for (const key of JOINT_KEYS) values[key] = lerp(base[key] || 0, g.values[key] || 0, w);
   return { values, drop: g.drop * w, w, k };

@@ -9,8 +9,9 @@ const GAIT_SAMPLES = 512; // 步态相位积分表的采样数
 /**
  * 角色 / 组 speed=smooth 的起步 / 收步时长（秒）。整段 smoothstep 会把加速拉满全程（5 s 的路第 1 s 才到均速，
  * 步频跟着减半 = 慢动作），人起步 1 秒内就到步速，所以改成「加速 RAMP → 匀速 → 减速 RAMP」。机位不用（整段缓入缓出是运镜手感）。
+ * 0.8 s 仍反馈「起步慢动作」，缩到 0.4 s（加上 Locomotion 的起步短步，步频从第一步起就正常）。
  */
-export const WALK_RAMP = 0.8;
+export const WALK_RAMP = 0.4;
 
 /** 实体类型 → Path 的 ramp 选项。 */
 export const rampFor = (type) => (type === 'camera' ? 0 : WALK_RAMP);
