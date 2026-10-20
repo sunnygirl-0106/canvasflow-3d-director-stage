@@ -1,7 +1,6 @@
-import { el } from '../../util/dom.js';
+import { el, toastError } from '../../util/dom.js';
 import { icon } from '../icons.js';
 import { toggleKey } from './animState.js';
-import { toastError } from './Transport.js';
 
 /** 轨道行名（词汇表 → 中文）。 */
 export const PROP_LABEL = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视野' };

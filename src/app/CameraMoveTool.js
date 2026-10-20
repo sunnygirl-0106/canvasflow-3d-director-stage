@@ -1,9 +1,7 @@
-import { toast } from '../util/dom.js';
+import { toast, toastError, confirmToast } from '../util/dom.js';
 import { aimPoint } from '../anim/Constraint.js';
 import { cameraMove, defaultParams, MoveError, MOVE_LABEL } from '../anim/cameraMoves.js';
 import { moveContext, aheadPoint, nearestSubject, applyCameraMove, clearCameraMoves } from '../doc/edit.js';
-import { toastError } from '../ui/timeline/Transport.js';
-import { confirmToast } from './PathTool.js';
 import { round4 } from '../util/math.js';
 
 const fmt = (s) => (Math.round(s * 10) / 10).toString();

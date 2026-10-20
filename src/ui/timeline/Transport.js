@@ -1,4 +1,4 @@
-import { el, toast } from '../../util/dom.js';
+import { el, toastError } from '../../util/dom.js';
 import { icon } from '../icons.js';
 
 const FPS_OPTIONS = [24, 25, 30, 60];
@@ -11,12 +11,6 @@ export function fmtTime(t) {
   const c = cs % 100;
   const p = (n) => String(n).padStart(2, '0');
   return `${p(m)}:${p(s)}.${p(c)}`;
-}
-
-/** timeline API 抛出的错误 → toast（DocumentError 逐条列出字段路径）。 */
-export function toastError(err) {
-  console.warn(err);
-  toast(err?.errors?.length ? err.errors.slice(0, 3).join('\n') : (err?.message || String(err)));
 }
 
 /**

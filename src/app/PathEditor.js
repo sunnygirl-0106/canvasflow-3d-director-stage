@@ -1,5 +1,4 @@
-import { toast, isTyping, CLICK_PX } from '../util/dom.js';
-import { toastError } from '../ui/timeline/Transport.js';
+import { toast, toastError, isTyping, CLICK_PX } from '../util/dom.js';
 import { stopsAfterInsert, stopsAfterDelete } from '../anim/pathGen.js';
 import { round4 } from '../util/math.js';
 

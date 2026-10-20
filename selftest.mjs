@@ -2911,7 +2911,7 @@ async function aiTest() {
     const { BODY_TYPES, PROP_KINDS } = await import('/src/config.js');
     const { POSE_PRESET_MAP } = await import('/src/entities/posePresets.js');
     const { CAMERA_MOVES } = await import('/src/anim/cameraMoves.js');
-    const { PATH_MODES } = await import('/src/app/PathTool.js');
+    const { PATH_MODES } = await import('/src/anim/pathGen.js');
     const S = await import('/src/doc/schema.js');
     const eq = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
     const sets = {

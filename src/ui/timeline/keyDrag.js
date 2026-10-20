@@ -1,6 +1,5 @@
-import { el } from '../../util/dom.js';
+import { el, toastError } from '../../util/dom.js';
 import { keyId } from './TrackRows.js';
-import { toastError } from './Transport.js';
 import { round6 } from '../../util/math.js';
 
 const DRAG_PX = 3; // 移动超过此距离才算拖动（否则是点击）

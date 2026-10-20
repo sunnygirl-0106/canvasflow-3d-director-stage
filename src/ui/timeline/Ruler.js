@@ -1,5 +1,5 @@
 import { el } from '../../util/dom.js';
-import { GUTTER } from './TimelinePanel.js';
+import { GUTTER } from './layout.js';
 
 const MAJOR_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120]; // 秒
 const MIN_LABEL_PX = 64;  // 两个秒标签之间至少这么宽

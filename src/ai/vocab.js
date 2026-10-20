@@ -5,7 +5,7 @@
 import { BODY_TYPES, PROP_KINDS, RATIO_OPTIONS } from '../config.js';
 import { POSE_PRESETS } from '../entities/posePresets.js';
 import { CAMERA_MOVES, MOVE_PARAMS, MOVE_DIRS, MOVE_DURATION } from '../anim/cameraMoves.js';
-import { PATH_MODES } from '../app/PathTool.js';
+import { PATH_MODES } from '../anim/pathGen.js';
 import { EASES, PATH_SPEEDS, PATH_ORIENTS, TRACK_PROPERTIES, CONSTRAINT_TYPES, FOV_RANGE } from '../doc/schema.js';
 
 // ---- 中文解释（键 = 代码枚举值）----

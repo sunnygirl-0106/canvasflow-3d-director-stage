@@ -8,8 +8,7 @@ import { validate, DEFAULT_TIMELINE } from '../doc/schema.js';
 import { BODY_TYPES, PROP_PALETTE } from '../config.js';
 import { propLocalCenter } from '../entities/Prop.js';
 import { aimRotation, MoveError, MOVE_LABEL } from '../anim/cameraMoves.js';
-import { line, polar, toward, pathLength } from '../anim/pathGen.js';
-import { arcPoints, ARC_SWEEP, TOWARD_STOP } from '../app/PathTool.js';
+import { line, polar, toward, pathLength, arcPoints, ARC_SWEEP, TOWARD_STOP } from '../anim/pathGen.js';
 import { hexColor } from '../entities/Entity.js';
 import { round6, clone, D2R } from '../util/math.js';
 

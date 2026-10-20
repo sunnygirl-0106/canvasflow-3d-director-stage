@@ -1,13 +1,11 @@
-import { el, isTyping } from '../../util/dom.js';
+import { el, isTyping, toastError } from '../../util/dom.js';
 import { Emitter } from '../../util/Emitter.js';
+import { NAME_W, GUTTER } from './layout.js';
 import { Transport } from './Transport.js';
 import { Ruler } from './Ruler.js';
 import { TrackRows, keyId, PROP_LABEL } from './TrackRows.js';
 import { dragKeys, dragBar, popupMenu } from './keyDrag.js';
-import { toastError } from './Transport.js';
 
-export const NAME_W = 184;   // 左侧行名列宽
-export const GUTTER = 12;    // 0 秒距名列的留白（t=0 的键不被名列遮住）
 const RULER_H = 24;
 const PAD_R = 24;            // 时长之后留白（末尾的键 / 播放头不贴边）
 const MAX_PPS = 1500;        // 最大缩放（px / 秒）

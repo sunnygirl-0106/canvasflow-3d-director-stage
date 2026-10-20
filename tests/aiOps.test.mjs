@@ -7,7 +7,7 @@ import { validateOps, sceneIndex, uniqueName, opsText, OP_NAMES, PATH_FIELDS, IM
 import { BODY_TYPES, PROP_KINDS, RATIO_OPTIONS } from '../src/config.js';
 import { POSE_PRESET_MAP } from '../src/entities/posePresets.js';
 import { CAMERA_MOVES, MOVE_PARAMS, MOVE_DIRS } from '../src/anim/cameraMoves.js';
-import { PATH_MODES } from '../src/app/PathTool.js';
+import { PATH_MODES } from '../src/anim/pathGen.js';
 import { EASES, PATH_SPEEDS, PATH_ORIENTS, TRACK_PROPERTIES, CONSTRAINT_TYPES } from '../src/doc/schema.js';
 
 const setEq = (a, b, msg) => assert.deepEqual([...new Set(a)].sort(), [...new Set(b)].sort(), msg);

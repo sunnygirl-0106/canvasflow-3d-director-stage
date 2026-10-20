@@ -1,8 +1,7 @@
-import { el, clear, toast } from '../util/dom.js';
+import { el, clear, toast, confirmToast } from '../util/dom.js';
 import { icon } from './icons.js';
 import { MODES, MODE_LABEL } from '../ai/ops.js';
 import { OpenAICompatProvider, loadSettings, saveSettings } from '../ai/provider.js';
-import { confirmToast } from '../app/PathTool.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 识图：原图 ≤ 2 MB
 const IMAGE_EDGE = 1024;                 // 压到长边 1024 px（JPEG）

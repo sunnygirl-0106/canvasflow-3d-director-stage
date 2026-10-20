@@ -1,20 +1,10 @@
 import * as THREE from 'three';
-import { el, toast, isTyping, CLICK_PX } from '../util/dom.js';
+import { el, toast, toastError, confirmToast, isTyping, CLICK_PX } from '../util/dom.js';
 import { Emitter } from '../util/Emitter.js';
 import { worldBox } from '../util/measure.js';
-import { line, arc, polar, toward, simplify } from '../anim/pathGen.js';
+import { line, polar, toward, simplify, PATH_MODES, TOWARD_STOP, ARC_SWEEP, arcPoints } from '../anim/pathGen.js';
 import { pathStartPoint, setPath } from '../doc/edit.js';
-import { toastError } from '../ui/timeline/Transport.js';
 import { round4 } from '../util/math.js';
-
-/** 五种绘制方式：[key, 文案]。key 与 AI 词汇表一致（points / freehand / line / arc / toward）。 */
-export const PATH_MODES = [
-  ['points', '点击落点'],
-  ['freehand', '手绘'],
-  ['line', '直线'],
-  ['arc', '环绕'],
-  ['toward', '走到'],
-];
 
 /** 某实体的绘制方式文案：机位的「走到」叫「推到」（同一个 toward）。 */
 export function pathModes(ent) {
@@ -33,14 +23,7 @@ const DBL_EPS = 0.05;     // 双击结束时，与上一点距离小于它的点
 const STROKE_STEP = 0.02; // 手绘采样间隔（米）
 const SIMPLIFY_TOL = 0.05;
 const MIN_RADIUS = 0.1;   // 环绕：当前位置离中心太近时无法定半径
-export const TOWARD_STOP = { default: 0.8, camera: 1.5 }; // 走到 / 推到：停在目标前的水平距离（米）
-export const ARC_SWEEP = 180; // 环绕默认扫过角度
 
-/** 环绕参数 → 生成结果（Inspector 改三参数时也用它）：每 22.5° 一段，180° = 8 段。 */
-export function arcPoints({ center, radius, startDeg, sweepDeg }, y) {
-  const segments = Math.max(2, Math.ceil(Math.min(360, Math.abs(sweepDeg)) / 22.5));
-  return arc({ center, radius, startDeg, sweepDeg, y, segments });
-}
 
 
 /**
@@ -390,11 +373,6 @@ export class PathTool extends Emitter {
     this.emit('commit', path);
     return path.id;
   }
-}
-
-/** 确认类提示：[ok / 取消]；不点 = 取消。 */
-export function confirmToast(msg, okLabel, onOk) {
-  toast(msg, { actions: [{ label: okLabel, onClick: onOk }, { label: '取消', secondary: true }] });
 }
 
 const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);

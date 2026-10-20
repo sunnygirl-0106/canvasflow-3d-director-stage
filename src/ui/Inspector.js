@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { el, toast } from '../util/dom.js';
+import { el, toast, toastError } from '../util/dom.js';
 import { tripleRow, sliderRow, colorRow, dropdownRow, infoTip, shotCard, toHex, numberRow, toggleRow } from './widgets.js';
 import { PoseSliders } from './PoseSliders.js';
 import { POSE_PRESETS } from '../entities/posePresets.js';
 import { downloadURL } from '../app/ShotManager.js';
 import { propState, toggleKey } from './timeline/animState.js';
-import { toastError } from './timeline/Transport.js';
-import { arcPoints, pathModes } from '../app/PathTool.js';
+import { pathModes } from '../app/PathTool.js';
+import { arcPoints } from '../anim/pathGen.js';
 import { pathLength, defaultDuration, stopsAfterReverse, toggleStop, WALK_PACE } from '../anim/pathGen.js';
 import { rampFor } from '../anim/Path.js';
 import { popupMenu } from './timeline/keyDrag.js';

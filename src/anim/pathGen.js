@@ -41,7 +41,7 @@ export function polar(center, p) {
  * 走到：从 from 沿水平连线走向 target，停在 target 前 stopDistance（水平距离）处；终点 y 取 from 的 y。
  * from 与 target 水平距离 ≤ stopDistance 时返回 null（已经够近，不必走）。
  */
-export function toward(from, target, { stopDistance = 0.8 } = {}) {
+export function toward(from, target, { stopDistance = TOWARD_STOP.default } = {}) {
   const dx = target[0] - from[0], dz = target[2] - from[2];
   const d = Math.hypot(dx, dz);
   if (d <= stopDistance) return null;
@@ -186,4 +186,26 @@ export function defaultDuration(points, { speed = WALK_PACE, closed = false, ram
   const base = pathLength(points, closed) / speed;
   const t = base >= ramp ? base + ramp : 2 * base;
   return Math.max(1, Math.ceil(t * 10 - 1e-9) / 10);
+}
+
+// ---- 绘制方式（界面路径工具与 AI 共用的词汇）----
+/** 五种绘制方式：[key, 文案]。key 与 AI 词汇表一致（points / freehand / line / arc / toward）。 */
+export const PATH_MODES = [
+  ['points', '点击落点'],
+  ['freehand', '手绘'],
+  ['line', '直线'],
+  ['arc', '环绕'],
+  ['toward', '走到'],
+];
+
+/** 走到 / 推到：停在目标前的水平距离（米）。 */
+export const TOWARD_STOP = { default: 0.8, camera: 1.5 };
+/** 环绕默认扫过角度、每段角度。 */
+export const ARC_SWEEP = 180;
+export const ARC_SEG_DEG = 22.5;
+
+/** 环绕参数 → 生成结果（Inspector 改三参数时也用它）：每 22.5° 一段，180° = 8 段。 */
+export function arcPoints({ center, radius, startDeg, sweepDeg }, y) {
+  const segments = Math.max(2, Math.ceil(Math.min(360, Math.abs(sweepDeg)) / ARC_SEG_DEG));
+  return arc({ center, radius, startDeg, sweepDeg, y, segments });
 }
