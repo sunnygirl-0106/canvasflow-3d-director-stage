@@ -38,3 +38,8 @@
 
 ## 接入方式（最小改动）
 `App.js` 体型注册表里把 `url` 指向 `./assets/figures/bodykun_male.glb` / `bodychan_female.glb`，`height` 填 1.75 / 1.62。其余代码不动。
+
+## 后续修改：女款中性化（2026-10-20）
+`bodychan_female.glb` 已按产品要求调成中性体型（胸压平留一点胸肌、臀收、胯收窄、腰略宽、肩每侧外移 2.5 cm）。
+由 `scripts/figure-neutral.mjs` 从原始文件生成（用法见脚本头注释，原始文件在 git 历史 1bb3f44）；
+只改了 POSITION / NORMAL、左右 `LeftArm`/`RightArm` 节点平移和手臂链的 inverseBindMatrices，骨骼轴向 / 权重 / 索引不变。
