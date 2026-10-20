@@ -3,7 +3,7 @@
 // 输入必须是【原始】模型（已处理过的再跑会叠加）：
 //   git show 1bb3f44:public/assets/figures/bodychan_female.glb > /tmp/orig.glb
 //   node scripts/figure-neutral.mjs /tmp/orig.glb public/assets/figures/bodychan_female.glb [chest=0.15 butt=0.3 …]
-// 参数：chest / butt = 胸 / 臀凸出高度保留比例（等比缩小，形状仍圆）；hip / waist = 胯 / 腰宽度倍数；sh = 每侧肩外移（米）；chestW = 上胸加宽比例；c = 凸起根部过渡宽度（米）。
+// 参数：chest / butt = 胸 / 臀凸出高度保留比例（等比缩小，形状仍圆）；hip / waist = 胯 / 腰宽度增量（高斯带峰值，-0.1 即 ×0.9）；sh = 每侧肩外移（米）；chestW = 上胸加宽比例；c = 凸起根部过渡宽度（米）。
 import fs from 'node:fs';
 import { Buffer } from 'node:buffer';
 import process from 'node:process';
@@ -28,7 +28,7 @@ function writeGlb(path, json, bin) {
 
 import * as THREE from 'three';
 const [src, out, ...kv] = process.argv.slice(2);
-const K = { chest: 0.75, butt: 0.8, hip: 0.88, waist: 1.12, sh: 0.025, chestW: 0.18, c: 0.004, ...Object.fromEntries(kv.map((s) => s.split('=')).map(([k, v]) => [k, +v])) };
+const K = { chest: 0.6, butt: 0.5, hip: -0.1, waist: 0.08, sh: 0.025, chestW: 0.05, c: 0.004, ...Object.fromEntries(kv.map((s) => s.split('=')).map(([k, v]) => [k, +v])) };
 const { json, bin, acc } = readGlb(src);
 const P = acc(0), N = acc(1), J = acc(2), W = acc(3), IBM = acc(5);
 const sk = json.skins[0], jn = sk.joints.map((n) => json.nodes[n].name.replace('mixamorig:', ''));
@@ -78,8 +78,12 @@ function f(p, inf) {
       z = buttWall(y) - (ex + (soft(ex, K.butt, K.c) - ex) * m);
     }
     // 宽度：胯收窄、腰略宽、上胸随肩加宽
-    const sx = 1 + (K.hip - 1) * band(y, 0.66, 0.78, 0.92, 1.0) + (K.waist - 1) * band(y, 0.98, 1.04, 1.10, 1.16) + K.chestW * smooth(1.16, 1.31, y) * (1 - smooth(1.33, 1.38, y));
-    x *= sx;
+    // 宽度用宽高斯带（σ 6–8 cm）平滑过渡，不出台阶 / 鼓包：腰 (y≈1.075) 加宽、胯 + 大腿根 (y≈0.80) 外侧收窄、上胸随肩略加宽
+    const g = (m, sg) => Math.exp(-((y - m) ** 2) / (2 * sg * sg));
+    // 胯只收外侧：|x| 超过 6 cm 的部分按比例往里收（softplus 过渡宽 1.5 cm 无折痕），大腿内侧 / 裆部不动，免得大腿整体内移撞上摆臂的手
+    const sp = (d, w) => w * Math.log1p(Math.exp(d / w));
+    const sx = 1 + K.waist * g(1.075, 0.06) + K.chestW * smooth(1.16, 1.31, y) * (1 - smooth(1.33, 1.38, y));
+    x = x * sx + Math.sign(x) * K.hip * g(0.80, 0.08) * sp(ax - 0.06, 0.015);
   }
   return [x, y, z];
 }
