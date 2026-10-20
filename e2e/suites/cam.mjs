@@ -315,7 +315,7 @@ export async function run() {
     playing.pov === c2.id && playing.t > 0 && d9 < 0.005 && mainLabel.main && mainLabel.text.includes(c2.name) && !idleLabel.main && idleLabel.text === ids.c1n,
     `t=${playing.t.toFixed(2)} 差异 ${(d9 * 100).toFixed(4)}% idle=${JSON.stringify(idleLabel)} active=${JSON.stringify(mainLabel)}`);
   await pickInOutliner(ids.An);
-  const giz = await page.evaluate(() => ({ sel: window.__app.selected?.name, giz: window.__app.gizmo._helper.visible }));
+  const giz = await page.evaluate(() => ({ sel: window.__app.selected?.name, giz: window.__app.gizmo.visible }));
   ok('验收9 透过主机位时可选中其他实体、gizmo 隐藏', giz.sel === ids.An && !giz.giz, JSON.stringify(giz));
   await pickInOutliner(ids.c1n); // 回到选中机位1（idle 后选中角色会显示 gizmo / 选中环，不是这里要比的）
   const still9 = await page.evaluate(() => window.__app.povCameraId);

@@ -266,6 +266,9 @@ export class PathOverlay {
 
   get visible() { return this.group.visible; }
 
+  /** 当前画出的路径条数。 */
+  get itemCount() { return this._items.length; }
+
   // ---- 交互状态（顶点编辑用，非文档状态）----
   setHover(h) {
     if (sameVertex(h, this.hover)) return;
@@ -297,7 +300,6 @@ export class PathOverlay {
     this.rebuild();
   }
 
-  get previewing() { return !!this._preview; }
 
   // ---- 命中测试（屏幕空间）----
   /**

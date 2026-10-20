@@ -168,13 +168,13 @@ export async function run() {
   ok('高大素体 height = 2.05（名牌不再陷进头里）', Math.abs(tall - 2.05) < 1e-6, `height=${tall}`);
 
   // 5 道具 + 选中 + gizmo
-  const pr = await page.evaluate(() => { const a = window.__app; const p = a.addProp('box'); return { sel: a.selectedId === p.id, g: a.gizmo.attached === p.root, vis: a.gizmo._helper.visible }; });
+  const pr = await page.evaluate(() => { const a = window.__app; const p = a.addProp('box'); return { sel: a.selectedId === p.id, g: a.gizmo.attached === p.root, vis: a.gizmo.visible }; });
   ok('加道具+选中+gizmo 绑定', pr.sel && pr.g && pr.vis);
 
   // 6 变换模式（含角色 scale）
   const tm = await page.evaluate(() => {
     const a = window.__app; const c = a.entities.find((e) => e.type === 'character'); a.select(c.id);
-    const modes = ['translate', 'rotate', 'scale'].map((m) => { a.setTransformMode(m); return a.gizmo.control.mode === m && a.gizmo._helper.visible; });
+    const modes = ['translate', 'rotate', 'scale'].map((m) => { a.setTransformMode(m); return a.gizmo.control.mode === m && a.gizmo.visible; });
     a.setTransformMode('translate');
     return modes.every(Boolean);
   });
@@ -205,7 +205,7 @@ export async function run() {
   const crud = await page.evaluate(() => {
     const a = window.__app; const p = a.entities.find((e) => e.type === 'prop');
     a.select(p.id);
-    a.toggleVisible(p.id); const h = !p.root.visible && !a.gizmo._helper.visible; a.toggleVisible(p.id);
+    a.toggleVisible(p.id); const h = !p.root.visible && !a.gizmo.visible; a.toggleVisible(p.id);
     a.select(null); const scenePanelShown = document.getElementById('inspector').hidden && !document.getElementById('scenePanel').hidden;
     const n0 = a.entities.length; a.remove(p.id);
     return { h, scenePanelShown, removed: a.entities.length === n0 - 1 };

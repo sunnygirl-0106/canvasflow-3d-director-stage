@@ -114,9 +114,7 @@ export async function gizmoDrag(axis, delta) {
   const pts = await page.evaluate((axis, delta) => {
     const a = window.__app;
     a.stage.render();
-    const giz = a.gizmo.control._gizmo;
-    giz.updateMatrixWorld(true);
-    const h = giz.picker.translate.children.find((c) => c.name === axis.toUpperCase());
+    const h = a.gizmo.translateHandle(axis);
     const V = () => a.stage.camera.position.clone().set(0, 0, 0);
     const dir = V().set(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
     const p0 = h.position.clone().add(dir.clone().multiplyScalar(0.4 * h.scale.x));

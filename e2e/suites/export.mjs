@@ -250,7 +250,7 @@ export async function run() {
     a.addCamera('side_track'); // 另一个机位（视锥在主机位画面里）
     a.select(ids.m);
     await new Promise((r) => setTimeout(r, 100));
-    const shown = { gizmo: a.gizmo._helper.visible, ring: a.selection.ring.visible, path: a.pathOverlay.visible };
+    const shown = { gizmo: a.gizmo.visible, ring: a.selection.ring.visible, path: a.pathOverlay.visible };
     const fr = await renderFrame(a, 1.0, { width: W, height: H });
     // 在路径线 / gizmo / 选中环应出现的屏幕位置采样：不含 accent 蓝、gizmo 红
     const cam = a.findCamera(a.timeline.mainCameraId).cam;
@@ -285,7 +285,7 @@ export async function run() {
   }, ids);
   ok('验收9 导出帧里没有 gizmo / 选中环 / 视锥 / 路径线（采样无 accent 蓝 / 红；与未选中时的帧逐像素相同）',
     clean.shown.gizmo && clean.shown.ring && clean.shown.path && clean.sampled >= 8 && clean.bad === 0 && clean.same, JSON.stringify(clean));
-  const after9 = await page.evaluate(() => ({ gizmo: window.__app.gizmo._helper.visible, ring: window.__app.selection.ring.visible, path: window.__app.pathOverlay.visible }));
+  const after9 = await page.evaluate(() => ({ gizmo: window.__app.gizmo.visible, ring: window.__app.selection.ring.visible, path: window.__app.pathOverlay.visible }));
   ok('导出结束后 gizmo / 选中环 / 路径 overlay 恢复显示', after9.gizmo && after9.ring && after9.path, JSON.stringify(after9));
 
   // ---- 验收 11 示例：5 s · 1080p MP4（不入库）----

@@ -56,6 +56,19 @@ export class TransformGizmo {
   /** 当前是否悬停在某个轴上（按下时即将抓取 gizmo）。 */
   get overAxis() { return this.control.axis != null; }
 
+  /** 手柄当前是否显示。 */
+  get visible() { return !!this._helper?.visible; }
+
+  /**
+   * 平移模式下某轴箭头的拾取体（世界矩阵已更新），自测真实拖拽用。
+   * 依赖 TransformControls 的内部结构，升级 three 时只需改这里。
+   */
+  translateHandle(axis) {
+    const giz = this.control._gizmo;
+    giz.updateMatrixWorld(true);
+    return giz.picker.translate.children.find((c) => c.name === axis.toUpperCase()) || null;
+  }
+
   setMode(mode) {
     this.control.setMode(mode); // 'translate' | 'rotate' | 'scale'
   }

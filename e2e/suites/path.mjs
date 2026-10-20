@@ -144,7 +144,7 @@ export async function run() {
     const d1 = a.toDocument();
     await a.loadDocument(JSON.parse(JSON.stringify(d1)), { applyView: true });
     const d2 = a.toDocument();
-    return { eq: strip(d1) === strip(d2), paths: d2.paths.length, items: a.pathOverlay._items.length, visible: a.pathOverlay.visible };
+    return { eq: strip(d1) === strip(d2), paths: d2.paths.length, items: a.pathOverlay.itemCount, visible: a.pathOverlay.visible };
   });
   ok('验收11 含手绘路径的文档 导出 → 导入 → 导出 ≡；导入后 overlay 立即显示', rt.eq && rt.paths === 4 && rt.items === 4 && rt.visible, JSON.stringify(rt));
 
