@@ -1,9 +1,9 @@
-// 把 bodychan_female 调得中性一点：胸 / 臀等比缩小（仍圆润）、胯收窄、腰略宽、肩加宽（手臂骨骼 + 网格同步外移）。
+// 把 bodychan_female 调得中性一点：胸 / 臀整体缩小（仍圆润）、胯收窄、腰略宽、肩加宽（手臂骨骼 + 网格同步外移）。
 // 直接改 GLB 的 POSITION / NORMAL / 手臂节点平移 / inverseBindMatrices，其余（骨骼轴向、权重、索引）逐字节不动；法线按变形雅可比的逆转置变换。
 // 输入必须是【原始】模型（已处理过的再跑会叠加）：
 //   git show 1bb3f44:public/assets/figures/bodychan_female.glb > /tmp/orig.glb
-//   node scripts/figure-neutral.mjs /tmp/orig.glb public/assets/figures/bodychan_female.glb [chest=0.15 butt=0.3 …]
-// 参数：chest / butt = 胸 / 臀凸出高度保留比例（等比缩小，形状仍圆）；hip / waist = 胯 / 腰宽度增量（高斯带峰值，-0.1 即 ×0.9）；sh = 每侧肩外移（米）；chestW = 上胸加宽比例；c = 凸起根部过渡宽度（米）。
+//   node scripts/figure-neutral.mjs /tmp/orig.glb public/assets/figures/bodychan_female.glb [chest=0.16 butt=0.2 …]
+// 参数：chest / butt = 胸 / 臀峰朝内部中心缩的比例（整体缩小，保持圆形）；hip / waist = 胯 / 腰宽度增量（高斯带峰值，-0.11 即外侧 ×0.89）；sh = 每侧肩外移（米）；chestW = 上胸加宽比例。
 import fs from 'node:fs';
 import { Buffer } from 'node:buffer';
 import process from 'node:process';
@@ -28,7 +28,7 @@ function writeGlb(path, json, bin) {
 
 import * as THREE from 'three';
 const [src, out, ...kv] = process.argv.slice(2);
-const K = { chest: 0.6, butt: 0.7, hip: -0.1, waist: 0.08, sh: 0.025, chestW: 0.05, c: 0.004, ...Object.fromEntries(kv.map((s) => s.split('=')).map(([k, v]) => [k, +v])) };
+const K = { chest: 0.16, butt: 0.2, hip: -0.11, waist: 0.08, sh: 0.03, chestW: 0.05, ...Object.fromEntries(kv.map((s) => s.split('=')).map(([k, v]) => [k, +v])) };
 const { json, bin, acc } = readGlb(src);
 const P = acc(0), N = acc(1), J = acc(2), W = acc(3), IBM = acc(5);
 const sk = json.skins[0], jn = sk.joints.map((n) => json.nodes[n].name.replace('mixamorig:', ''));
@@ -36,10 +36,6 @@ const nodeJoint = new Map(sk.joints.map((n, j) => [n, j]));
 const nv = P.length / 3;
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-// 等比缩小凸起：超出量 e ≥ 0 → e·(s + (1−s)·e^(−e/c))。远处 ≈ s·e（整体按比例变矮，圆弧轮廓不变，不是压平）；
-// e=0 处值与斜率都连续（斜率 1），根部过渡宽约 c，不起折痕
-const soft = (e, s, c) => (e <= 0 ? e : e * (s + (1 - s) * Math.exp(-e / c)));
-const band = (y, a, b, c, d) => smooth(a, b, y) * (1 - smooth(c, d, y)); // a↗b 平台 c↘d
 // 手臂链（含 Shoulder 之后的所有骨）：左 / 右
 const armSet = { 1: new Set(), [-1]: new Set() };
 const collect = (n, set) => { const j = nodeJoint.get(n); if (j != null) set.add(j); for (const c of json.nodes[n].children || []) collect(c, set); };
@@ -56,28 +52,25 @@ for (let i = 0; i < nv; i++) {
   info.push({ dom: jn[J[i * 4 + b]], aw, side });
 }
 
-// 胸壁：下胸 (1.13, 0.142) → 上胸 (1.31, 0.078) 的直线；臀线：腰 (1.00, −0.046) → 大腿 (0.73, −0.056)
-const chestWall = (y) => 0.142 + (y - 1.13) * (0.078 - 0.142) / (1.31 - 1.13);
-const buttWall = (y) => -0.046 + (y - 1.00) * (-0.056 + 0.046) / (0.73 - 1.00);
 function f(p, inf) {
   let [x, y, z] = p;
   const ax = Math.abs(x);
   if (inf.aw > 0) x += inf.side * K.sh * inf.aw; // 手臂整体外移（与骨骼同步）
   const torso = !/Arm|Hand|Fore|Head|Neck/.test(inf.dom);
   if (torso && inf.aw < 0.5) {
-    // 胸：前表面超出胸壁的部分等比缩小
-    if (/Spine/.test(inf.dom)) {
-      const m = band(y, 1.12, 1.17, 1.28, 1.32) * (1 - smooth(0.12, 0.15, ax));
-      const ex = z - chestWall(y);
-      z = chestWall(y) + ex + (soft(ex, K.chest, K.c) - ex) * m;
-    }
-    // 臀：后表面超出臀线的部分等比缩小
-    if (/Hips|UpLeg/.test(inf.dom)) {
-      const m = band(y, 0.70, 0.76, 0.97, 1.02);
-      const ex = buttWall(y) - z;
-      z = buttWall(y) - (ex + (soft(ex, K.butt, K.c) - ex) * m);
-    }
-    // 宽度：胯收窄、腰略宽、上胸随肩加宽
+    // 胸：同臀，每侧胸峰附近朝胸内中心点缩（σ 5.5 cm），整体变小、轮廓仍是圆的
+    // 臀 / 胸都用"朝内部中心整体缩"而不是只压前后厚度——只压厚度会把圆弧压成斜坡 + 平顶
+    const pull = (cx, cy, cz, ox, oy, oz, sg, k, kx = 1) => {
+      let dx = 0, dy = 0, dz = 0;
+      for (const sd of [1, -1]) {
+        const w = Math.exp(-((x - sd * cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) / (2 * sg * sg)) * k;
+        dx += w * kx * (sd * ox - x); dy += w * (oy - y); dz += w * (oz - z);
+      }
+      x += dx; y += dy; z += dz;
+    };
+    pull(0.070, 1.224, 0.154, 0.070, 1.21, 0.06, 0.055, K.chest);
+    // 臀：每侧臀峰 (±6.5, 89.5, −10.2 cm) 附近朝臀内中心点缩（σ 7 cm），左右叠加，往外自然衰减到 0，无边界
+    pull(0.065, 0.895, -0.102, 0.065, 0.87, 0, 0.07, K.butt, 0); // 左右不收：否则大腿内侧被推向外，撞跑步摆臂的手
     // 宽度用宽高斯带（σ 6–8 cm）平滑过渡，不出台阶 / 鼓包：腰 (y≈1.075) 加宽、胯 + 大腿根 (y≈0.80) 外侧收窄、上胸随肩略加宽
     const g = (m, sg) => Math.exp(-((y - m) ** 2) / (2 * sg * sg));
     // 胯只收外侧：|x| 超过 6 cm 的部分按比例往里收（softplus 过渡宽 1.5 cm 无折痕），大腿内侧 / 裆部不动，免得大腿整体内移撞上摆臂的手
