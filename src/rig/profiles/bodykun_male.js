@@ -1,5 +1,5 @@
 // 骨骼档案：BodyKun 男
-// BlendSwap #23521 (vinchau, CC0)；局部轴向已用 align_roll 对齐 Xbot，见 public/assets/figures/README-handoff.md。
+// BlendSwap #23521 (vinchau, CC0)；局部轴向已用 align_roll 对齐 Xbot。
 // joints：语义关节 key → { bone, axis, sign }。sign 缺省为 1；校准页发现方向反了就改 sign 或 axis。
 // axis 是【身体坐标系】轴（X=角色左侧，Y=上，Z=前方；以文件 T-pose 为准），'twist' = 沿骨头自转。
 // 加载时按骨头静止朝向换算成局部轴，所以与骨头 roll 无关；同一骨头上的多个轴按 JOINT_SCHEMA 顺序相乘。

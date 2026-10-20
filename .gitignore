@@ -7,9 +7,6 @@ dist/
 selftest_*.png
 clean_*.png
 # 本地临时 / 源素材（不入库）
-_tmp_sketchfab/
-_tmp_sketchfab.*
-ziea3gdr
 _assets_src/
 # 姿势回归 / 校准截图
 test-output/
