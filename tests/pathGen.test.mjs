@@ -2,7 +2,8 @@
 // 运行：npm run test:unit（= node --test tests/）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { line, arc, polar, toward, simplify, pathLength, defaultDuration } from '../src/anim/pathGen.js';
+import { line, arc, polar, toward, simplify, pathLength, defaultDuration, WALK_PACE } from '../src/anim/pathGen.js';
+import { Path, WALK_RAMP } from '../src/anim/Path.js';
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
@@ -109,15 +110,22 @@ test('simplify：≤ 2 点原样返回（拷贝）', () => {
   assert.notEqual(simplify(one)[0], one[0]);
 });
 
-test('defaultDuration：长度 ÷ 速度，向上取 0.5 s，最短 1 s', () => {
+test('defaultDuration：匀速段速度 = 步速（含 0.8 s 起步 / 收步），向上取 0.1 s，最短 1 s', () => {
   assert.ok(close(pathLength(line([0, 0, 0], [6, 0, 0])), 6, 1e-6));
-  assert.equal(defaultDuration(line([0, 0, 0], [6, 0, 0])), 5);              // 6/1.3 = 4.62 → 5
-  assert.equal(defaultDuration(line([0, 0, 0], [6, 0, 0]), { speed: 3 }), 2); // 2.0 整 → 2
-  assert.equal(defaultDuration(line([0, 0, 0], [6.5, 0, 0]), { speed: 1 }), 6.5);
-  assert.equal(defaultDuration(line([0, 0, 0], [0.3, 0, 0])), 1);            // 最短 1 s
+  assert.equal(defaultDuration(line([0, 0, 0], [6.8, 0, 0])), 4.8);            // 6.8/1.7 + 0.8 = 4.8
+  assert.equal(defaultDuration(line([0, 0, 0], [6, 0, 0]), { speed: 3 }), 2.8); // 2 + 0.8
+  assert.equal(defaultDuration(line([0, 0, 0], [6.5, 0, 0]), { speed: 1, ramp: 0 }), 6.5); // 机位：长 ÷ 速度
+  assert.equal(defaultDuration(line([0, 0, 0], [1.2, 0, 0]), { speed: 1 }), 2); // 1.2 ≥ 0.8 → 1.2 + 0.8
+  assert.equal(defaultDuration(line([0, 0, 0], [1.02, 0, 0])), 1.2);            // 0.6 < 0.8 → 2×0.6 = 1.2
+  assert.equal(defaultDuration(line([0, 0, 0], [0.3, 0, 0])), 1);              // 最短 1 s
   assert.equal(defaultDuration([[0, 0, 0]]), 1);
+  { // 生成的时长下，匀速段速度 ≈ 步速（只差向上取整）
+    const pts = line([0, 0, 0], [10, 0, 0]), D = defaultDuration(pts);
+    const v = new Path({ points: pts, closed: false, start: 0, duration: D, speed: 'smooth' }, { ramp: WALK_RAMP }).speedAt(D / 2);
+    assert.ok(v <= WALK_PACE + 1e-9 && v > WALK_PACE - 0.05, `匀速 ${v}`);
+  }
   const ring = arc({ center: [0, 0, 0], radius: 1, startDeg: 0, sweepDeg: 360, y: 0 });
   const L = pathLength(ring.points, true);
   assert.ok(Math.abs(L - 2 * Math.PI) < 0.05, `整圆长 ${L}`);
-  assert.equal(defaultDuration(ring.points, { closed: true }), Math.ceil(L / 1.3 * 2) / 2);
+  assert.equal(defaultDuration(ring.points, { closed: true }), Math.ceil((L / WALK_PACE + WALK_RAMP) * 10 - 1e-9) / 10);
 });

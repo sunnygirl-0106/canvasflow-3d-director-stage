@@ -7,7 +7,8 @@ import { downloadURL } from '../app/ShotManager.js';
 import { propState, toggleKey } from './timeline/animState.js';
 import { toastError } from './timeline/Transport.js';
 import { arcPoints, pathModes } from '../app/PathTool.js';
-import { pathLength, defaultDuration, stopsAfterReverse, toggleStop } from '../anim/pathGen.js';
+import { pathLength, defaultDuration, stopsAfterReverse, toggleStop, WALK_PACE } from '../anim/pathGen.js';
+import { rampFor } from '../anim/Path.js';
 import { popupMenu } from './timeline/keyDrag.js';
 import { CAMERA_MOVES, MOVE_PARAMS, MOVE_DIRS, MOVE_LABEL } from '../anim/cameraMoves.js';
 
@@ -16,7 +17,7 @@ const R2D = 180 / Math.PI;
 const FOV_TIP = '控制镜头视野范围。数值越小，画面越近、越聚焦；数值越大，画面越广、能看到更多环境。';
 const PREVIEW_W = 248, PREVIEW_H = 140;
 const RUN_SPEED = 2.6; // m/s：平均速度超过它标「跑」（步态 ≥ 2.6 纯跑）
-const PACES = [[0.8, '慢走'], [1.3, '走'], [1.8, '快走'], [3.5, '跑']];
+const PACES = [[0.8, '慢走'], [WALK_PACE, '走'], [1.8, '快走'], [3.5, '跑']];
 const round2 = (x) => Math.round(x * 100) / 100;
 const fmtS = (x) => (Math.round(x * 10) / 10).toFixed(1);
 
@@ -178,7 +179,7 @@ export class Inspector {
     const pace = (e) => {
       const r = e.currentTarget.getBoundingClientRect();
       popupMenu(r.left, r.bottom + 4, PACES.map(([speed, name]) => ({
-        label: `${name} ${speed} m/s`, onClick: () => upd({ duration: defaultDuration(p.points, { speed, closed: p.closed }) }),
+        label: `${name} ${speed} m/s`, onClick: () => upd({ duration: defaultDuration(p.points, { speed, closed: p.closed, ramp: p.speed === 'smooth' ? rampFor(ent.type) : 0 }) }),
       })));
     };
     return el('div', { class: 'anim-sec', 'data-sec': 'path' }, [

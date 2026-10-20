@@ -10,6 +10,7 @@ import { genId, hexColor } from '../entities/Entity.js';
 import { BODY_TYPES, CROWD_PALETTE, CHARACTER_COLOR } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
 import { defaultDuration, fitStops } from '../anim/pathGen.js';
+import { rampFor } from '../anim/Path.js';
 import { cameraMove, appendMove, lookAtWindows, pathEnd, MoveError } from '../anim/cameraMoves.js';
 import { round6 } from '../util/round.js';
 
@@ -231,7 +232,7 @@ export function setPath(doc, target, points, { closed = false, start = 0, set = 
   const ent = findEntity(doc, target);
   if (!ent) throw new Error(`实体不存在：${target}`);
   const old = doc.paths.find((p) => p.target === target);
-  const duration = set.duration ?? defaultDuration(points, { closed });
+  const duration = set.duration ?? defaultDuration(points, { closed, ramp: (set.speed ?? old?.speed ?? 'smooth') === 'smooth' ? rampFor(ent.type) : 0 });
   let path;
   if (old) { // 重新绘制：旧停顿作废（set.stops 给出时用新的）
     path = fitStops(null, { ...old, points: clone(points), closed, duration, stops: undefined, stopTimes: undefined, ...clone(set) });

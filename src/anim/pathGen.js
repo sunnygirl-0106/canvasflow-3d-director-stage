@@ -1,4 +1,4 @@
-import { Path } from './Path.js';
+import { Path, WALK_RAMP } from './Path.js';
 
 // 路径生成器（阶段 E）：纯函数，不依赖 DOM。输入 / 输出都是文档口径的 [x,y,z]（实体父坐标系，角色 / 组的 y = 地面高度）。
 // 同时是阶段 F 运镜预设、阶段 H AI 生成的积木（词汇表：line / arc / toward）。点的 y 一律由调用方给。
@@ -177,8 +177,16 @@ export function toggleStop(path, index, on) {
   return { stops, stopTimes: times };
 }
 
-/** 默认时长：曲线长度 ÷ 速度（m/s），向上取 0.5 s 整，最短 1 s。 */
-export function defaultDuration(points, { speed = 1.3, closed = false } = {}) {
-  const t = pathLength(points, closed) / speed;
-  return Math.max(1, Math.ceil(t * 2 - 1e-9) / 2);
+/** 默认步速（m/s）：匀速段的速度。1.7 = 快一点的正常走（纯走上限 1.8，再快就开始混跑）。 */
+export const WALK_PACE = 1.7;
+
+/**
+ * 默认时长：让匀速段的速度 = speed（m/s）。smooth 角色路径有起步 / 收步（ramp 秒，Path 的 ramp 选项），
+ * 匀速 V = 长 / (时长 − r)、r = min(ramp, 时长/2) → 时长 = 长/speed + ramp（很短时 = 2·长/speed）；ramp=0 即 长 ÷ speed。
+ * 向上取 0.1 s，最短 1 s。
+ */
+export function defaultDuration(points, { speed = WALK_PACE, closed = false, ramp = WALK_RAMP } = {}) {
+  const base = pathLength(points, closed) / speed;
+  const t = base >= ramp ? base + ramp : 2 * base;
+  return Math.max(1, Math.ceil(t * 10 - 1e-9) / 10);
 }

@@ -85,7 +85,7 @@ pb.play();            // pause() / seek(t) / stop()（回到手动值）/ loop =
 import { line, arc, toward, simplify, defaultDuration } from '/src/anim/pathGen.js';
 const pts = toward([0,0,0], [3,0,4]);                          // 停在目标前 0.8 m（水平距离）；太近返回 null
 const { points, closed } = arc({ center: [0,0,0], radius: 2, startDeg: 0, sweepDeg: 180, y: 0 }); // 角度从 +X 起、俯视逆时针为正
-tl.addPath({ target: a.id, points, closed, duration: defaultDuration(points, { closed }) }); // 长度 ÷ 1.3 m/s，向上取 0.5 s
+tl.addPath({ target: a.id, points, closed, duration: defaultDuration(points, { closed }) }); // 匀速段 = 步速 1.7 m/s：长度 ÷ 1.7 + 0.8 s 起步收步，向上取 0.1 s
 ```
 
 路径停顿（可选字段，旧文档不受影响）：`stops` = 停顿的顶点索引（升序、不含首尾），`stopTimes` = 到达各停顿的时刻（相对 start，可省略 = 按弧长比例分）。有停顿时路径在这些顶点断成几段、每段各自缓入缓出（停顿处速度 0，speed 只作用于无停顿的路径）；插入 / 删除顶点、反向时索引自动跟着走，顶点数整体改变（重画）时停顿去掉，改时长时 stopTimes 按比例缩放。
@@ -168,7 +168,7 @@ await __app.ai.run({ input: '让小王走到原点', mode: 'modify' });   // 走
 { op:'remove', target:"实体名" }  // 删除实体（连同引用它的路径 / 约束 / 关键帧；删组连成员一起删）
 { op:'move', target:"实体名", pos?:[x,y,z], yaw?:度, scale?:倍数|[x,y,z] }  // 改手动位置 / 朝向 / 缩放（机位只能改 pos，并保持对准原注视点）
 { op:'set_pose', target:"实体名", preset:<姿势 pose> }  // 换姿势（对组 = 全部成员）
-{ op:'set_path', target:"实体名", path:{kind:'points', points:[[x,y,z],…], stops?:[下标,…]} | {kind:'line', to:"实体名"|[x,y,z]} | {kind:'arc', center:"实体名"|[x,y,z], sweep?:度, dir?:<环绕 dir>} | {kind:'toward', target:"实体名", stop?:米}, start?:秒, duration?:秒, speed?:<路径速度 speed>, orient?:<路径朝向 orient> }  // 沿路径移动（替换已有路径）；duration 默认按步速 1.3 m/s 估算；points 写法可加 stops = 在哪几个点停一下（各段时长按路程比例分）
+{ op:'set_path', target:"实体名", path:{kind:'points', points:[[x,y,z],…], stops?:[下标,…]} | {kind:'line', to:"实体名"|[x,y,z]} | {kind:'arc', center:"实体名"|[x,y,z], sweep?:度, dir?:<环绕 dir>} | {kind:'toward', target:"实体名", stop?:米}, start?:秒, duration?:秒, speed?:<路径速度 speed>, orient?:<路径朝向 orient> }  // 沿路径移动（替换已有路径）；duration 默认按步速 1.7 m/s 估算；points 写法可加 stops = 在哪几个点停一下（各段时长按路程比例分）
 { op:'clear_path', target:"实体名" }  // 删除路径
 { op:'camera_move', target:"实体名", preset:<运镜 preset>, subject?:"实体名"|[x,y,z], amount?:米, dir?:<方向>, sweep?:度, duration?:秒, append?:true|false }  // 运镜：生成机位路径并注视主体（subject 默认最近的角色）；append=true 接在已有运镜之后，否则替换已有运镜
 { op:'clear_moves', target:"实体名" }  // 清除机位的运镜（路径 + 约束 + 旋转关键帧）
