@@ -2,8 +2,8 @@ import { el, toast } from '../util/dom.js';
 import { icon } from './icons.js';
 import { downloadURL } from '../app/ShotManager.js';
 import {
-  EXPORT_RESOLUTIONS, exportSize, frameCount, exportCamera, exportVideo, hasWebCodecs, isExportSupported, UNSUPPORTED_MSG,
-} from '../app/VideoExporter.js';
+  EXPORT_RESOLUTIONS, exportSize, frameCount, exportCamera, hasWebCodecs, isExportSupported, UNSUPPORTED_MSG,
+} from '../app/exportSpec.js';
 
 const FPS_OPTIONS = [24, 25, 30, 60];
 const fmtSec = (s) => String(+s.toFixed(2));
@@ -183,6 +183,7 @@ export class ExportModal {
     };
     onProgress(0, p.n || 1);
     try {
+      const { exportVideo } = await import('../app/VideoExporter.js'); // 编码 / 封装（含 mp4-muxer）只在导出时加载
       const out = await exportVideo(this.app, { ...p, signal: ac.signal, onProgress });
       const url = URL.createObjectURL(out.blob);
       downloadURL(url, out.filename);

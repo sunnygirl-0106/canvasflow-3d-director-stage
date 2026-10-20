@@ -7,7 +7,7 @@ import { RATIO_OPTIONS, isPanoRatio, BODY_TYPES, PROP_KINDS } from '../config.js
 import { icon } from './icons.js';
 import { exportScene, pickAndImportScene } from '../app/SceneFile.js';
 import { pathModes } from '../app/PathTool.js';
-import { hasWebCodecs, UNSUPPORTED_MSG } from '../app/VideoExporter.js';
+import { hasWebCodecs, UNSUPPORTED_MSG } from '../app/exportSpec.js';
 import { toast } from '../util/dom.js';
 
 const svg = (name, w = 21) => icon(name, w);
