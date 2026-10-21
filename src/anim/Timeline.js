@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { Emitter } from '../util/Emitter.js';
-import { DEFAULT_TIMELINE, validate, DocumentError } from '../doc/schema.js';
+import { updateDraft } from '../doc/Store.js';
 import { genId } from '../entities/Entity.js';
 import { dropTransformAnim, pruneAnim } from '../doc/edit.js';
+import { Pose } from '../rig/Pose.js';
 import { Track } from './Track.js';
 import { PathTrack } from './PathTrack.js';
 import { rampFor } from './Path.js';
@@ -36,48 +37,35 @@ export class Timeline extends Emitter {
     this.time = 0;            // 最近一次 evaluate 的时刻（数据变化后按它重新求值）
     this._base = new Map();   // Entity → base（只在 active 时非空）
     this._runtime = new WeakMap(); // 文档对象 → 运行时对象（Track 等）；文档对象只整体替换，不原地改
-    this._reset();
+
   }
 
-  _reset() {
-    const d = clone(DEFAULT_TIMELINE);
-    this.duration = d.duration;
-    this.fps = d.fps;
-    this.mainCameraId = d.mainCameraId;
-    this.tracks = [];
-    this.paths = [];
-    this.constraints = [];
-  }
+  get duration() { return this.app.store.document.timeline.duration; }
+  get fps() { return this.app.store.document.timeline.fps; }
+  get mainCameraId() { return this.app.store.document.timeline.mainCameraId; }
+  get tracks() { return this.app.store.document.timeline.tracks; }
+  get paths() { return this.app.store.document.paths; }
+  get constraints() { return this.app.store.document.constraints; }
 
-  // ---- 场景文档 ----
-  /** → { timeline, paths, constraints }（深拷贝，可直接并入文档 / 随意修改）。 */
   toJSON() { return clone(this.view()); }
-
-  /**
-   * 与 toJSON 同形状的只读视图（不拷贝，直接引用内部数据）。文档对象只整体替换、不原地改，
-   * 所以可以放心长期持有；调用方绝不能修改它。供每帧刷新的界面（菱形状态等）用，避免逐帧深拷贝。
-   */
   view() {
-    return {
-      timeline: { duration: this.duration, fps: this.fps, mainCameraId: this.mainCameraId, tracks: this.tracks },
-      paths: this.paths,
-      constraints: this.constraints,
-    };
+    const { timeline, paths, constraints } = this.app.store.document;
+    return { timeline, paths, constraints };
   }
 
-  /**
-   * 从已校验的文档恢复（整体替换）。实体此时已整体重建（都是手动值）：
-   * active 时丢掉旧实体的 base，按新数据在原时刻重新求值（播放中撤销 / 导入不打断播放）。
-   */
   fromJSON(doc) {
-    const { timeline, paths, constraints } = clone({ timeline: doc.timeline, paths: doc.paths, constraints: doc.constraints });
-    this.duration = timeline.duration;
-    this.fps = timeline.fps;
-    this.mainCameraId = timeline.mainCameraId;
-    this.tracks = timeline.tracks;
-    this.paths = paths;
-    this.constraints = constraints;
-    this._base.clear();
+    this.app.store.transact('替换动画', (draft) => {
+      updateDraft(draft.timeline, doc.timeline);
+      draft.paths = clone(doc.paths);
+      draft.constraints = clone(doc.constraints);
+    });
+  }
+
+  invalidateBase(ent) { this._base.delete(ent); }
+
+  documentChanged({ reset = false } = {}) {
+    if (reset) this._base.clear();
+    for (const ent of this._base.keys()) if (!this.app.findEntity(ent.id)) this._base.delete(ent);
     if (this.active) this.evaluate(this.time);
     this.emit('change');
   }
@@ -124,6 +112,19 @@ export class Timeline extends Emitter {
     };
   }
 
+  _documentBase(ent) {
+    const json = this.app.store.document.entities.find((e) => e.id === ent.id);
+    const opts = ent.docTransformOpts();
+    const { pos, rot, scale } = json.transform;
+    return {
+      position: new THREE.Vector3(...pos.map((v, i) => v + opts.posOffset[i])),
+      rotation: new THREE.Euler(...rot.map((v) => v * Math.PI / 180)),
+      scale: new THREE.Vector3(...scale.map((v, i) => v * opts.scaleDiv[i])),
+      fov: json.fov,
+      values: json.type === 'character' ? Pose.fromJSON(json.pose).values : undefined,
+    };
+  }
+
   /** 把 base 原样写回实体。 */
   _restore(ent, base, props) {
     const r = ent.root;
@@ -146,7 +147,7 @@ export class Timeline extends Emitter {
       const ent = this.app.findEntity(id);
       if (!ent) continue;
       live.add(ent);
-      if (!this._base.has(ent)) this._base.set(ent, this._capture(ent));
+      if (!this._base.has(ent)) this._base.set(ent, this._documentBase(ent));
     }
     for (const [ent, base] of this._base) {
       if (live.has(ent)) continue;
@@ -341,7 +342,9 @@ export class Timeline extends Emitter {
       out.keyed.push(p);
     }
 
-    // 手动值：没被驱动、也不是这次打键的属性记进 base（未进 base 的实体，root 本身就是手动值）
+    // 首次打键先从已提交文档取 base，不能把拖动预览当作原手动值。
+    if (out.keyed.length && !this._base.has(ent)) this._base.set(ent, this._documentBase(ent));
+    // 手动值：没被驱动、也不是这次打键的属性记进 base。
     const base = this._base.get(ent);
     if (base) {
       const driven = this._drivenProps().get(ent.id) || new Set();
@@ -378,18 +381,13 @@ export class Timeline extends Emitter {
    * 合法则提交：emit 'change'、记撤销、active 时按当前时刻重新求值。
    */
   _commit(next) {
-    const cur = { duration: this.duration, fps: this.fps, mainCameraId: this.mainCameraId, tracks: this.tracks, paths: this.paths, constraints: this.constraints };
-    const n = { ...cur, ...next };
-    const doc = this.app.toDocument({ view: false });
-    doc.timeline = { duration: n.duration, fps: n.fps, mainCameraId: n.mainCameraId, tracks: n.tracks };
-    doc.paths = n.paths;
-    doc.constraints = n.constraints;
-    const { ok, errors } = validate(doc); // validate 只读不改；不再整份深拷贝（文档里可能带几 MB 的全景 dataURL）
-    if (!ok) throw new DocumentError(errors);
-    Object.assign(this, n);
-    if (this.active) this.evaluate(this.time);
-    this.emit('change');
-    this.app.history?.schedule();
+    this.app.store.transact('编辑动画', (doc) => {
+      for (const [key, value] of Object.entries(next)) {
+        if (key === 'paths' || key === 'constraints') updateDraft(doc[key], value);
+        else if (key === 'tracks') updateDraft(doc.timeline.tracks, value);
+        else doc.timeline[key] = value;
+      }
+    });
   }
 
   _find(list, id, what) {
@@ -499,30 +497,11 @@ export class Timeline extends Emitter {
    */
   pruneEntities(ids) {
     const dead = new Set(ids);
-    for (const ent of [...this._base.keys()]) if (dead.has(ent.id)) this._base.delete(ent); // 实体已销毁，不写回
-    const n = this.tracks.length + this.paths.length + this.constraints.length;
-    Object.assign(this, pruneAnim({ tracks: this.tracks, paths: this.paths, constraints: this.constraints }, dead));
-    const camGone = dead.has(this.mainCameraId);
-    if (camGone) this.mainCameraId = null;
-    const changed = camGone || n !== this.tracks.length + this.paths.length + this.constraints.length;
-    if (changed) this._afterStructural();
-    return changed;
+    const anim = pruneAnim(this, dead);
+    return this._commit({ ...anim, mainCameraId: dead.has(this.mainCameraId) ? null : this.mainCameraId });
   }
 
-  /**
-   * 实体的坐标系变了（打组 / 解组）：它的轨道与路径按旧坐标系记录，直接删除，避免跳变或产生非法文档
-   * （打组后成员不能有路径）。约束只引用实体位置，不受影响。
-   */
   dropTransformAnimation(ids) {
-    const n = this.tracks.length + this.paths.length;
-    Object.assign(this, dropTransformAnim({ tracks: this.tracks, paths: this.paths }, ids));
-    const changed = n !== this.tracks.length + this.paths.length;
-    if (changed) this._afterStructural();
-    return changed;
-  }
-
-  _afterStructural() {
-    if (this.active) this.evaluate(this.time);
-    this.emit('change');
+    return this._commit(dropTransformAnim(this, ids));
   }
 }

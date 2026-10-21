@@ -25,7 +25,7 @@ export async function run() {
   await page.evaluate(async (ids) => { // 机位先对准 A 的注视点（运镜从 start 起注视，不改手动朝向）
     const a = window.__app;
     const { aimPoint } = await import('/src/anim/Constraint.js');
-    a.findEntity(ids.c1).aimAt(aimPoint(a, ids.A));
+    a.findEntity(ids.c1).aimAt(aimPoint(a, ids.A)); a.edited(a.findEntity(ids.c1));
   }, ids);
   await pickInOutliner(ids.c1n);
   const before2 = await camShot(ids.c1, `${OUT}/2_before.png`);
@@ -110,7 +110,7 @@ export async function run() {
   ok('验收4 升降：只有 y 变化 1 m', Math.abs(dc[0]) < 1e-4 && Math.abs(dc[2]) < 1e-4 && Math.abs(dc[1] - 1) < 1e-4, JSON.stringify(dc.map((v) => +v.toFixed(5))));
 
   // ---- 5 摇 ----
-  await page.evaluate((id) => { const c = window.__app.findEntity(id); c.root.rotation.y += 0.7; c.root.updateMatrixWorld(true); }, ids.c1);
+  await page.evaluate((id) => { const c = window.__app.findEntity(id); c.root.rotation.y += 0.7; c.root.updateMatrixWorld(true); window.__app.edited(c); }, ids.c1);
   const panPos0 = (await camPose(ids.c1)).pos;
   await moveField('预设', 'pan');
   await moveBtn('应用');
@@ -128,7 +128,7 @@ export async function run() {
   ok('验收5 t=duration 机位 −Z 指向主体 < 0.5°、位置全程不变', panAim.angle < 0.5 && still < 1e-6, `夹角 ${panAim.angle.toFixed(4)}° 位移 ${still.toExponential(1)}`);
   await page.evaluate(() => window.__app.playback.stop());
   await moveBtn('清除运镜');
-  await page.evaluate((id) => { const c = window.__app.findEntity(id); c.root.rotation.y -= 0.7; c.root.updateMatrixWorld(true); }, ids.c1);
+  await page.evaluate((id) => { const c = window.__app.findEntity(id); c.root.rotation.y -= 0.7; c.root.updateMatrixWorld(true); window.__app.edited(c); }, ids.c1);
 
   // ---- 6 追加：推 → 半环绕（同主体合并注视）----
   await moveField('预设', 'push_in');
@@ -274,7 +274,7 @@ export async function run() {
   const c2 = await page.evaluate((ids) => {
     const a = window.__app;
     const c = a.addCamera('front_mid');
-    c.root.position.set(4, 1.4, 4); c.aimAt(a.findEntity(ids.A).root.position.clone().setY(0.9));
+    c.root.position.set(4, 1.4, 4); c.aimAt(a.findEntity(ids.A).root.position.clone().setY(0.9)); a.edited(c);
     const t = a.cameraMoves;
     t.formOf(c).name = 'truck';
     t.commit(c, t.build(c)); // 机位2 自己也在动：横移 3 s
@@ -369,7 +369,7 @@ export async function run() {
   await page.evaluate(() => window.__app.playback.seek(4));
   await settle();
   const rtA = await camShot(ids.c1, `${OUT}/10_before.png`);
-  const doc1 = await page.evaluate(() => { window.__app.playback.stop(); return window.__app.toDocument(); });
+  const doc1 = await page.evaluate(() => { window.__app.playback.stop(); return window.__app.exportDocument(); });
   fs.writeFileSync(`${OUT}/10_doc1.json`, JSON.stringify(doc1, null, 2));
   await page.evaluate(async (d) => {
     const { createEmptyDocument } = await import('/src/doc/schema.js');
@@ -378,7 +378,7 @@ export async function run() {
     await a.loadDocument(d);
   }, doc1);
   await settle(150);
-  const doc2 = await page.evaluate(() => window.__app.toDocument());
+  const doc2 = await page.evaluate(() => window.__app.exportDocument());
   const norm = (d) => JSON.stringify({ ...d, meta: { ...d.meta, updatedAt: null } });
   const camPath = doc1.paths.find((p) => p.target === ids.c1);
   ok('验收10 含运镜（升降 + 追加半环绕）的文档 导出 → 导入 → 导出 ≡', norm(doc1) === norm(doc2) && camPath?.duration === 8
@@ -410,6 +410,7 @@ export async function run() {
     a.select(null);
     c.root.rotation.y += 1.1; // 偏开 ~63°：没对准主体
     c.root.updateMatrixWorld(true);
+    a.edited(c);
     const pre = c.root.quaternion.clone();
     const Q = pre.constructor, M = c.root.matrix.constructor, V = c.root.position.constructor;
     const aimQ = (sub) => new Q().setFromRotationMatrix(new M().lookAt(c.root.position, aimPoint(a, sub), new V(0, 1, 0)));

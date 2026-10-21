@@ -4,9 +4,10 @@ import { JOINT_SCHEMA, groupJoints } from '../rig/jointSchema.js';
 // 从语义关节表 JOINT_SCHEMA 按 group/side 分组渲染滑条（0 = 自然站立）。
 // input → 写 character.values[key] → applyPose()。
 export class PoseSliders {
-  constructor(container, character, onChange) {
+  constructor(container, character, onChange, onCommit) {
     this.container = container;
     this.character = character;
+    this.onCommit = onCommit;
     this.onChange = onChange; // 可选：每次摆姿后回调（群众组用于广播到全部成员）
     this.sliderEls = {}; // key → {input, valSpan}
     this.render();
@@ -28,6 +29,7 @@ export class PoseSliders {
           const valSpan = el('span', { class: 'v', text: Math.round(val) + '°' });
           const input = el('input', {
             type: 'range', min: j.min, max: j.max, step: 1, value: val,
+            onchange: () => this.onCommit?.(),
             oninput: (e) => {
               const v = parseFloat(e.target.value);
               ch.values[j.key] = v;

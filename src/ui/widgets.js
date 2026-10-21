@@ -123,16 +123,17 @@ export function shotCard({ shot, selected, onToggle, onDelete, onSend, onExpand,
 }
 
 // 颜色行：色块 + #hex 文本
-export function colorRow({ label = '颜色', hex, onChange }) {
+export function colorRow({ label = '颜色', hex, onChange, onCommit }) {
   const picker = el('input', { type: 'color', value: hex });
   const swatch = el('div', { class: 'swatch' }, [picker]);
   swatch.style.background = hex;
   const text = el('input', { value: hex.replace('#', '') });
   const apply = (h) => { swatch.style.background = h; picker.value = h; onChange(h); };
   picker.addEventListener('input', () => { text.value = picker.value.replace('#', ''); apply(picker.value); });
+  picker.addEventListener('change', () => onCommit?.());
   text.addEventListener('change', () => {
     const v = text.value.trim();
-    if (/^#?[0-9a-fA-F]{6}$/.test(v)) apply(v[0] === '#' ? v : '#' + v);
+    if (/^#?[0-9a-fA-F]{6}$/.test(v)) { apply(v[0] === '#' ? v : '#' + v); onCommit?.(); }
   });
   const row = el('div', { class: 'field' }, [
     el('label', { text: label }),

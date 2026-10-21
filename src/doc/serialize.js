@@ -1,76 +1,17 @@
-// 场景 ↔ 文档。toDocument 读当前场景出一份文档；loadDocument 按文档重建场景。
+// 加载已校验文档：预建资源后原子发布到 Store 和运行时。
 // 实体各自实现 toJSON / static fromJSON(json, ctx)；这里只编排场景级字段与实体顺序。
-import { SCHEMA_VERSION, APP_ID, validate, DocumentError } from './schema.js';
+import { validate, DocumentError } from './schema.js';
 import { migrate } from './migrate.js';
 import { Character } from '../entities/Character.js';
 import { Prop } from '../entities/Prop.js';
 import { CameraEntity } from '../entities/Camera.js';
 import { Crowd } from '../entities/Crowd.js';
-import { round6, xyz } from '../util/math.js';
 
 /* global __APP_VERSION__ */
 export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
 
 /** 文档 type → 实体类（文档词汇 group ↔ 代码类 Crowd）。 */
 const ENTITY_CLASSES = { character: Character, prop: Prop, camera: CameraEntity, group: Crowd };
-
-/** 导演相机视角（仅导入 / 恢复存档时应用，撤销忽略）。 */
-function editorView(app) {
-  return { pos: xyz(app.stage.camera.position), target: xyz(app.rig.controls.target) };
-}
-
-/**
- * 当前场景 → 文档。
- * @param {{view?:boolean}} opts view=false 时 editorView 置 null（撤销快照用：视角不是场景内容）
- */
-export function toDocument(app, { view = true } = {}) {
-  // 时间轴 active 期间，被驱动的实体导出 base（手动值），不导出动画瞬时值
-  const base = (e) => app.timeline.baseOf(e);
-  const entities = [];
-  for (const e of app.entities) {
-    entities.push(e.toJSON({ base: base(e) }));
-    for (const m of e.children) entities.push(m.toJSON({ parent: e.id, base: base(m) })); // 成员紧跟其组，顺序 = members 顺序
-  }
-
-  // 只导出被引用的资源（目前只有全景）
-  const pano = app.panorama;
-  const assets = {};
-  let panorama = null;
-  if (pano.active && pano.assetId) {
-    assets[pano.assetId] = { ...pano.asset };
-    panorama = { assetId: pano.assetId, rotation: round6(pano.rotation), radius: round6(pano.radius) };
-  }
-
-  const s = app.sceneState;
-  const anim = app.timeline.toJSON(); // 删除实体时 Timeline 已同步清掉对它的引用，导出的文档始终合法
-
-  return {
-    schema: SCHEMA_VERSION,
-    meta: {
-      name: app.docMeta.name,
-      createdAt: app.docMeta.createdAt,
-      updatedAt: new Date().toISOString(),
-      app: `${APP_ID}@${APP_VERSION}`,
-      editorView: view ? editorView(app) : null,
-    },
-    scene: {
-      scale: round6(s.scale),
-      pos: xyz(s.pos),
-      rot: xyz(s.rot),
-      sky: '#' + s.sky.toString(16).padStart(6, '0'),
-      labels: s.labels,
-      ground: { visible: s.ground.visible, opacity: round6(s.ground.opacity), height: round6(s.ground.height) },
-      ratio: app.ratio,
-      activeCameraId: app.findCamera(app.activeCameraId) ? app.activeCameraId : null,
-      panorama,
-    },
-    assets,
-    entities,
-    paths: anim.paths,
-    constraints: anim.constraints,
-    timeline: anim.timeline,
-  };
-}
 
 /**
  * 文档 → 全部顶层实体（尚未入场），顺序 = 文档顺序；群众成员由 group 负责。
@@ -116,6 +57,11 @@ export async function loadDocument(app, input, opts = {}) {
   const doc = migrate(input);
   const { ok, errors } = validate(doc);
   if (!ok) throw new DocumentError(errors);
+  const view = doc.meta.editorView;
+  doc.meta.editorView = null;
+  doc.meta.updatedAt = app.store.document.meta.updatedAt;
+  const revision = app.store.revision;
+  const change = app.store.prepareReplacement(opts.label || '加载文档', doc);
   const panoRef = doc.scene.panorama && { id: doc.scene.panorama.assetId, ...doc.assets[doc.scene.panorama.assetId] };
   const [ents, pano] = await Promise.allSettled([buildEntities(app, doc), app.panorama.prepare(panoRef)]);
   if (ents.status === 'rejected' || pano.status === 'rejected') {
@@ -124,6 +70,13 @@ export async function loadDocument(app, input, opts = {}) {
     throw ents.reason || pano.reason;
   }
   const { entities, apply } = ents.value;
-  app._commitDocument(doc, entities, pano.value, { ...opts, apply });
+  if (revision !== app.store.revision) {
+    ents.value.fresh.forEach((e) => e.dispose());
+    pano.value?.discard();
+    throw new Error('准备期间场景已被修改，请重试');
+  }
+  const commit = () => app.documents.commitRuntime({ ...doc, meta: { ...doc.meta, editorView: view } }, entities, pano.value, { ...opts, apply });
+  if (change) app.store.commit(change, { apply: commit, history: opts.history !== false });
+  else commit();
   return doc;
 }

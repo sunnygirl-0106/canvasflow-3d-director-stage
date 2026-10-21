@@ -36,9 +36,10 @@ export class Panorama {
    * @param {Stage} stage
    * @param {{getSky:()=>number, onChange:(applied:boolean, opts:{silent:boolean})=>void}} hooks
    */
-  constructor(stage, { getSky, onChange }) {
+  constructor(stage, { getSky, onChange, getRevision = () => 0 }) {
     this.stage = stage;
     this.getSky = getSky;
+    this.getRevision = getRevision;
     this.onChange = onChange;
     this.active = false;
     this.info = null;       // { thumb, title }
@@ -65,7 +66,9 @@ export class Panorama {
   }
 
   async _setAsset(asset) {
+    const revision = this.getRevision();
     const tex = await loadEquirect(this._loader, asset.url || asset.dataURL);
+    if (revision !== this.getRevision()) { tex.dispose(); throw new Error('场景已改变，请重新设置全景'); }
     this._apply(tex, genId(), asset, { silent: false });
   }
 
@@ -79,8 +82,8 @@ export class Panorama {
     if (!silent) toast('已移除全景背景');
   }
 
-  setRotation(deg) { this.rotation = deg; this.stage.setPanoramaRotation(deg); }
-  setRadius(r) { this.radius = r; this.stage.setPanoramaRadius(r); }
+  setRotation(deg, { silent = false } = {}) { this.rotation = deg; this.stage.setPanoramaRotation(deg); if (!silent) this.onChange(false, { parameters: true }); }
+  setRadius(r, { silent = false } = {}) { this.radius = r; this.stage.setPanoramaRadius(r); if (!silent) this.onChange(false, { parameters: true }); }
 
   /**
    * 为加载文档预备全景（异步、不改动当前画面）。返回句柄交给 commit；加载失败抛错。

@@ -13,6 +13,8 @@ export class ScenePanel {
   render() {
     const app = this.app;
     const s = app.sceneState;
+    const preview = { preview: true };
+    const commit = () => app.commitScenePreview();
     const pano = app.panorama;
     const root = el('div', { class: 'rp rp-pad' });
 
@@ -22,15 +24,15 @@ export class ScenePanel {
     const sec1 = el('div', { class: 'sec' });
     sec1.appendChild(sliderRow({
       label: '场景缩放', min: 10, max: 300, step: 1, value: s.scale * 100,
-      format: (v) => Math.round(v) + '%', onInput: (v) => app.setSceneScale(v / 100),
+      format: (v) => Math.round(v) + '%', onInput: (v) => app.setSceneScale(v / 100, preview), onChange: commit,
     }).el);
     sec1.appendChild(tripleRow({
-      label: '场景平移',
-      axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => s.pos[k], set: (v) => app.setScenePos(k, v) })),
+      label: '场景平移', onCommit: commit,
+      axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => app.sceneState.pos[k], set: (v) => app.setScenePos(k, v, preview) })),
     }).el);
     sec1.appendChild(tripleRow({
-      label: '场景旋转', deg: true,
-      axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => s.rot[k], set: (v) => app.setSceneRot(k, v) })),
+      label: '场景旋转', deg: true, onCommit: commit,
+      axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => app.sceneState.rot[k], set: (v) => app.setSceneRot(k, v, preview) })),
     }).el);
     root.appendChild(sec1);
 
@@ -52,14 +54,14 @@ export class ScenePanel {
       panoField.appendChild(el('div', { class: 'placeholder-box', html: '<span>⃝</span><span>底部「全景图」按钮：本地上传或选历史记录</span>' }));
     }
     sec2.appendChild(panoField);
-    sec2.appendChild(colorRow({ label: '天空颜色', hex: toHex(s.sky), onChange: (h) => app.setSkyColor(h) }).el);
+    sec2.appendChild(colorRow({ label: '天空颜色', hex: toHex(s.sky), onChange: (h) => app.setSkyColor(h, preview), onCommit: commit }).el);
     root.appendChild(sec2);
 
     // ---- 全景球（有全景图时可用）----
     const sec3 = el('div', { class: 'sec' });
     sec3.appendChild(el('div', { class: 'sec-title', text: '全景球' }));
-    sec3.appendChild(sliderRow({ label: '水平旋转', min: 0, max: 360, value: pano.rotation, disabled: !pano.active, format: (v) => Math.round(v) + '°', onInput: (v) => pano.setRotation(v) }).el);
-    sec3.appendChild(sliderRow({ label: '球形半径', min: 3, max: 200, value: pano.radius, disabled: !pano.active, format: (v) => Math.round(v), onInput: (v) => pano.setRadius(v) }).el);
+    sec3.appendChild(sliderRow({ label: '水平旋转', min: 0, max: 360, value: pano.rotation, disabled: !pano.active, format: (v) => Math.round(v) + '°', onInput: (v) => app.sceneEdit((scene) => { scene.panorama.rotation = v; }, preview), onChange: commit }).el);
+    sec3.appendChild(sliderRow({ label: '球形半径', min: 3, max: 200, value: pano.radius, disabled: !pano.active, format: (v) => Math.round(v), onInput: (v) => app.sceneEdit((scene) => { scene.panorama.radius = v; }, preview), onChange: commit }).el);
     root.appendChild(sec3);
 
     // ---- 角色标签 ----
@@ -72,11 +74,11 @@ export class ScenePanel {
     sec6.appendChild(toggleRow({ label: '地面', checked: s.ground.visible, onChange: (v) => app.setGroundVisible(v) }).el);
     sec6.appendChild(sliderRow({
       label: '透明度', min: 0, max: 1, step: 0.01, value: s.ground.opacity,
-      format: (v) => v.toFixed(2), onInput: (v) => app.setGroundOpacity(v),
+      format: (v) => v.toFixed(2), onInput: (v) => app.setGroundOpacity(v, preview), onChange: commit,
     }).el);
     sec6.appendChild(sliderRow({
       label: '高度', min: -2, max: 2, step: 0.01, value: s.ground.height,
-      format: (v) => v.toFixed(1), onInput: (v) => app.setGroundHeight(v),
+      format: (v) => v.toFixed(1), onInput: (v) => app.setGroundHeight(v, preview), onChange: commit,
     }).el);
     root.appendChild(sec6);
 

@@ -56,7 +56,7 @@ export async function run() {
   const moving = new Set(h0).size > 20; // 角色在走、机位在转：帧应各不相同
   ok('验收4 同一文档导出两次 30 帧 PNG 序列逐帧 md5 相同', same && moving, `帧数 ${runs.join('/')}，不同帧 ${new Set(h0).size}/30`);
   const after = await exportState();
-  ok('验收4 导出后播放头回到导出前（时间 + active）、toDocument 不变、History 不变',
+  ok('验收4 导出后播放头回到导出前（时间 + active）、exportDocument 不变、History 不变',
     after.active === before.active && after.time === before.time && after.doc === before.doc && after.hist === before.hist && after.idx === before.idx,
     `active ${before.active}→${after.active} t ${before.time}→${after.time} doc ${after.doc === before.doc} hist ${before.hist}/${before.idx}→${after.hist}/${after.idx}`);
   await page.evaluate(() => window.__app.playback.stop());
@@ -330,14 +330,14 @@ export async function run() {
     const near = await a.addCharacter('male');
     const far = await a.addCharacter('female');
     near.root.position.x = 0; near.root.position.z = 0;
-    far.root.position.x = 0.15; far.root.position.z = -2.5;
+    far.root.position.x = 0.15; far.root.position.z = -2.5; a.edited(near); a.edited(far);
     const c = a.addCamera('front_full');
     const w = (x, y, z) => a.stage.world.localToWorld(near.root.position.clone().set(x, y, z));
     // 机位与名牌锚点同高、平视：两人名牌落在同一水平线上，必然叠在一起
     const { labelAnchor } = await import('/src/app/Labels.js');
     const hy = a.stage.world.worldToLocal(labelAnchor(near, a.stage.world.scale.y, near.root.position.clone())).y;
     c.root.position.copy(a.stage.world.worldToLocal(w(0, hy, 5)));
-    c.aimAt(w(0, hy, -1));
+    c.aimAt(w(0, hy, -1)); a.edited(c);
     a.select(null);
     a.rig.controls.target.copy(w(0, hy, -1)); a.stage.camera.position.copy(w(0, hy, 5)); a.rig.controls.update();
     await new Promise((r) => setTimeout(r, 300));

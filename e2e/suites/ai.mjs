@@ -15,7 +15,7 @@ export async function run() {
   await page.evaluate(async (FX) => {
     const { MockProvider } = await import('/src/ai/provider.js');
     const fx = eval(FX);
-    const snap = () => { const d = window.__app.toDocument({ view: false }); d.meta.updatedAt = null; return JSON.stringify(d); };
+    const snap = () => { const d = window.__app.exportDocument({ view: false }); d.meta.updatedAt = null; return JSON.stringify(d); };
     const BAD = JSON.parse(JSON.stringify(fx.gen));
     BAD.ops[5].preset = 'orbit';
     BAD.ops[3].pos = [0.8, 0];
@@ -50,7 +50,7 @@ export async function run() {
   const g = await page.evaluate(async () => {
     const a = window.__app;
     const { aimPoint } = await import('/src/anim/Constraint.js');
-    const doc = a.toDocument({ view: false });
+    const doc = a.exportDocument({ view: false });
     const by = (n) => doc.entities.find((e) => e.name === n);
     const cam = by('机位1');
     a.playback.seek(2.5);
@@ -113,13 +113,13 @@ export async function run() {
 
   // ---- 验收 4 修改模式（在验收 1 的场景上）----
   const before4 = await aiState();
-  const pre = await page.evaluate(() => JSON.stringify(window.__app.toDocument({ view: false }).entities.find((e) => e.name === '小红')));
+  const pre = await page.evaluate(() => JSON.stringify(window.__app.exportDocument({ view: false }).entities.find((e) => e.name === '小红')));
   const r4 = await aiSend('modify', AI_MOD_INPUT);
   const m = await page.evaluate(async () => {
     const a = window.__app;
     const { cameraMove } = await import('/src/anim/cameraMoves.js');
     const { aimPoint } = await import('/src/anim/Constraint.js');
-    const doc = a.toDocument({ view: false });
+    const doc = a.exportDocument({ view: false });
     const by = (n) => doc.entities.find((e) => e.name === n);
     const red = by('小红'), wang = by('小王'), cam = by('机位1');
     const wp = doc.paths.find((p) => p.target === wang.id);
@@ -198,7 +198,7 @@ export async function run() {
     const calls = window.__aiMock.calls;
     const user = calls[calls.length - 1].find((m) => m.role === 'user');
     const img = Array.isArray(user.content) && user.content.find((p) => p.type === 'image_url');
-    const doc = window.__app.toDocument({ view: false });
+    const doc = window.__app.exportDocument({ view: false });
     return {
       img: img ? img.image_url.url.slice(0, 23) : null,
       chars: doc.entities.filter((e) => e.type === 'character').map((e) => [e.name, e.pose.preset]),
@@ -255,7 +255,7 @@ export async function run() {
     set('baseURL', 'https://example.invalid/v1'); set('apiKey', 'sk-selftest-not-a-real-key'); set('model', 'demo-model');
     [...document.querySelectorAll('.ai-frow-btns .minibtn')].find((b) => b.textContent === '保存').click();
     const stored = JSON.parse(localStorage.getItem('director-stage.ai'));
-    const docHasKey = JSON.stringify(window.__app.toDocument()).includes('sk-selftest');
+    const docHasKey = JSON.stringify(window.__app.exportDocument()).includes('sk-selftest');
     window.__app.ai.setProvider(window.__aiMock); // 截图后恢复 Mock，不发真实请求
     return { stored: stored.model === 'demo-model' && stored.apiKey === 'sk-selftest-not-a-real-key', docHasKey, pwd: document.querySelector('.ai-field[data-name="apiKey"]').type };
   });

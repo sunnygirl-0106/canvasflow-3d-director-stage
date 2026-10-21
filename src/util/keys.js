@@ -8,6 +8,7 @@ export const KEY_PRIORITY = {
   modal: 100,      // 导出弹层：打开 / 导出中拦下全部按键（Esc = 取消 / 关闭）
   popup: 90,       // 弹出菜单：Esc 关闭
   pathDraw: 80,    // 路径绘制态：回车 / Backspace / Esc
+  transformDrag: 75, // gizmo 拖动：Esc 取消预览
   pathDrag: 70,    // 拖顶点中：Esc 还原
   timeline: 60,    // 时间轴：选中键时 Del 删键、Space 播放…
   // 冒泡阶段

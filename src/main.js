@@ -71,19 +71,8 @@ $('helpBtn').onclick = () =>
   toast('空白拖动=环绕视角 · 拖三色 gizmo=变换选中 · 底部「＋」加角色/模型 · 右侧「姿势」摆全身');
 $('closeBtn').onclick = () => toast('（演示）关闭');
 
-// 撤销重做：每个用户操作结束后记一步（快照与栈顶相同则不记）。
-// 拖动类操作（gizmo / 轴标签拖动 / 滑条）只在 pointerup / change 时记录，不按帧记录；
-// 异步完成的操作（加角色 / 群众 / 复制 / 全景）在 'entities' / 'scene' 事件时记录。
+// 撤销只订阅已提交的文档事务；交互预览由各编辑入口管理。
 const history = app.history;
-const isTextInput = (t) => t && (t.isContentEditable || t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'color'].includes(t.type)));
-for (const t of ['pointerup', 'click', 'change', 'keyup']) {
-  window.addEventListener(t, (e) => {
-    if (t === 'keyup' && isTextInput(e.target)) return; // 文本框里逐字输入不快照：改动在 change（失焦 / 回车）时记一步
-    history.schedule();
-  });
-}
-app.on('entities', () => history.schedule());
-app.on('scene', () => history.schedule());
 new AutoSave(app); // 撤销栈变化后防抖 1s 写 localStorage
 
 // 键盘：输入控件内不拦截（文本框里的 ⌘Z 留给浏览器做文字撤销）
@@ -123,6 +112,8 @@ stage.startLoop({
     // 只改水平位置：y 保留各素体的站立基准偏移（脚底贴地）
     if (a) { a.root.position.x = -1.1; a.root.position.z = 0.2; }
     if (b) { b.root.position.x = 1.1; b.root.position.z = 0.2; }
+    if (a) app.edited(a);
+    if (b) app.edited(b);
     app.frameSubjects(); // 自动对准主体，主体占满画面
     app.select(null);
   } catch (e) { console.error('seed failed', e); }

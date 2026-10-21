@@ -1,100 +1,78 @@
 import { Emitter } from '../util/Emitter.js';
+import { applyPatches } from 'immer';
 
-/**
- * 撤销 / 重做：场景文档快照栈。
- * - 快照 = toDocument({view:false}) 去掉 updatedAt 与 assets 后的 JSON 字符串；与栈顶相同则不入栈
- *   （天然过滤"点了但没改"，也让拖动只在松手时记一步）。
- * - assets（可能是几 MB 的 dataURL）按 id 单独缓存，快照里只留引用。
- * - 撤销 = app.loadDocument(上一份)。导演视角、视图模式、选中都是会话态，不随撤销变化。
- * 事件：'change'(reason) —— 栈变化，reason ∈ 'reset' | 'capture' | 'undo' | 'redo'；自动保存据此触发。
- */
+/** 事务补丁历史。同一同步操作合并为一步，拖动预览由编辑入口在松手时提交。 */
 export class History extends Emitter {
   constructor(app, { limit = 100 } = {}) {
     super();
     this.app = app;
     this.limit = limit;
-    this.entries = [];   // JSON 字符串
-    this._refs = [];     // 与 entries 一一对应：该快照引用的全景 assetId（或 null），资源回收用
-    this.index = -1;     // 当前状态在 entries 里的位置
-    this.enabled = false; // 种子场景加载完成后由 reset() 打开
-    this._assets = new Map(); // assetId → asset
-    this._restoring = 0;      // 进行中的撤销/重做加载数（排队期间 loadingDocument 可能还没置位）
+    this.entries = [];
+    this.index = -1;
+    this.enabled = false;
+    this._pending = null;
+    this._chain = Promise.resolve();
+    app.store.on('change', (change) => {
+      if (!this.enabled || !change.history) return;
+      if (!this._pending) this._pending = { label: change.label, patches: [], inversePatches: [] };
+      this._pending.patches.push(...change.patches);
+      this._pending.inversePatches.unshift(...change.inversePatches);
+      this.schedule();
+    });
   }
 
-  get canUndo() { return this.index > 0; }
-  get canRedo() { return this.index < this.entries.length - 1; }
+  get canUndo() { return this.index > 0 || !!this._pending; }
+  get canRedo() { return !this._pending && this.index < this.entries.length - 1; }
 
-  /** → { json, ref }：ref = 快照引用的全景 assetId（或 null）。 */
-  _snapshot() {
-    const doc = this.app.toDocument({ view: false });
-    doc.meta.updatedAt = '';
-    for (const [id, a] of Object.entries(doc.assets)) this._assets.set(id, a);
-    doc.assets = {};
-    return { json: JSON.stringify(doc), ref: doc.scene.panorama?.assetId ?? null };
-  }
-
-  /** 以当前场景为唯一起点清空栈（启动完成时）。 */
   reset() {
-    this.enabled = true;
-    this._assets.clear();
-    const snap = this._snapshot();
-    this.entries = [snap.json];
-    this._refs = [snap.ref];
+    clearTimeout(this._timer);
+    this._timer = null;
+    this._pending = null;
+    this.entries = [{ label: '初始场景', patches: [], inversePatches: [] }];
     this.index = 0;
+    this.enabled = true;
     this.emit('change', 'reset');
   }
 
-  /** 记录一步（当前状态与栈顶相同则忽略）。加载文档期间不记录。返回是否入栈。 */
   capture() {
-    if (!this.enabled || this._restoring || this.app.loadingDocument) return false;
-    const snap = this._snapshot();
-    if (snap.json === this.entries[this.index]) return false;
-    this.entries.length = this._refs.length = this.index + 1; // 丢弃重做分支
-    this.entries.push(snap.json);
-    this._refs.push(snap.ref);
-    if (this.entries.length > this.limit) {
-      const drop = this.entries.length - this.limit;
-      this.entries.splice(0, drop);
-      this._refs.splice(0, drop);
-    }
+    clearTimeout(this._timer);
+    this._timer = null;
+    if (!this.enabled || !this._pending) return false;
+    this.entries.length = this.index + 1;
+    this.entries.push(this._pending);
+    this._pending = null;
+    if (this.entries.length > this.limit) this.entries.splice(0, this.entries.length - this.limit);
+    // 首项只是可回退的边界，不需要保留已无法使用的补丁及资源引用。
+    this.entries[0] = { label: '历史起点', patches: [], inversePatches: [] };
     this.index = this.entries.length - 1;
-    this._gcAssets();
     this.emit('change', 'capture');
     return true;
   }
 
-  /** 同一帧内多处触发只记一次：等当前事件处理链全部结束后再快照。 */
   schedule() {
-    if (this._pending) return;
-    this._pending = true;
-    setTimeout(() => { this._pending = false; this.capture(); }, 0);
+    if (this._timer != null) return;
+    this._timer = setTimeout(() => this.capture(), 0);
   }
 
   undo() { return this._go(-1); }
   redo() { return this._go(1); }
 
-  async _go(step) {
-    if (!this.enabled) return false;
-    this.capture(); // 先收下尚未记录的改动（如刚改完还没触发记录），避免被撤销直接吞掉
-    const target = this.index + step;
-    if (target < 0 || target >= this.entries.length) return false;
-    this.index = target; // 同步推进：连按多次撤销按顺序排队加载
-    this.emit('change', step < 0 ? 'undo' : 'redo');
-    const doc = JSON.parse(this.entries[target]);
-    doc.meta.updatedAt = new Date().toISOString();
-    const pano = doc.scene.panorama;
-    if (pano) doc.assets = { [pano.assetId]: this._assets.get(pano.assetId) };
-    this._restoring++;
-    try { await this.app.loadDocument(doc, { applyView: false }); }
-    catch (err) { console.error('[history] 恢复快照失败', err); return false; }
-    finally { this._restoring--; }
-    return true;
-  }
-
-  /** 丢掉不再被任何快照引用的资源缓存。 */
-  _gcAssets() {
-    if (!this._assets.size) return;
-    const used = new Set(this._refs);
-    for (const id of this._assets.keys()) if (!used.has(id)) this._assets.delete(id);
+  _go(step) {
+    const run = async () => {
+      if (!this.enabled) return false;
+      this.capture();
+      const target = this.index + step;
+      if (target < 0 || target >= this.entries.length) return false;
+      const entry = this.entries[step < 0 ? this.index : target];
+      const doc = applyPatches(this.app.store.document, step < 0 ? entry.inversePatches : entry.patches);
+      try { await this.app.loadDocument(doc, { applyView: false, history: false, label: step < 0 ? '撤销' : '重做' }); }
+      catch (err) { console.error('[history] 恢复失败', err); return false; }
+      this.index = target;
+      this.emit('change', step < 0 ? 'undo' : 'redo');
+      return true;
+    };
+    const pending = this._chain.then(run, run);
+    this._chain = pending.catch(() => {});
+    return pending;
   }
 }

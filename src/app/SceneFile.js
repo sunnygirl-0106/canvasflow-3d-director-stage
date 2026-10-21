@@ -16,7 +16,7 @@ const stamp = (d = new Date()) => {
 
 /** 导出当前场景为 .json 下载。 */
 export function exportScene(app) {
-  const doc = app.toDocument();
+  const doc = app.exportDocument();
   const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }));
   downloadURL(url, `${doc.meta.name || '场景'}-${stamp()}.json`);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -88,7 +88,7 @@ export class AutoSave {
   save() {
     if (this.app.loadingDocument) { this.schedule(); return; }
     try {
-      const text = JSON.stringify(this.app.toDocument());
+      const text = JSON.stringify(this.app.exportDocument());
       if (new Blob([text]).size > AUTOSAVE_MAX_BYTES) {
         if (!this._warnedLarge) toast('场景含大图，未自动保存，请手动导出');
         this._warnedLarge = true;

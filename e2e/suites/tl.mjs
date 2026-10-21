@@ -24,9 +24,9 @@ export async function run() {
     a.playback.stop();
     await a.loadDocument(createEmptyDocument());
     const m = await a.addCharacter('male');
-    m.root.position.set(0.9, m.root.position.y, 0);
-    const p1 = a.addProp('box'); p1.root.position.set(-1.2, 0, 1.2);
-    const p2 = a.addProp('cylinder'); p2.root.position.set(-0.4, 0, -1.4);
+    m.root.position.set(0.9, m.root.position.y, 0); a.edited(m);
+    const p1 = a.addProp('box'); p1.root.position.set(-1.2, 0, 1.2); a.edited(p1);
+    const p2 = a.addProp('cylinder'); p2.root.position.set(-0.4, 0, -1.4); a.edited(p2);
     const cam = a.addCamera('front_mid');
     a.select(null);
     a.rig.controls.target.set(0.4, 0, 0.3); a.stage.camera.position.set(0.6, 5.2, 6.4); a.rig.controls.update();
@@ -71,7 +71,7 @@ export async function run() {
     JSON.stringify(auto.tracks.map((t) => [t.property, t.keys.map((k) => k.t)])));
   await clickSel('#timeline .tl-autokey');
   await pickInOutliner(ids.p2Name);
-  const docPos = () => page.evaluate((id) => window.__app.toDocument().entities.find((e) => e.id === id).transform.pos, ids.p2);
+  const docPos = () => page.evaluate((id) => window.__app.exportDocument().entities.find((e) => e.id === id).transform.pos, ids.p2);
   const p2a = await docPos();
   const n1 = await page.evaluate(() => window.__app.timeline.toJSON().timeline.tracks.length);
   await gizmoDrag('x', 0.5);
@@ -212,7 +212,7 @@ export async function run() {
   const perfSetup = await page.evaluate(async () => {
     const a = window.__app, tl = a.timeline;
     const props = [];
-    for (let i = 0; i < 5; i++) { const p = a.addProp('box'); p.root.position.set(-2 + i, 0, 2.2); props.push(p); }
+    for (let i = 0; i < 5; i++) { const p = a.addProp('box'); p.root.position.set(-2 + i, 0, 2.2); a.edited(p); props.push(p); }
     a.select(null);
     for (const [i, p] of props.entries()) {
       const tp = tl.addTrack({ target: p.id, property: 'pos' });
@@ -250,7 +250,7 @@ export async function run() {
     await a.loadDocument(createEmptyDocument());
     const m = await a.addCharacter('male');
     const f = await a.addCharacter('female');
-    m.root.position.x = -1; f.root.position.x = 1;
+    m.root.position.x = -1; f.root.position.x = 1; a.edited(m); a.edited(f);
     a.select(null);
     await new Promise((r) => setTimeout(r, 100));
     const rows = [...document.querySelectorAll('#timeline .tl-row')].map((r) => ({ ent: r.dataset.ent, bare: r.classList.contains('is-bare'), btn: !!r.querySelector('.tl-addkey'), color: getComputedStyle(r.querySelector('.tl-label')).color }));

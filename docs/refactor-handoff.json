@@ -1,0 +1,52 @@
+{
+  "purpose": "新对话接手状态：先读取本文件，再检查 git status 和相关源码；沿用用户已经批准的计划继续。",
+  "date": "2026-10-21",
+  "branch": "refactor/cleanup",
+  "status": "WIP checkpoint，核心迁移已实现，最终验收和收尾未完成；未 push。",
+  "authorization": "用户要求接手 Claude 清理优化，审核计划后已说开始吧。最新要求是解决对话容量不足；保存检查点后可在新对话继续。不需要重新申请常规代码编辑许可。",
+  "prior_commits": [
+    "50ddaf1 原始接手点：撤销复用实体",
+    "6c28a77 修复路径测试种子顺序和初始化等待",
+    "3a1adf0 引入 Immer 11.2.3 / DocumentStore"
+  ],
+  "implemented": [
+    "DocumentStore 为不可变 JSON 文档源：prepare/commit/transact/batch、结构共享、schema 校验、revision 冲突检测。",
+    "DocumentController 负责文档导出、运行时投影和异步加载；EntityActions 从 App 提取增删复制分组逻辑。",
+    "History 改为 Immer 正反补丁；撤销失败不推进索引、支持串行撤销和限制条数。当前撤销仍走 loadDocument 全文档复用流程，未实现仅投影补丁路径。",
+    "Timeline 数据由 Store getter 提供，运行时仅保留播放/预览。修复首次自动关键帧覆盖手动基值。",
+    "Inspector、场景设置、姿势、gizmo、路径、相机运动、时间线及实体操作迁移；预览与提交分离。删除 toDocument，使用 exportDocument。",
+    "资源加载先准备后提交，版本冲突拒绝陈旧结果；AI/导入使用统一加载入口。",
+    "新增 store e2e 套件，更新测试夹具显式提交编辑。"
+  ],
+  "validation": {
+    "check": "最近 npm run check 通过：128 unit tests，83 modules layering；见 /tmp/canvasflow-check-finalprep.log 和 /tmp/canvasflow-check-new3.log。",
+    "build": "最近 build 成功；主包 gzip 282.74 kB，对比基线 275.85 kB。见 /tmp/canvasflow-build-new.log。",
+    "latest_full_e2e": "已完成 /tmp/canvasflow-e2e-final.log：9 suites 中 8 个通过，default 因旧私有方法调用报错。doc20/20 anim49/49 tl26/26 path25/25 cam34/34 export24/24 ai15/15 store7/7。不能报告全绿。",
+    "known_failure": "e2e/suites/default.mjs:158 仍调用 a._nextCharName()；提取后位于 a.entityActions._nextCharName()。尚未修复，优先修复并扫描其他旧私有方法引用。",
+    "performance": "单次观察 undo 约 2.4ms，基线约1.6ms；均复用实体，不构成严谨性能比较。",
+    "logs_note": "/tmp 日志可能被系统清理；上述结果已保存在本文件。最终代码仍须运行 check/build/e2e。"
+  },
+  "next_steps": [
+    "修复 default 测试遗留私有调用，检查 EntityActions 提取后的其他引用；重跑失败套件。",
+    "检查 EntityActions.addCrowd 的 Crowd.fromJSON 上下文 {app:this}，应为 {app:this.app}。",
+    "检查 Store.preparePatches：目前无调用且 inversePatches 为空；删除无用接口或补齐正确语义。修正 batch 注释：实际子事务仍做校验。",
+    "清理 Timeline、README 等仍声称 snapshot History / toDocument / Timeline 自持数据的注释文档。",
+    "审查 group/ungroup/duplicate 原子性、预览与撤销交互；gizmo Esc/pointercancel 已实现但缺真实拖拽取消验收。通用 widgets pointercancel 仍旧行为，必要时核实。",
+    "跑 npm run check、npm run build、npm run test:e2e:all，全部通过后再完成验收；若更改了测试夹具，不要削弱原断言。",
+    "更新本交接状态，提交收尾变更，报告性能/包体积变化及尚存限制；用户未要求 push。"
+  ],
+  "important_files": [
+    "src/doc/Store.js",
+    "src/doc/serialize.js",
+    "src/app/DocumentController.js",
+    "src/app/EntityActions.js",
+    "src/app/App.js",
+    "src/app/History.js",
+    "src/anim/Timeline.js",
+    "e2e/suites/store.mjs",
+    "tests/store.test.mjs",
+    "tests/history.test.mjs"
+  ],
+  "workflow": "没有发现适用 AGENTS.md；未调用 skills；不要擅自创建子代理。当前迁移改动一起保存为 WIP 提交以防上下文丢失，不表示已完成验收。",
+  "new_chat_prompt": "读取 docs/refactor-handoff.json，检查当前分支和代码，沿用已批准计划继续文档 Store 重构。先修复记录中的 default 测试失败，再完成剩余审查和全套验收，不要 push。"
+}

@@ -41,6 +41,7 @@ export async function run() {
     a.setActiveCamera(c1.id);
     a.select(null);
     a.rig.controls.target.set(0, 0.9, -0.8); a.stage.camera.position.set(2.5, 2.6, 6.5); a.rig.controls.update();
+    for (const ent of a.entities) a.edited(ent); // 提交测试搭景的手动编辑
     // 动画数据（阶段 C）：轨道 / 路径 / 约束也要往返一致
     const tl = a.timeline;
     const tr = tl.addTrack({ target: p.id, property: 'rot' });
@@ -56,7 +57,7 @@ export async function run() {
 
   // ---- 2 截图 A → doc1 → 清空 → load(doc1) → 截图 B → doc2 ----
   const shotA = await shootViewport(`${OUT}/A_director.png`);
-  const doc1 = await page.evaluate(() => window.__app.toDocument());
+  const doc1 = await page.evaluate(() => window.__app.exportDocument());
   fs.writeFileSync(`${OUT}/doc1.json`, JSON.stringify(doc1, null, 2));
   const v1 = await page.evaluate(async (d) => (await import('/src/doc/schema.js')).validate(d), doc1);
   ok('文档：doc1 通过校验', v1.ok, v1.errors.slice(0, 3).join(' | '));
@@ -72,7 +73,7 @@ export async function run() {
 
   const t = await page.evaluate(async (d) => { const t0 = performance.now(); await window.__app.loadDocument(d, { applyView: true }); return performance.now() - t0; }, doc1);
   const shotB = await shootViewport(`${OUT}/B_director.png`);
-  const doc2 = await page.evaluate(() => window.__app.toDocument());
+  const doc2 = await page.evaluate(() => window.__app.exportDocument());
   fs.writeFileSync(`${OUT}/doc2.json`, JSON.stringify(doc2, null, 2));
   const norm = (d) => JSON.stringify({ ...d, meta: { ...d.meta, updatedAt: null } });
   ok('文档：doc1 与 doc2 深度相等（忽略 updatedAt）', norm(doc1) === norm(doc2), `加载 ${t.toFixed(0)}ms`);
@@ -101,7 +102,7 @@ export async function run() {
       ['重复 id', (d) => { d.entities[ci + 1].id = d.entities[ci].id; }, `entities[${ci + 1}].id 重复`],
       ['版本号未知', (d) => { d.schema = 'director-stage/9.9'; }, 'schema 版本未知'],
     ];
-    const before = JSON.stringify({ ...a.toDocument(), meta: null });
+    const before = JSON.stringify({ ...a.exportDocument(), meta: null });
     const out = [];
     for (const [name, mut, expect] of cases) {
       const d = structuredClone(good);
@@ -109,7 +110,7 @@ export async function run() {
       const v = validate(d);
       let rejected = false;
       try { await a.loadDocument(d); } catch (e) { rejected = e.name === 'DocumentError'; }
-      const unchanged = JSON.stringify({ ...a.toDocument(), meta: null }) === before;
+      const unchanged = JSON.stringify({ ...a.exportDocument(), meta: null }) === before;
       out.push({ name, ok: !v.ok, located: v.errors.some((e) => e.startsWith(expect)), rejected, unchanged, first: v.errors[0] });
     }
     return out;
@@ -125,8 +126,8 @@ export async function run() {
     states.push(await shootViewport(`${OUT}/undo_s${i}.png`));
   };
   await step(() => { window.__app.addProp('box'); window.__app.select(null); }, 1);
-  await step(() => { const p = window.__app.entities.at(-1); p.root.position.set(1.6, 0, 1.4); window.dispatchEvent(new Event('pointerup')); }, 2);
-  await step(() => { window.__app.entities.find((e) => e.type === 'character').applyPosePreset('sit'); window.dispatchEvent(new Event('click')); }, 3);
+  await step(() => { const p = window.__app.entities.at(-1); p.root.position.set(1.6, 0, 1.4); window.__app.edited(p); }, 2);
+  await step(() => { const a = window.__app, c = a.entities.find((e) => e.type === 'character'); c.applyPosePreset('sit'); a.edited(c); }, 3);
   const steps = await page.evaluate(() => window.__app.history.entries.length);
   ok('撤销重做：三个操作各记一步', steps === 4, `entries=${steps}`);
   const seq = [];

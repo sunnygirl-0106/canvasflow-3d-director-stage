@@ -24,11 +24,13 @@ export function toggleKey(app, ent, prop) {
   const idle = !tl.active;
   const t = idle ? 0 : pb.time;
   const st = propState(app, tl.view(), ent.id, prop, t);
+  app.store.batch('切换关键帧', () => {
   if (st.key) tl.removeKey(st.track.id, st.key.t);
   else {
     const value = tl.valueOf(ent, prop); // 此刻显示的值（idle = 手动值，active = 求值结果）
     const track = st.track || tl.addTrack({ target: ent.id, property: prop });
     tl.setKey(track.id, t, value);
   }
+  });
   if (idle) pb.seek(0);
 }

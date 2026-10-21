@@ -49,3 +49,24 @@ test('整份导入相同文档不产生补丁，外部数据不会被冻住或�
   assert.equal(store.document.scene.ground.height, 0);
   assert.deepEqual(change.patches.map((p) => p.path), [['meta', 'name']]);
 });
+
+test('批量事务只发布最终结果；异常回滚全部步骤；缩短数组没有空洞', () => {
+  const store = new DocumentStore();
+  let changes = 0;
+  store.on('change', () => changes++);
+  store.batch('组合', () => {
+    store.transact('一', (d) => { d.meta.name = '一'; });
+    store.transact('二', (d) => { d.meta.name += '二'; });
+  });
+  assert.equal(store.document.meta.name, '一二');
+  assert.equal(changes, 1);
+  assert.throws(() => store.batch('失败', () => {
+    store.transact('先修改', (d) => { d.meta.name = '丢弃'; });
+    throw new Error('失败');
+  }));
+  assert.equal(store.document.meta.name, '一二');
+  const input = structuredClone(store.document);
+  input.scene.pos = [1, 2, 3];
+  store.commit(store.prepareReplacement('数组', input));
+  assert.deepEqual(store.document.scene.pos, [1, 2, 3]);
+});

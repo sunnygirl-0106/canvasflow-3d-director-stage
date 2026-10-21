@@ -4,7 +4,7 @@ import { Emitter } from '../util/Emitter.js';
 import { worldBox } from '../util/measure.js';
 import { line, polar, toward, simplify, PATH_MODES, TOWARD_STOP, ARC_SWEEP, arcPoints } from '../anim/pathGen.js';
 import { pathStartPoint, setPath } from '../doc/edit.js';
-import { round4 } from '../util/math.js';
+import { round4, clone } from '../util/math.js';
 import { onKey, KEY_PRIORITY } from '../util/keys.js';
 
 /** 某实体的绘制方式文案：机位的「走到」叫「推到」（同一个 toward）。 */
@@ -364,9 +364,9 @@ export class PathTool extends Emitter {
     this._end();
     let path, old;
     try {
-      const doc = app.toDocument({ view: false });
-      ({ path, replaced: old } = setPath(doc, ent.id, points, { closed, start: tl.active ? app.playback.time : 0 }));
-      tl.commitAnim(doc);
+      app.store.transact('绘制路径', (doc) => {
+        ({ path, replaced: old } = clone(setPath(doc, ent.id, points, { closed, start: tl.active ? app.playback.time : 0 })));
+      });
     } catch (err) { toastError(err); return null; }
     if (meta) app.pathMeta[path.id] = meta; else delete app.pathMeta[path.id];
     const over = path.start + path.duration > tl.duration ? `（结束于 ${fmt(path.start + path.duration)} s，超出时间轴时长）` : '';

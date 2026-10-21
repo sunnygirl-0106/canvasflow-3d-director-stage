@@ -81,12 +81,14 @@ export function dragKeys(panel, e, anchorEl, { collapseOnClick = false } = {}) {
       const tl = app.timeline;
       const next = new Set();
       try {
+        app.store.batch('移动关键帧', () => {
         if (!copy) for (const k of sel) tl.removeKey(k.trackId, k.t);
         for (const k of sel) {
           const t = round6(k.t + delta);
           tl.setKey(k.trackId, t, k.value, k.ease);
           next.add(keyId(k.trackId, t));
         }
+        });
         panel.selKeys = next;
       } catch (err) { toastError(err); }
       panel.rebuild();

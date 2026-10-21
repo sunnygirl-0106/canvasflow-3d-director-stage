@@ -14,7 +14,7 @@ export async function run() {
   const bad = await page.evaluate(async (ids) => {
     const { validate } = await import('/src/doc/schema.js');
     const a = window.__app;
-    const good = a.toDocument();
+    const good = a.exportDocument();
     good.timeline.tracks = [
       { id: 'trk00001', target: ids.m, property: 'rot', keys: [{ t: 0, value: [0, 0, 0], ease: 'linear' }, { t: 2.5, value: [0, 90, 0], ease: 'smooth' }, { t: 4, value: [0, 180, 0], ease: 'linear' }] },
       { id: 'trk00002', target: ids.c1, property: 'fov', keys: [{ t: 0, value: 40, ease: 'linear' }, { t: 3, value: 25, ease: 'linear' }] },
@@ -29,7 +29,7 @@ export async function run() {
       ['id 重复', (d) => { d.paths[0].id = ids.p; }, 'paths[0].id 重复'],
       ['points 只有 1 个', (d) => { d.paths[0].points = [[0, 0, 0]]; }, 'paths[0].points 应为至少 2 个点'],
     ];
-    const before = JSON.stringify({ ...a.toDocument(), meta: null });
+    const before = JSON.stringify({ ...a.exportDocument(), meta: null });
     const out = [];
     for (const [name, mut, expect] of cases) {
       const d = structuredClone(good);
@@ -37,14 +37,14 @@ export async function run() {
       const v = validate(d);
       let rejected = false;
       try { await a.loadDocument(d); } catch (e) { rejected = e.name === 'DocumentError'; }
-      const unchanged = JSON.stringify({ ...a.toDocument(), meta: null }) === before;
+      const unchanged = JSON.stringify({ ...a.exportDocument(), meta: null }) === before;
       out.push({ name, ok: !v.ok, located: v.errors.some((e) => e.startsWith(expect)), rejected, unchanged, first: v.errors[0] });
     }
     // 合法文档能加载；删除被引用的实体后，引用它的路径 / 约束一并删除，导出仍合法
     await a.loadDocument(good);
     const loaded = JSON.stringify(a.timeline.toJSON()) === JSON.stringify({ timeline: good.timeline, paths: good.paths, constraints: good.constraints });
     a.remove(ids.f);
-    const after = a.toDocument();
+    const after = a.exportDocument();
     const pruned = { paths: after.paths.length, constraints: after.constraints.length, tracks: after.timeline.tracks.length, valid: validate(after).ok };
     return { good: v0, out, loaded, pruned };
   }, ids);
@@ -54,7 +54,7 @@ export async function run() {
   const kf = await page.evaluate(async (ids) => {
     const a = window.__app, tl = a.timeline, pb = a.playback;
     const strip = (d) => JSON.stringify({ ...d, meta: null });
-    const manualDoc = strip(a.toDocument());
+    const manualDoc = strip(a.exportDocument());
     const m = a.findEntity(ids.m), c1 = a.findEntity(ids.c1);
     const before = { pos: m.root.position.toArray(), rot: m.root.rotation.toArray().slice(0, 3), fov: c1.cam.fov };
     const tp = tl.addTrack({ target: ids.m, property: 'pos' });
@@ -72,12 +72,12 @@ export async function run() {
     const at2 = { x: m.root.position.x, yaw: m.root.rotation.y * 180 / Math.PI, fov: c1.cam.fov, state: pb.state };
     pb.seek(2.5);
     const fov25 = c1.cam.fov; // step：2..3 段保持 20
-    const docWhileActive = strip(a.toDocument());
+    const docWhileActive = strip(a.exportDocument());
     pb.play();
     await new Promise((r) => setTimeout(r, 300));
     pb.pause();
     const playedTo = pb.time;
-    const docWhilePlaying = strip(a.toDocument());
+    const docWhilePlaying = strip(a.exportDocument());
     pb.stop();
     const after = { pos: m.root.position.toArray(), rot: m.root.rotation.toArray().slice(0, 3), fov: c1.cam.fov };
     // 文档：去掉三条轨道后应与打键前的手动文档一致
@@ -94,7 +94,7 @@ export async function run() {
   ok('关键帧：step 缓动保持到下一键', kf.fov25 === 20, `fov@2.5=${kf.fov25}`);
   ok('关键帧：play / pause 推进时间', kf.playedTo > 0.2 && kf.playedTo < 3, `time=${kf.playedTo.toFixed(3)}`);
   ok('关键帧：stop() 后回到手动值、状态 idle', kf.restored && kf.state === 'idle');
-  ok('关键帧：active / 播放中 toDocument() 导出 base', kf.exportBase);
+  ok('关键帧：active / 播放中 exportDocument() 导出 base', kf.exportBase);
   // ---- 路径：道具 / 机位 / 角色沿 Catmull-Rom 移动，tangent 朝向，smooth 首尾速度为 0 ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
   const pt = await page.evaluate(async (ids) => {
@@ -126,7 +126,7 @@ export async function run() {
     // 角色：沿 +Z 走，yaw = 0；脚底高度 = 路径 y；仍是原姿势（本步不切步态）
     pb.seek(2);
     out.charYaw = m.root.rotation.y * R2D;
-    out.charDocY = a.toDocument().entities.find((e) => e.id === ids.m).transform.pos[1];
+    out.charDocY = a.exportDocument().entities.find((e) => e.id === ids.m).transform.pos[1];
     out.charRootY = m.root.position.y - m.rootY0;
     out.charZ = m.root.position.z;
     // smooth：首尾速度为 0
@@ -149,7 +149,7 @@ export async function run() {
   const gait = await page.evaluate(async (ids) => {
     const a = window.__app, tl = a.timeline, pb = a.playback;
     const m = a.findEntity(ids.m);
-    m.applyPosePreset('think'); // 原姿势不是站立：停下后应回到它
+    m.applyPosePreset('think'); a.edited(m); // 原姿势不是站立：停下后应回到它
     a.history.reset();
     const base = { ...m.values };
     const dir = [Math.sin(0.5), 0, Math.cos(0.5)]; // 斜向 6 m
@@ -225,9 +225,9 @@ export async function run() {
     };
     pb.seek(T1 / 2); out.walkMid = Math.abs(m.values.lLegFwd - m.values.rLegFwd) > 5;
     pb.stop();
-    const d1 = a.toDocument();
+    const d1 = a.exportDocument();
     await a.loadDocument(JSON.parse(JSON.stringify(d1)));
-    const d2 = a.toDocument();
+    const d2 = a.exportDocument();
     d1.meta.updatedAt = d2.meta.updatedAt = null;
     out.roundTrip = JSON.stringify(d1) === JSON.stringify(d2) && JSON.stringify(d2.paths[0].stops) === '[1]';
     // 插入 / 删除顶点后停顿索引跟着走；顶点数被整体替换时停顿去掉
@@ -252,7 +252,7 @@ export async function run() {
     const a = window.__app, tl = a.timeline, pb = a.playback;
     const m = a.findEntity(ids.m);
     const R2D = 180 / Math.PI;
-    m.root.rotation.set(0, -100 / R2D, 0);
+    m.root.rotation.set(0, -100 / R2D, 0); a.edited(m);
     a.history.reset();
     const x = m.root.position.x, z = m.root.position.z;
     const json = tl.addPath({ target: ids.m, points: [[x, 0, z], [x + 4, 0, z]], start: 1, duration: 3, speed: 'smooth', orient: 'tangent' });
@@ -361,7 +361,7 @@ export async function run() {
     return out;
   });
   const manualShot = await shootViewport(`${OUT}/manual.png`);
-  const manualDoc = await page.evaluate(() => window.__app.toDocument());
+  const manualDoc = await page.evaluate(() => window.__app.exportDocument());
   const prop0 = await page.evaluate((id) => window.__app.findEntity(id).root.position.toArray(), ids.p);
 
   // 1 纯函数：真实播放 2.0 s → 暂停记录；stop → seek(同一时刻) 再记录
@@ -390,7 +390,7 @@ export async function run() {
     return { p0, p5 };
   }, ids.p);
   // 4 导出不污染：t=5 时导出
-  const docAt5 = await page.evaluate(() => window.__app.toDocument());
+  const docAt5 = await page.evaluate(() => window.__app.exportDocument());
   await shootViewport(`${OUT}/t5.png`);
   await page.evaluate(() => window.__app.playback.stop());
   const pStop = await page.evaluate((id) => window.__app.findEntity(id).root.position.toArray(), ids.p);
@@ -406,7 +406,7 @@ export async function run() {
   // 5 往返：导出 → 清空 → 导入 → 导出；导入后 seek(3) 截图 ≡ 导入前 seek(3)
   await page.evaluate(() => window.__app.playback.seek(3));
   const rtA = await shootViewport(`${OUT}/roundtrip_before_t3.png`);
-  const rtDoc1 = await page.evaluate(() => window.__app.toDocument());
+  const rtDoc1 = await page.evaluate(() => window.__app.exportDocument());
   fs.writeFileSync(`${OUT}/doc1.json`, JSON.stringify(rtDoc1, null, 2));
   await page.evaluate(async (d) => {
     const { createEmptyDocument } = await import('/src/doc/schema.js');
@@ -415,7 +415,7 @@ export async function run() {
     await a.loadDocument(createEmptyDocument());
     await a.loadDocument(d, { applyView: true });
   }, rtDoc1);
-  const rtDoc2 = await page.evaluate(() => window.__app.toDocument());
+  const rtDoc2 = await page.evaluate(() => window.__app.exportDocument());
   fs.writeFileSync(`${OUT}/doc2.json`, JSON.stringify(rtDoc2, null, 2));
   ok('验收5 往返：含 timeline 的 doc1 ≡ doc2（忽略 updatedAt）', strip(rtDoc1) === strip(rtDoc2) && rtDoc1.timeline.tracks.length === 4 && rtDoc1.paths.length === 1 && rtDoc1.constraints.length === 2);
   await page.evaluate(() => window.__app.playback.seek(3));

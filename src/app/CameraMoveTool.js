@@ -2,7 +2,7 @@ import { toast, toastError, confirmToast } from '../util/dom.js';
 import { aimPoint } from '../anim/Constraint.js';
 import { cameraMove, defaultParams, MoveError, MOVE_LABEL } from '../anim/cameraMoves.js';
 import { moveContext, aheadPoint, nearestSubject, applyCameraMove, clearCameraMoves } from '../doc/edit.js';
-import { round4 } from '../util/math.js';
+import { round4, clone } from '../util/math.js';
 
 const fmt = (s) => (Math.round(s * 10) / 10).toString();
 
@@ -48,7 +48,7 @@ export class CameraMoveTool {
 
   /** 默认主体：离机位最近的角色（含群众成员）；没有角色取最近的其他实体；什么都没有 = 机位前方 3 m 的点。 */
   nearestSubject(cam) {
-    const doc = this.app.toDocument({ view: false });
+    const doc = this.app.store.document;
     const aimOf = (id) => aimPoint(this.app, id)?.toArray() ?? null; // 场景实测注视点
     return nearestSubject(doc, cam.id, this.context(cam).position, aimOf) ?? this._aheadPoint(cam);
   }
@@ -57,8 +57,7 @@ export class CameraMoveTool {
 
   /** 只含本机位条目 + 动画字段的文档视图（edit.moveContext 用；不必整份 toDocument）。 */
   _camDoc(cam) {
-    const anim = this.app.timeline.toJSON();
-    return { entities: [cam.toJSON({ base: this.app.timeline.baseOf(cam) })], ...anim };
+    return this.app.store.document;
   }
 
   /** 表单里的主体 → 约束 subject（实体 id 或 [x,y,z]）。 */
@@ -168,12 +167,12 @@ export class CameraMoveTool {
     const params = this.params(cam);
     let res;
     try {
-      const doc = app.toDocument({ view: false });
-      res = applyCameraMove(doc, cam.id, {
+      app.store.transact('应用运镜', (doc) => {
+      res = clone(applyCameraMove(doc, cam.id, {
         name, subject, aim: this._aim(subject), params, time: ctx.time,
         lastPan: segs[segs.length - 1] || null, ownPan: segs.some((s) => s.kind === 'pan'),
+      }));
       });
-      tl.commitAnim(doc);
     } catch (err) { toastError(err); return null; }
     const { move, start, undo } = res;
     const { rotEnd, ...rest } = undo;
@@ -197,6 +196,7 @@ export class CameraMoveTool {
     const cur = this._anim(cam);
     const u = seg.undo;
     try {
+      this.app.store.batch('删除运镜段', () => {
       if (seg.kind === 'path') {
         if (u.path) tl.updatePath(cur.path.id, u.path);
         else tl.removePath(cur.path.id);
@@ -207,6 +207,7 @@ export class CameraMoveTool {
       if (u.added && cur.lookAts.some((c) => c.id === u.added)) tl.removeConstraint(u.added);
       for (const p of u.patched) if (cur.lookAts.some((c) => c.id === p.id)) tl.updateConstraint(p.id, { end: p.end });
       for (const c of u.removed) tl.addConstraint(c);
+      });
     } catch (err) { toastError(err); return false; }
     // 不截断 meta：签名回到上一段，段列表自然少一段；⌘Z 后签名又等于这一段，列表恢复
     toast(`已删除运镜段：${MOVE_LABEL[seg.name]}`);
@@ -217,8 +218,7 @@ export class CameraMoveTool {
   clear(cam) {
     const { app } = this;
     try {
-      const doc = app.toDocument({ view: false });
-      if (clearCameraMoves(doc, cam.id)) app.timeline.commitAnim(doc);
+      app.store.transact('清除运镜', (doc) => { clearCameraMoves(doc, cam.id); });
     } catch (err) { toastError(err); return; }
     delete this.meta[cam.id];
     toast('已清除运镜');

@@ -498,7 +498,7 @@ export class Inspector {
       onInput: (v) => { const s = ent.baseScale * v; o.scale.set(s * girth, s, s * girth); scl.syncAll(); invalidate(); },
       onChange: commit('scale'),
     });
-    const col = colorRow({ label: '颜色', hex: toHex(ent.color), onChange: (h) => { ent.setColor(h); this.app.edited(ent); invalidate(); } });
+    const col = colorRow({ label: '颜色', hex: toHex(ent.color), onChange: (h) => { ent.setColor(h); invalidate(); }, onCommit: () => this.app.edited(ent) });
 
     root.append(pos.el, rot.el, scl.el, uni.el, col.el);
     this._keyable(ent, [['pos', pos.el], ['rot', rot.el], ['scale', scl.el]]);
@@ -681,7 +681,7 @@ export class Inspector {
   _pose(root, members) {
     const rep = members[0];
     if (!rep) return;
-    const invalidate = () => { members.forEach((m) => this.app.edited(m)); this.app.stage.invalidate(); };
+    const invalidate = () => { this.app.store.batch('修改姿势', () => members.forEach((m) => this.app.edited(m))); this.app.stage.invalidate(); };
 
     const grid = el('div', { class: 'pose-grid' });
     const btns = new Map();
@@ -710,7 +710,7 @@ export class Inspector {
     this.poseSliders = new PoseSliders(host, rep, () => {
       mark(null); // 手动微调取消预设高亮
       for (const m of members) if (m !== rep) m.copyPoseFrom(rep);
-      invalidate();
-    });
+      this.app.stage.invalidate();
+    }, invalidate);
   }
 }

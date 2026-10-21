@@ -26,7 +26,7 @@ export async function run() {
     const out = [];
     for (const c of a.entities.filter((e) => e.type === 'character')) {
       a.select(c.id); await wait(80);
-      const tr = a.toDocument().entities.find((e) => e.id === c.id).transform;
+      const tr = a.exportDocument().entities.find((e) => e.id === c.id).transform;
       const shown = { pos: vals('位置'), rot: vals('旋转'), scale: vals('缩放') };
       const same = ['pos', 'scale'].every((k) => shown[k].every((v, i) => Math.abs(v - tr[k][i]) <= 0.005))
         && shown.rot.every((v, i) => Math.abs(v - tr.rot[i]) <= 0.5);
@@ -122,8 +122,8 @@ export async function run() {
     const base = PROFILES.xbot;
     const joints = { ...base.joints, lHand: { bone: 'mixamorig:NoSuchBone', axis: 'x' } };
     delete joints.rHand;
-    const c = await a._loadCharacter({ url: './assets/Xbot.glb', profile: { ...base, id: 'broken_test', joints }, height: 1.7 });
-    a._registerEntity(c, { msg: a._rigWarning(c) });
+    const c = await a.entityActions._loadCharacter({ body: 'xbot', url: './assets/Xbot.glb', profile: { ...base, id: 'broken_test', joints }, height: 1.7 });
+    a.entityActions._registerEntity(c, { msg: a.entityActions._rigWarning(c) });
     const toastTxt = document.getElementById('toast').textContent;
     a.select(c.id);
     const tab = (t) => [...document.querySelectorAll('#inspector .ptabs button')].find((x) => x.textContent === t)?.click();

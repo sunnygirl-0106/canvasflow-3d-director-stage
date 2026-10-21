@@ -15,9 +15,9 @@ export async function run() {
     // 种子模型并发加载，entities 的入列顺序不代表左右位置。
     const A = a.entities.find((e) => e.type === 'character' && e.body === 'male');
     const B = a.entities.find((e) => e.type === 'character' && e.body === 'female');
-    const box = a.addProp('box'); box.root.position.set(1.6, 0, 2.6);
-    const cyl = a.addProp('cylinder'); cyl.root.position.set(3.4, 0, 0.9);
-    const box2 = a.addProp('box'); box2.root.position.set(-2.6, 0, 2.4);
+    const box = a.addProp('box'); box.root.position.set(1.6, 0, 2.6); a.edited(box);
+    const cyl = a.addProp('cylinder'); cyl.root.position.set(3.4, 0, 0.9); a.edited(cyl);
+    const box2 = a.addProp('box'); box2.root.position.set(-2.6, 0, 2.4); a.edited(box2);
     a.addCamera('front_mid'); // 验收 9：机位视角下路径不显示
     a.select(null);
     a.rig.controls.target.set(0, 0, 0.6); a.stage.camera.position.set(0, 8.5, 7.5); a.rig.controls.update();
@@ -143,9 +143,9 @@ export async function run() {
   const rt = await page.evaluate(async () => {
     const a = window.__app;
     const strip = (d) => { const c = JSON.parse(JSON.stringify(d)); delete c.meta.updatedAt; return JSON.stringify(c); };
-    const d1 = a.toDocument();
+    const d1 = a.exportDocument();
     await a.loadDocument(JSON.parse(JSON.stringify(d1)), { applyView: true });
-    const d2 = a.toDocument();
+    const d2 = a.exportDocument();
     return { eq: strip(d1) === strip(d2), paths: d2.paths.length, items: a.pathOverlay.itemCount, visible: a.pathOverlay.visible };
   });
   ok('验收11 含手绘路径的文档 导出 → 导入 → 导出 ≡；导入后 overlay 立即显示', rt.eq && rt.paths === 4 && rt.items === 4 && rt.visible, JSON.stringify(rt));

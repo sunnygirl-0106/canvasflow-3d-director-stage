@@ -34,11 +34,11 @@ export async function buildAnimScene() {
     a.playback?.stop();
     await a.loadDocument(createEmptyDocument());
     const m = await a.addCharacter('male');
-    m.root.position.x = -1.2; m.root.rotation.y = 0.4;
+    m.root.position.x = -1.2; m.root.rotation.y = 0.4; a.edited(m);
     const f = await a.addCharacter('female');
     f.root.position.set(1.0, f.root.position.y, 0.6);
-    f.applyPosePreset('think');
-    const p = a.addProp('box'); p.root.position.set(0.2, 0, -1.4);
+    f.applyPosePreset('think'); a.edited(f);
+    const p = a.addProp('box'); p.root.position.set(0.2, 0, -1.4); a.edited(p);
     a.select(m.id);
     const c1 = a.addCamera('front_mid');
     a.select(f.id);
@@ -280,15 +280,15 @@ export async function buildExportScene() {
     a.playback.stop();
     await a.loadDocument(createEmptyDocument());
     const m = await a.addCharacter('male');
-    m.root.position.x = -1.6;
+    m.root.position.x = -1.6; a.edited(m);
     const f = await a.addCharacter('female');
-    f.root.position.set(1.2, f.root.position.y, -0.8);
+    f.root.position.set(1.2, f.root.position.y, -0.8); a.edited(f);
     const tl = a.timeline;
     tl.setDuration(6);
     tl.addPath({ target: m.id, points: [[-1.6, 0, 0], [1.6, 0, 0.4]], start: 0, duration: 4, speed: 'smooth', orient: 'tangent' });
     a.select(m.id);
     const c = a.addCamera('front_full');
-    c.aimAt(a.stage.world.localToWorld(aimPoint(a, m.id).clone()));
+    c.aimAt(a.stage.world.localToWorld(aimPoint(a, m.id).clone())); a.edited(c);
     const mv = a.cameraMoves;
     mv.setName(c, 'half_orbit');
     mv.formOf(c).subject = m.id;
@@ -307,7 +307,7 @@ export async function buildExportScene() {
 export function exportState() {
   return page.evaluate(() => {
     const a = window.__app;
-    const d = a.toDocument();
+    const d = a.exportDocument();
     d.meta.updatedAt = null;
     return { active: a.timeline.active, time: a.playback.time, doc: JSON.stringify(d), hist: a.history.entries.length, idx: a.history.index };
   });
@@ -398,7 +398,7 @@ export async function aiSend(mode, text, { confirm = true } = {}) {
 export function aiState() {
   return page.evaluate(() => {
     const a = window.__app;
-    const d = a.toDocument({ view: false });
+    const d = a.exportDocument({ view: false });
     d.meta.updatedAt = null;
     return { doc: JSON.stringify(d), hist: a.history.entries.length, idx: a.history.index };
   });

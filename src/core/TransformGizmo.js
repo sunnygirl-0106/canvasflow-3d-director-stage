@@ -1,3 +1,4 @@
+import { onKey, KEY_PRIORITY } from '../util/keys.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
 // TransformControls 封装：模式切换、与 Orbit 互斥、变更回调。
@@ -26,7 +27,7 @@ export class TransformGizmo {
     this._onDrag = null;
     this.control.addEventListener('dragging-changed', (e) => {
       orbit.enabled = !e.value && orbitAllowed();
-      this._onDrag?.(e.value);
+      this._onDrag?.(e.value, !!this._cancelled);
     });
 
     this._onObjectChange = null;
@@ -35,6 +36,20 @@ export class TransformGizmo {
     this.control.addEventListener('change', () => this._onChange?.());
 
     this.attached = null;
+    onKey((e) => {
+      if (e.key !== 'Escape' || !this.dragging) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      this.cancel();
+    }, { priority: KEY_PRIORITY.transformDrag });
+    domElement.addEventListener('pointercancel', () => this.cancel());
+  }
+
+  cancel() {
+    if (!this.dragging) return;
+    this._cancelled = true;
+    this.control.reset();
+    this.control.pointerUp({ button: 0 });
+    this._cancelled = false;
   }
 
   _setHelperVisible(v) {

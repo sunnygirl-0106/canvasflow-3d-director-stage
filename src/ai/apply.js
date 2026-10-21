@@ -282,7 +282,7 @@ export function compileOps(base, ops, { mode = 'modify', charSeq = 0 } = {}) {
  * @returns {Promise<{ok:boolean, applied:number, renames:Object<string,string>, warnings:string[], errors:string[]}>}
  */
 export async function applyOps(app, ops, { mode = 'modify' } = {}) {
-  const base = app.toDocument({ view: false });
+  const base = app.store.document;
   const v = validateOps(ops, sceneIndex(base), { mode });
   if (!v.ok) return { ok: false, applied: 0, renames: v.renames, warnings: [], errors: v.errors };
   const r = compileOps(base, ops, { mode, charSeq: app.charSeq });
@@ -309,7 +309,7 @@ const MAX_LINES = 60;
  * 加场景参数与时间轴。实体很多时截断（控制在约 2k token 内）。
  */
 export function summarize(appOrDoc) {
-  const doc = appOrDoc.toDocument ? appOrDoc.toDocument({ view: false }) : appOrDoc;
+  const doc = appOrDoc.exportDocument ? appOrDoc.exportDocument({ view: false }) : appOrDoc;
   const byId = new Map(doc.entities.map((e) => [e.id, e]));
   const nameOf = (s) => (Array.isArray(s) ? vec(s) : byId.get(s)?.name ?? '?');
   const span = (s, e) => `${f2(s ?? 0)}–${e == null ? '全程' : f2(e) + ' s'}`;

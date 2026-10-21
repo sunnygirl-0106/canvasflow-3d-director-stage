@@ -101,7 +101,7 @@ test('toJSON 深拷贝可随意改；view() 是同一份数据的只读引用；
   j.timeline.tracks[0].keys.push({ t: 9, value: [9, 9, 9], ease: 'linear' });
   assert.equal(app.timeline.view().timeline.tracks[0].keys.length, 1);
   assert.equal(app.timeline.view().timeline.tracks, app.timeline.tracks);
-  const doc = app.toDocument();
+  const doc = app.exportDocument();
   Object.assign(doc, { timeline: { ...j.timeline, duration: 12 }, paths: j.paths, constraints: j.constraints });
   app.timeline.fromJSON(doc);
   assert.equal(app.timeline.duration, 12);
