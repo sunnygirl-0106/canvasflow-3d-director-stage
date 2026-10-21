@@ -1,4 +1,4 @@
-// 模型调用：纯前端，fetch 直接调接口，不引依赖。
+// 模型调用：本机配置走服务端代理，手动配置可直接调用兼容接口。
 // - OpenAICompatProvider：OpenAI 兼容的 /chat/completions（DeepSeek / 通义 / Kimi / OpenRouter / 本地 vLLM 等都能接）。
 // - MockProvider：按请求里的关键字返回预录回复；selftest 用它，验收不依赖网络。
 // 两者接口相同：chat(messages, { signal }) → 模型回复的文本。
@@ -9,6 +9,9 @@ export const SETTINGS_KEY = 'director-stage.ai';
 const DEFAULT_SETTINGS = { baseURL: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini' };
 
 export function loadSettings() {
+  if (typeof __LOCAL_AI_MODEL__ !== 'undefined' && __LOCAL_AI_MODEL__) {
+    return { baseURL: '/api/local-ai', apiKey: '', model: __LOCAL_AI_MODEL__, local: true };
+  }
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; }
   catch { return { ...DEFAULT_SETTINGS }; }
 }
@@ -31,9 +34,10 @@ export function textOf(content) {
 
 export class OpenAICompatProvider {
   /**
-   * @param {{baseURL:string, apiKey:string, model:string, temperature?:number, timeoutMs?:number}} o
+   * @param {{baseURL:string, apiKey:string, model:string, local?:boolean, temperature?:number, timeoutMs?:number}} o
    */
-  constructor({ baseURL, apiKey, model, temperature = 0.2, timeoutMs = 120000 }) {
+  constructor({ baseURL, apiKey, model, local = false, temperature = 0.2, timeoutMs = 120000 }) {
+    this.local = local;
     this.baseURL = (baseURL || '').replace(/\/+$/, '');
     this.apiKey = apiKey;
     this.model = model;
@@ -42,7 +46,7 @@ export class OpenAICompatProvider {
     this.jsonMode = true; // 接口不支持 response_format 时自动关掉（只影响本实例）
   }
 
-  get configured() { return !!(this.baseURL && this.apiKey && this.model); }
+  get configured() { return !!(this.baseURL && (this.local || this.apiKey) && this.model); }
 
   async chat(messages, { signal } = {}) {
     if (!this.configured) throw new ProviderError('未配置模型接口：请在 AI 面板「设置」里填写 baseURL / apiKey / model');
@@ -76,11 +80,12 @@ export class OpenAICompatProvider {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(new Error('请求超时')), this.timeoutMs);
     const onAbort = () => ctl.abort(signal.reason);
-    signal?.addEventListener('abort', onAbort);
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
     try {
       return await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
+        headers: { 'Content-Type': 'application/json', ...(!this.local ? { Authorization: `Bearer ${this.apiKey}` } : {}) },
         body: JSON.stringify(body),
         signal: ctl.signal,
       });

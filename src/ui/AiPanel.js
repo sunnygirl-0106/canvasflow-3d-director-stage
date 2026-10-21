@@ -2,6 +2,7 @@ import { el, clear, toast, confirmToast } from '../util/dom.js';
 import { icon } from './icons.js';
 import { MODES, MODE_LABEL } from '../ai/ops.js';
 import { OpenAICompatProvider, loadSettings, saveSettings } from '../ai/provider.js';
+import { SCENE_PRESETS } from '../ai/presets.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 识图：原图 ≤ 2 MB
 const IMAGE_EDGE = 1024;                 // 压到长边 1024 px（JPEG）
@@ -51,6 +52,7 @@ export class AiPanel {
     this.mode = 'modify';
     this.image = null;      // 识图：压缩后的 data URL
     this.showSettings = false;
+    this.presetsOpen = true;
     this.settings = loadSettings();
     this.testState = null;  // 测试连接结果文案
     this.root = el('div', { class: 'ai-drawer', hidden: true });
@@ -101,6 +103,14 @@ export class AiPanel {
   renderSettings() {
     const s = this.settings;
     clear(this.settingsEl);
+    if (s.local) {
+      this.settingsEl.append(
+        el('div', { class: 'ai-privacy', text: `已自动加载本机配置 · ${s.model}。无需重复填写，密钥仅保存在本机服务端。` }),
+        el('button', { class: 'minibtn', text: '测试连接', onclick: () => this._testConnection() }),
+      );
+      if (this.testState) this.settingsEl.append(el('div', { class: 'ai-test ' + (this.testState.ok ? 'ok' : 'err'), text: this.testState.text }));
+      return;
+    }
     const field = (label, key, type = 'text', placeholder = '') => {
       const inp = el('input', { class: 'ai-field', type, value: s[key] || '', placeholder, spellcheck: 'false', autocomplete: 'off' });
       inp.dataset.name = key;
@@ -147,7 +157,7 @@ export class AiPanel {
     if (!turns.length) {
       this.flowEl.appendChild(el('div', { class: 'ai-empty' }, [
         el('div', { text: '用一句话描述场景，AI 会摆好人物、机位和运镜。' }),
-        el('div', { class: 'ai-eg', text: '例：两个人在广场对话，一个女的站着挥手，一个男的坐着，一个机位半环绕拍他们，5 秒' }),
+        el('div', { class: 'ai-eg', text: '不想打字？选下方预制场景，再点「发送」即可。' }),
       ]));
       return;
     }
@@ -210,6 +220,30 @@ export class AiPanel {
       onclick: () => { this.mode = m; if (m !== 'image') this.image = null; this.renderInput(); },
     })));
     this.inputEl.appendChild(seg);
+
+    if (mode !== 'image') {
+      const presets = el('details', { class: 'ai-presets', open: this.presetsOpen ? true : undefined });
+      presets.append(
+        el('summary', { text: '预制场景 · 点选填入', onclick: (event) => {
+          event.preventDefault();
+          this.presetsOpen = !presets.open;
+          presets.open = this.presetsOpen;
+        } }),
+        el('div', { class: 'ai-preset-grid' }, SCENE_PRESETS.map((preset) => el('button', {
+          class: 'ai-preset', type: 'button', title: preset.prompt, disabled: busy || undefined,
+          onclick: () => {
+            if (this.agent.busy) return;
+            this.mode = 'generate';
+            this.image = null;
+            this.textarea.value = preset.prompt;
+            this.renderInput();
+            this.textarea.focus();
+          },
+        }, [el('strong', { text: preset.title }), el('span', { text: preset.detail })]))),
+        el('div', { class: 'ai-preset-hint', text: '选好后可直接发送，也可改字；将使用「生成新场景」。' }),
+      );
+      this.inputEl.appendChild(presets);
+    }
 
     if (mode === 'image') {
       const file = el('input', { type: 'file', accept: 'image/*', hidden: true });

@@ -10,3 +10,7 @@ clean_*.png
 _assets_src/
 # 姿势回归 / 校准截图
 test-output/
+
+# 本机模型凭据
+.env.local
+.env.*.local

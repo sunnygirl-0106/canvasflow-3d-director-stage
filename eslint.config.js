@@ -5,7 +5,7 @@ export default [
   { ignores: ['dist/', 'node_modules/', 'test-output/', '_assets_src/'] },
   js.configs.recommended,
   {
-    languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: globals.browser },
+    languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { ...globals.browser, __LOCAL_AI_MODEL__: 'readonly' } },
     rules: {
       'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }],
       eqeqeq: ['error', 'smart'],

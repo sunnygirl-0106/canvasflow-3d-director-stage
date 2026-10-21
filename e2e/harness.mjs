@@ -16,7 +16,7 @@ if (!CHROME) { console.error('找不到 Chrome：请设置 CHROME_PATH'); proces
 export let server = null;
 export let URL_ = process.env.TEST_URL;
 if (!URL_) {
-  server = await createServer({ server: { port: 5181, strictPort: false, open: false, hmr: false, watch: null }, logLevel: 'error' });
+  server = await createServer({ mode: 'test', server: { port: 5181, strictPort: false, open: false, hmr: false, watch: null }, logLevel: 'error' });
   await server.listen();
   URL_ = server.resolvedUrls.local[0];
 }

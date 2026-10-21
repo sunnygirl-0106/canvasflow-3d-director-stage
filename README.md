@@ -133,6 +133,10 @@ Object.assign(cm.formOf(cam), { name: 'push_in', subject: a.id }); cm.request(ca
 
 **配置**：抽屉右上角 ⚙ 填 Base URL / API Key / Model（任何 OpenAI 兼容的 `/chat/completions` 接口：OpenAI、DeepSeek、通义、Kimi、OpenRouter、本地 vLLM / Ollama 的 OpenAI 端点等；识图需要支持图片输入的模型），「测试连接」验证。接口不支持 `response_format: json_object` 时自动去掉重试。
 
+本地开发也可在项目根目录的 `.env.local` 中设置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`（三个都必填），再启动或重启 `npm run dev`。AI 面板会自动使用本机代理，密钥留在服务端，不写入浏览器或构建产物。`.env.local` 已被 Git 忽略。`npm run build` 的静态产物和 `npm run preview` 使用面板中的浏览器配置；自动化自测不读取本机模型配置。
+
+抽屉内提供 8 个预制场景。点击只填入提示词并切换到「生成新场景」，可继续编辑；点击发送时仍需确认清空已有场景。
+
 **示例提示词**
 
 - 生成：「两个人在广场对话，一个女的站着挥手，一个男的坐着，一个机位半环绕拍他们，5 秒」
@@ -152,7 +156,7 @@ __app.ai.summarize();                                     // 给模型看的当�
 await __app.ai.run({ input: '让小王走到原点', mode: 'modify' });   // 走模型 + 重试回路
 ```
 
-**隐私**：Base URL / API Key / Model 只存本机浏览器 localStorage（键 `director-stage.ai`），不写进场景文件、撤销栈和自动保存，不出现在日志与 selftest 产物里。请求由浏览器直接发往你配置的接口：发送的是提示词、当前场景摘要（实体名字 / 位置 / 姿势等）和你的输入，识图模式还有压缩后的图片；对话记录只在当前页面会话里。
+**隐私**：手动填写的 Base URL / API Key / Model 只存本机浏览器 localStorage（键 `director-stage.ai`），不写进场景文件、撤销栈和自动保存，不出现在日志与 selftest 产物里。手动配置时请求由浏览器直接发往你配置的接口，本机配置时由本机代理转发：发送的是提示词、当前场景摘要（实体名字 / 位置 / 姿势等）和你的输入，识图模式还有压缩后的图片；对话记录只在当前页面会话里。
 
 <!-- ai-vocab:start（npm run docs:ai 生成，勿手改）-->
 **操作（ops）**

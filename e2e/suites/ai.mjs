@@ -44,6 +44,37 @@ export async function run() {
   await settle(200);
   await aiPanelShot(`${OUT}/panel_empty.png`);
 
+  // 预制场景仅填入草稿；真正发送仍遵守生成确认与忙碌状态。
+  await page.evaluate(() => {
+    window.__presetBefore = { doc: window.__app.store.document, hist: window.__app.history.index };
+  });
+  await page.click('.ai-preset');
+  const preset = await page.evaluate(async () => {
+    const { SCENE_PRESETS } = await import('/src/ai/presets.js');
+    const p = window.__aiPanel, a = window.__app;
+    return document.querySelectorAll('.ai-preset').length === SCENE_PRESETS.length && SCENE_PRESETS.length === 8
+      && p.mode === 'generate' && p.textarea.value === SCENE_PRESETS[0].prompt && document.activeElement === p.textarea
+      && a.store.document === window.__presetBefore.doc && a.history.index === window.__presetBefore.hist && window.__aiMock.calls.length === 0;
+  });
+  ok('8 个预制场景：真实点击仅填入提示词并切生成模式，不调用模型或改文档', preset);
+  await page.click('.ai-send');
+  const confirmation = await page.evaluate(() => document.querySelector('#toast').textContent.includes('清空并生成') && window.__aiMock.calls.length === 0);
+  await page.click('#toast .toast-action.secondary');
+  ok('预制场景发送保留清空确认，取消不改变现有场景', confirmation && await page.evaluate(() => window.__app.store.document === window.__presetBefore.doc && window.__aiMock.calls.length === 0));
+  await page.click('.ai-presets summary');
+  const controls = await page.evaluate(() => {
+    const p = window.__aiPanel;
+    p.renderInput();
+    const collapsed = !document.querySelector('.ai-presets').open;
+    p.agent.busy = true; p.renderInput();
+    const disabled = [...document.querySelectorAll('.ai-preset')].every((button) => button.disabled);
+    p.agent.busy = false; p.mode = 'image'; p.renderInput();
+    const hidden = !document.querySelector('.ai-presets');
+    p.mode = 'modify'; p.presetsOpen = true; p.textarea.value = ''; p.renderInput();
+    return collapsed && disabled && hidden;
+  });
+  ok('预制场景折叠状态跨重绘保留，忙碌时禁用，识图模式隐藏', controls);
+
   // ---- 验收 1 一句话生成 ----
   const h0 = (await aiState()).hist;
   const r1 = await aiSend('generate', AI_GEN_INPUT);
@@ -270,5 +301,23 @@ export async function run() {
     await settle(80);
     await aiPanelShot(`${OUT}/panel_mode_${mode}.png`);
   }
+  // 常见笔记本高度：同时展开设置和预制场景，发送按钮仍可见；更矮窗口可滚动触达。
+  await page.setViewport({ width: 1440, height: 810, deviceScaleFactor: 1 });
+  await page.evaluate(() => { const p = window.__aiPanel; p.showSettings = true; p.mode = 'generate'; p.render(); });
+  await settle();
+  const laptop = await page.evaluate(() => {
+    const drawer = document.querySelector('.ai-drawer').getBoundingClientRect();
+    const send = document.querySelector('.ai-send').getBoundingClientRect();
+    return send.bottom <= drawer.bottom && send.top >= drawer.top;
+  });
+  await aiPanelShot(`${OUT}/panel_laptop.png`);
+  await page.setViewport({ width: 1440, height: 600, deviceScaleFactor: 1 });
+  await page.$eval('.ai-send', (button) => button.scrollIntoView({ block: 'nearest' }));
+  const compact = await page.evaluate(() => {
+    const drawer = document.querySelector('.ai-drawer').getBoundingClientRect();
+    const send = document.querySelector('.ai-send').getBoundingClientRect();
+    return send.bottom <= drawer.bottom && send.top >= drawer.top;
+  });
+  ok('设置与预制场景同时展开：810px 高窗口发送按钮可见，600px 高窗口可滚动触达', laptop && compact);
   console.log(`📸 截图在 ${OUT}/（gen_t2.5 / gen_viewport / image_viewport / panel_*）`);
 }
