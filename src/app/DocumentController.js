@@ -3,6 +3,7 @@ import { createEmptyDocument, APP_ID } from '../doc/schema.js';
 import { clone, xyz } from '../util/math.js';
 import { PROP_LABEL } from '../config.js';
 import { parseCharName } from '../doc/edit.js';
+import { exportCamera } from './exportSpec.js';
 import { loadDocument, APP_VERSION } from '../doc/serialize.js';
 
 /** 文档与 Three 场景之间的边界。普通事务只同步改动的实体；资源加载走 prepare/commit。 */
@@ -49,6 +50,10 @@ export class DocumentController {
       if (!a.findEntity(json.id)) throw new Error('实体尚未准备：' + json.id);
     }
     const removed = a.entities.filter((e) => !byId.has(e.id));
+    if (removed.some((ent) => ent.id === a.selectedId)) {
+      a.gizmo.detach();
+      a.selection.highlight(null);
+    }
     for (const ent of removed) {
       a.stage.remove(ent.root); a.labels.detach(ent); ent.dispose();
     }
@@ -115,6 +120,8 @@ export class DocumentController {
    * entities 里可能有当前场景复用的实体，apply 把文档值写进它们。
    */
   commitRuntime(doc, entities, panoHandle, { applyView = false, pruneShots = false, apply = [] } = {}) {
+    const preview = this.app.preview;
+    this.app.endPreview();
     this.app._scenePreview = null;
     this.app.gizmo.cancel();
     const prevSel = this.app.selectedId;
@@ -140,6 +147,7 @@ export class DocumentController {
     this.app.emit('entities');
     this.app.emit('scene');
     this.app.select(this.app.findEntity(prevSel) ? prevSel : null); // id 稳定：撤销后仍选中同一对象
+    if (preview && exportCamera(this.app)) this.app.startPreview({ play: false, returnView: preview.cameraView });
     this.app.emit('document', doc);
   }
 

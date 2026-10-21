@@ -1,17 +1,18 @@
 import { el, isTyping, toastError } from '../../util/dom.js';
 import { Emitter } from '../../util/Emitter.js';
-import { NAME_W, GUTTER } from './layout.js';
+import { nameWidth, GUTTER } from './layout.js';
 import { Transport } from './Transport.js';
 import { Ruler } from './Ruler.js';
 import { TrackRows, keyId, PROP_LABEL } from './TrackRows.js';
 import { dragKeys, dragBar, popupMenu } from './keyDrag.js';
+import { toggleKey, propState } from './animState.js';
 import { onKey, KEY_PRIORITY } from '../../util/keys.js';
 
-const RULER_H = 24;
+const RULER_H = 41;
+const TOOLS_W = 340;
 const PAD_R = 24;            // 时长之后留白（末尾的键 / 播放头不贴边）
 const MAX_PPS = 1500;        // 最大缩放（px / 秒）
 const PREF_KEY = 'director-stage.timeline';
-const SHORT_WINDOW = 900;    // 窗口低于此高度时默认折叠
 
 /** 会话偏好（折叠 / 自动打键 / 吸附 / 循环）：只存 localStorage，不进场景文档。 */
 function loadPrefs() {
@@ -33,17 +34,19 @@ export class TimelinePanel extends Emitter {
     super();
     this.app = app;
     this.container = container;
+    this.nameWidth = nameWidth(container.clientWidth);
     const tl = app.timeline, pb = app.playback;
 
     const prefs = loadPrefs();
-    this.collapsed = prefs.collapsed ?? (window.innerHeight < SHORT_WINDOW);
+    this.collapsed = prefs.collapsed ?? false;
     this.autoKey = !!prefs.autoKey;
     app.autoKey = this.autoKey;
     this.snap = prefs.snap ?? true;
     pb.loop = !!prefs.loop;
 
     this.pps = 100;          // px / 秒
-    this.fit = true;         // 未手动缩放：时长铺满可见宽度
+    this.fit = false;
+    this.initialZoom = true; // 首次布局显示约五秒；显式适配才铺满全长
     this.scrollLeft = 0;
     this.selKeys = new Set(); // 选中的关键帧（keyId）
 
@@ -54,7 +57,8 @@ export class TimelinePanel extends Emitter {
     pb.on('tick', (t) => this._onTick(t));
     pb.on('state', () => this.transport.reflectState());
     app.on('entities', () => { this.transport.reflectCameras(); this.rebuild(); }); // 改名 / 删除
-    app.on('selection', () => this.applySelection());
+    app.on('selection', () => this.rebuild());
+    app.on('transform', () => this.trackRows.reflectValues());
     onKey((e) => this._onKey(e), { priority: KEY_PRIORITY.timeline }); // 先于全局快捷键（Del 删键而非删实体）
     // 点面板以外的地方 = 取消选键（之后 Del 删的是实体而不是键）
     window.addEventListener('pointerdown', (e) => {
@@ -68,15 +72,16 @@ export class TimelinePanel extends Emitter {
     this.transport = new Transport(this);
     this.ruler = new Ruler(this);
     this.trackRows = new TrackRows(this);
-    this.phHead = el('div', { class: 'tl-ph-head' });
+    this.phHead = el('div', { class: 'tl-ph-head', title: '播放头：拖动查看不同时间的画面' });
     this.bindScrub(this.phHead);
-    this.corner = el('div', { class: 'tl-corner', style: { width: NAME_W + 'px' } });
+    this.corner = el('div', { class: 'tl-corner', style: { width: this.nameWidth + 'px' } });
+    this.corner.appendChild(this.transport.el);
     this.rulerRow = el('div', { class: 'tl-ruler-row', style: { height: RULER_H + 'px' } }, [this.corner, this.ruler.canvas, this.phHead]);
     this.rows = el('div', { class: 'tl-rows' });
     this.phLine = el('div', { class: 'tl-ph-line' });
     this.content = el('div', { class: 'tl-content' }, [this.rulerRow, this.rows, this.phLine]);
     this.scroll = el('div', { class: 'tl-scroll' }, [this.content]);
-    this.scroll.style.setProperty('--name-w', NAME_W + 'px');
+    this.scroll.style.setProperty('--name-w', this.nameWidth + 'px');
     this.scroll.style.setProperty('--gutter', GUTTER + 'px');
     this.scroll.addEventListener('scroll', () => { this.scrollLeft = this.scroll.scrollLeft; this._drawRuler(); });
     this.scroll.addEventListener('wheel', (e) => this._onWheel(e), { passive: false });
@@ -85,7 +90,7 @@ export class TimelinePanel extends Emitter {
     this.rows.addEventListener('contextmenu', (e) => this._onRowsContext(e));
     this.dragTip = el('div', { class: 'tl-dragtip' });
     document.body.appendChild(this.dragTip);
-    this.container.replaceChildren(this.transport.el, this.scroll);
+    this.container.replaceChildren(this.scroll, this.transport.tools);
     this._rebuildNow();
   }
 
@@ -103,10 +108,14 @@ export class TimelinePanel extends Emitter {
     for (const g of this.trackRows.groups) for (const r of g.rows) if (r.kind === 'track') for (const k of r.data.keys) alive.add(keyId(r.data.id, k.t));
     for (const id of [...this.selKeys]) if (!alive.has(id)) this.selKeys.delete(id);
     this.applySelection();
+    this.trackRows.reflectValues();
   }
 
   /** 选中联动：选中实体的行高亮；选中键高亮。 */
   applySelection() {
+    const alive = this.selectedAnimation && this.rows.querySelector(`[data-${this.selectedAnimation.kind}="${this.selectedAnimation.id}"]`);
+    if (!alive || !this.app.selectedIds.has(alive.dataset.ent)) this.selectedAnimation = null;
+    this.reflectTrackAction();
     const sel = this.app.selectedIds;
     for (const row of this.rows.querySelectorAll('.tl-row')) row.classList.toggle('sel', sel.has(row.dataset.ent));
     for (const k of this.rows.querySelectorAll('.tl-key')) k.classList.toggle('sel', this.selKeys.has(keyId(k.dataset.track, k.dataset.t)));
@@ -132,7 +141,7 @@ export class TimelinePanel extends Emitter {
       dragBar(this, e, bar, e.target.dataset.edge || 'mid');
       return;
     }
-    if (e.target.closest('.tl-op, .tl-caret')) return;
+    if (e.target.closest('button, .tl-caret')) return;
     const row = e.target.closest('.tl-row');
     if (!e.shiftKey) this.selKeys.clear();
     if (row) this._selectEntityOf(row);
@@ -218,7 +227,13 @@ export class TimelinePanel extends Emitter {
   }
 
   _selectEntityOf(node) {
-    const id = node.closest('.tl-row')?.dataset.ent;
+    const row = node.closest('.tl-row');
+    this.selectedAnimation = null;
+    for (const kind of ['track', 'path', 'constraint']) {
+      if (row?.dataset[kind]) this.selectedAnimation = { kind, id: row.dataset[kind] };
+    }
+    this.reflectTrackAction();
+    const id = row?.dataset.ent;
     if (id && this.app.selectedId !== id && this.app.findEntity(id)) this.app.select(id);
   }
 
@@ -226,21 +241,58 @@ export class TimelinePanel extends Emitter {
   removeAllAnimation(entId) {
     const tl = this.app.timeline;
     const { timeline, paths, constraints } = tl.toJSON();
+    this.app.store.batch('删除全部动画', () => {
     for (const t of timeline.tracks) if (t.target === entId) tl.removeTrack(t.id);
     for (const p of paths) if (p.target === entId) tl.removePath(p.id);
     for (const c of constraints) if (c.target === entId) tl.removeConstraint(c.id);
+    });
+  }
+
+  reflectTrackAction() {
+    const b = this.transport.removeBtn;
+    b.disabled = !this.app.selected;
+    b.textContent = this.selectedAnimation ? '－ 移除轨道' : '＋ 新建轨道';
+    b.title = this.selectedAnimation ? '移除选中的动画轨道或路径（保留实体）' : '为选中对象新建轨道';
+  }
+
+  addTrackMenu(event) {
+    const ent = this.app.selected;
+    if (!ent) return;
+    const properties = ent.type === 'camera' ? ['pos', 'rot', 'fov'] : ['pos', 'rot', 'scale'];
+    popupMenu(event.clientX, event.clientY, properties.map(property => {
+      const state = propState(this.app, this.app.timeline.view(), ent.id, property, this.app.playback.time);
+      return { label: PROP_LABEL[property], disabled: !!state.forced || !!state.track, onClick: () => {
+        try { toggleKey(this.app, ent, property); this.trackRows.collapsedEnts.delete(ent.id); this.rebuild(); } catch (err) { toastError(err); }
+      } };
+    }));
+  }
+
+  removeSelectedAnimation() {
+    const selected = this.selectedAnimation;
+    if (!selected) return;
+    const method = { track: 'removeTrack', path: 'removePath', constraint: 'removeConstraint' }[selected.kind];
+    this.app.timeline[method](selected.id);
+    this.selectedAnimation = null;
+    this.reflectTrackAction();
   }
 
   /** 尺寸 / 缩放 / 时长变化后重新排版：内容宽度、标尺、播放头、行内元素位置。 */
   _layout() {
+    this.nameWidth = nameWidth(this.container.clientWidth);
+    this.corner.style.width = this.nameWidth + 'px';
+    this.scroll.style.setProperty('--name-w', this.nameWidth + 'px');
     if (this.collapsed) return;
-    const vis = Math.max(0, this.scroll.clientWidth - NAME_W);
+    const vis = Math.max(0, this.scroll.clientWidth - this.nameWidth);
+    if (this.initialZoom && vis > TOOLS_W) {
+      this.pps = Math.max(this._fitPps(), (vis - TOOLS_W - GUTTER) / 5);
+    }
     if (this.fit) this.pps = this._fitPps();
+    this.transport.zoom.value = 100 * Math.log(this.pps / this._fitPps()) / Math.log(MAX_PPS / this._fitPps());
     const { duration } = this.app.timeline;
-    this.content.style.width = NAME_W + GUTTER + duration * this.pps + PAD_R + 'px';
+    this.content.style.width = this.nameWidth + GUTTER + duration * this.pps + PAD_R + TOOLS_W + 'px';
     this.content.style.setProperty('--pps', this.pps);
     this.content.style.setProperty('--dur', duration);
-    this.ruler.resize(vis, RULER_H);
+    this.ruler.resize(Math.max(1, vis - TOOLS_W), RULER_H);
     this.scrollLeft = this.scroll.scrollLeft;
     this._drawRuler();
     this._placePlayhead(this.app.playback.time);
@@ -248,7 +300,7 @@ export class TimelinePanel extends Emitter {
   }
 
   _fitPps() {
-    const vis = Math.max(1, this.scroll.clientWidth - NAME_W - GUTTER - PAD_R);
+    const vis = Math.max(1, this.scroll.clientWidth - this.nameWidth - TOOLS_W - GUTTER - PAD_R);
     return Math.max(1, vis / this.app.timeline.duration);
   }
 
@@ -260,12 +312,12 @@ export class TimelinePanel extends Emitter {
 
   // ---- 坐标换算 ----
   /** 时刻 → 内容坐标 x（含左侧名列）。 */
-  timeToX(t) { return NAME_W + GUTTER + t * this.pps; }
+  timeToX(t) { return this.nameWidth + GUTTER + t * this.pps; }
 
   /** 视口 clientX → 时刻（未夹取）。 */
   clientXToTime(clientX) {
     const r = this.scroll.getBoundingClientRect();
-    return (clientX - r.left + this.scroll.scrollLeft - NAME_W - GUTTER) / this.pps;
+    return (clientX - r.left + this.scroll.scrollLeft - this.nameWidth - GUTTER) / this.pps;
   }
 
   /** 吸附开启时按帧取整。 */
@@ -284,13 +336,14 @@ export class TimelinePanel extends Emitter {
     this.transport.reflectTime(t);
     if (this.collapsed) return;
     this._placePlayhead(t);
+    this.trackRows.reflectValues();
     if (this.app.playback.playing) this._follow(t);
   }
 
   /** 播放时播放头跑出可见区则翻页。 */
   _follow(t) {
     const x = GUTTER + t * this.pps;
-    const vis = this.scroll.clientWidth - NAME_W;
+    const vis = this.scroll.clientWidth - this.nameWidth - TOOLS_W;
     if (x < this.scroll.scrollLeft || x > this.scroll.scrollLeft + vis - 8) this.scroll.scrollLeft = Math.max(0, x - 8);
   }
 
@@ -328,7 +381,7 @@ export class TimelinePanel extends Emitter {
 
   togglePlay() {
     const pb = this.app.playback;
-    if (pb.playing) pb.pause(); else pb.play();
+    if (pb.playing) pb.pause(); else this.app.startPreview();
   }
 
   setPref(key, value) {
@@ -373,18 +426,22 @@ export class TimelinePanel extends Emitter {
   _onWheel(e) {
     if (!(e.metaKey || e.ctrlKey)) return;
     e.preventDefault();
+    this.setZoom(this.pps * Math.exp(-e.deltaY * 0.0025), e.clientX);
+  }
+
+  setZoom(value, clientX = this.scroll.getBoundingClientRect().left + this.nameWidth + GUTTER) {
     const r = this.scroll.getBoundingClientRect();
-    const anchorT = this.clientXToTime(e.clientX);
+    const anchorT = this.clientXToTime(clientX);
     const minPps = this._fitPps();
-    const pps = Math.min(MAX_PPS, Math.max(minPps, this.pps * Math.exp(-e.deltaY * 0.0025)));
-    this.fit = pps <= minPps + 1e-6;
-    this.pps = pps;
+    this.initialZoom = false;
+    this.pps = Math.min(MAX_PPS, Math.max(minPps, value));
+    this.fit = this.pps <= minPps + 1e-6;
     this._layout();
-    this.scroll.scrollLeft = Math.max(0, NAME_W + GUTTER + anchorT * pps - (e.clientX - r.left));
+    this.scroll.scrollLeft = Math.max(0, this.nameWidth + GUTTER + anchorT * this.pps - (clientX - r.left));
   }
 
   _onKey(e) {
-    if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+    if (!this.app.ready || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
     const pb = this.app.playback;
     let handled = true;
     switch (e.key) {
@@ -393,7 +450,7 @@ export class TimelinePanel extends Emitter {
       case 'ArrowRight': if (e.shiftKey) this.seek(pb.time + 1); else this.stepFrames(1); break;
       case 'Home': this.seek(0); break;
       case 'End': this.seek(this.app.timeline.duration); break;
-      case 'Escape': if (this.app.timeline.active) pb.stop(); else handled = false; break;
+      case 'Escape': if (this.app.timeline.active) this.app.stopPreview(); else handled = false; break;
       default: handled = this.handleKey(e);
     }
     if (handled) { e.preventDefault(); e.stopImmediatePropagation(); }

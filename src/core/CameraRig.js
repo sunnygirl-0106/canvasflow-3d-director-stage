@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { fitBounds, OVERVIEW_DIRECTION } from './framing.js';
 import { worldBox } from '../util/measure.js';
 
 // OrbitControls + 自动取景 + 取景比例 overlay + 重置视角
@@ -58,71 +59,26 @@ export class CameraRig {
     return this.controls.update();
   }
 
-  /**
-   * 自动取景：把主体（角色/道具，跳过相机）拉到占满画面，使其成为主角、背景退为陪衬。
-   * 关键点——**宽度只按主体「身体中心跨度 + 身宽余量」算，忽略 T-pose 张开的手臂**，
-   * 这样相机能贴得足够近、人物足够大；张开的手臂允许裁出画面边缘（电影常规构图）。
-   * 高度用骨骼盒全高。结果设为 home（「重置视角」回到此构图）。
-   * insetRight：视口右侧被遮住的宽度占比（AI 抽屉打开时）。> 0 时按剩余宽度取景、主体居中在左侧可用区域，
-   * 并保证每个主体的包围盒（角色用骨骼盒）投影都落在可用区域内（不够就再拉远）。
-   */
-  frameAll(entities, { margin = 1.06, bodyPad = 0.32, insetRight = 0 } = {}) {
-    const box = new THREE.Box3();        // 垂直 + 中心（角色用骨骼盒）
-    const boxes = [];
-    let any = false;
-    let minX = Infinity, maxX = -Infinity; // 主体「中心」的水平跨度（忽略张开手臂）
-    for (const e of entities) {
-      if (!e || e.type === 'camera' || !e.visible) continue;
-      const b = worldBox(e.root, { useBones: e.type === 'character' });
-      if (!b.isEmpty()) { box.union(b); boxes.push(b); any = true; }
-      const c = e.root.getWorldPosition(new THREE.Vector3());
-      minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x);
+  /** 显式对准主体保留方向；新场景总览建立统一斜俯视。 */
+  frameAll(entities, { overview = false } = {}) {
+    const visible = entities.filter(e => e && e.type !== 'camera' && e.visible);
+    const subjects = visible.filter(e => e.type === 'character' || e.type === 'group');
+    const box = new THREE.Box3();
+    for (const e of subjects.length ? subjects : visible) box.union(worldBox(e.root, { useBones: e.type === 'character' }));
+    if (box.isEmpty()) return;
+    // 近景道具参与取景；远处布景不能把主角缩成点。
+    const near = box.clone().expandByScalar(1.5);
+    for (const e of visible.filter(e => e.type === 'prop')) {
+      const bounds = worldBox(e.root);
+      if (near.containsBox(bounds)) box.union(bounds);
     }
-    if (!any || box.isEmpty()) return;
-
-    const free = 1 - Math.min(Math.max(insetRight, 0), 0.8); // 可用宽度占比
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const vfov = THREE.MathUtils.degToRad(this.camera.fov);
-    const tanFull = Math.tan(vfov / 2) * this.camera.aspect;
-    const hfov = 2 * Math.atan(tanFull * free);
-    const halfH = size.y * 0.5;
-    const halfW = (maxX - minX) * 0.5 + bodyPad; // 中心跨度 + 身宽，不含手臂
-    const dH = halfH / Math.tan(vfov / 2);
-    const dW = halfW / Math.tan(hfov / 2);
-    let dist = Math.max(dH, dW) * margin;
-    dist = Math.max(this.controls.minDistance, Math.min(dist, this.controls.maxDistance));
-
-    const dir = new THREE.Vector3().subVectors(this.camera.position, center); // 视线方向保持（从主体中心看过来）
-    if (dir.lengthSq() < 1e-6) dir.set(0, 0.12, 1);
-    dir.normalize();
-    const right = new THREE.Vector3().crossVectors(this.camera.up, dir).normalize(); // 相机右方
-    const place = (d) => {
-      // 可用区域的中心在 NDC x = −insetRight：注视点向右偏 insetRight × 半画幅宽，主体就落在左侧区域中央
-      this.controls.target.copy(center).addScaledVector(right, (1 - free) * d * tanFull);
-      this.camera.position.copy(this.controls.target).addScaledVector(dir, d);
-      this.controls.update();
-    };
-    place(dist);
-    if (free < 1) {
-      const xMax = 1 - 2 * (1 - free), p = new THREE.Vector3();
-      const inside = () => {
-        this.camera.updateMatrixWorld(true);
-        for (const b of boxes) {
-          for (let i = 0; i < 8; i++) {
-            p.set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(this.camera);
-            if (p.x < -0.98 || p.x > xMax - 0.02 || Math.abs(p.y) > 0.98) return false;
-          }
-        }
-        return true;
-      };
-      for (let i = 0; i < 40 && !inside() && dist < this.controls.maxDistance; i++) {
-        dist = Math.min(dist * 1.06, this.controls.maxDistance);
-        place(dist);
-      }
-    }
-
-    this.saveHome(); // 重置视角回到该自动取景
+    box.expandByScalar(0.12);
+    const direction = overview ? OVERVIEW_DIRECTION : this.camera.position.clone().sub(this.controls.target).normalize();
+    const fit = fitBounds(box, { fov: this.camera.fov, aspect: this.camera.aspect, direction, occupancy: overview ? (subjects.length > 1 ? 0.55 : 0.38) : 0.75, horizontalOccupancy: 0.72 });
+    this.controls.target.copy(fit.target);
+    this.camera.position.copy(fit.position);
+    this.controls.update();
+    this.saveHome();
   }
 
   /** 把当前视角记为「重置视角」的目标。 */
@@ -158,7 +114,8 @@ export class CameraRig {
     const H = this.viewport.clientHeight;
     let fw = W * 0.7;
     let fh = fw / this.ratio;
-    if (fh > H * 0.82) { fh = H * 0.82; fw = fh * this.ratio; }
+    const maxH = H * 0.82;
+    if (fh > maxH) { fh = maxH; fw = fh * this.ratio; }
     const x = (W - fw) / 2;
     const y = (H - fh) / 2;
     this.frameRect = { x, y, w: fw, h: fh };

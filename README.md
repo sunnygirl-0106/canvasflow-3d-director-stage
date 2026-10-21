@@ -135,7 +135,7 @@ Object.assign(cm.formOf(cam), { name: 'push_in', subject: a.id }); cm.request(ca
 
 本地开发也可在项目根目录的 `.env.local` 中设置 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL`（三个都必填），再启动或重启 `npm run dev`。AI 面板会自动使用本机代理，密钥留在服务端，不写入浏览器或构建产物。`.env.local` 已被 Git 忽略。`npm run build` 的静态产物和 `npm run preview` 使用面板中的浏览器配置；自动化自测不读取本机模型配置。
 
-抽屉内提供 8 个预制场景。点击只填入提示词并切换到「生成新场景」，可继续编辑；点击发送时仍需确认清空已有场景。
+左侧场景栏常驻「预制场景」入口，点击直接展开全部 8 个预制场景；AI 加号菜单也保留入口。点击只填入提示词并切换到「生成新场景」，可继续编辑；点击发送时仍需确认清空已有场景。
 
 **示例提示词**
 

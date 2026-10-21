@@ -1,8 +1,10 @@
 // 默认套件：核心功能 + 已修复问题的回归。
 import fs from 'node:fs';
 import { page, ok, warns } from '../harness.mjs';
+import { twoCharacterFixture } from '../harness.mjs';
 
 export async function run() {
+  await twoCharacterFixture();
   // 1 骨骼/restQ + 归一化（身高 = 体型注册表里的目标身高）
   const ci = await page.evaluate(async () => {
     const { BODY_TYPES } = await import('/src/config.js');
@@ -388,10 +390,10 @@ export async function run() {
     const cv = document.querySelector('#inspector .cam-preview canvas');
     const px = cv ? cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data : [];
     let lit = 0; for (let i = 0; i < px.length; i += 4) if (px[i] + px[i + 1] + px[i + 2] > 30) lit++;
-    document.querySelector('#dock .dockbtn[title^="添加角色"]').click();
-    const menuOpen = !!document.querySelector('#dock .dockmenu.open');
+    document.querySelector('#sideRail .dockbtn[title^="添加角色"]').click();
+    const menuOpen = !!document.querySelector('.dockmenu.open');
     document.body.click();
-    const menuClosed = !document.querySelector('#dock .dockmenu.open');
+    const menuClosed = !document.querySelector('.dockmenu.open');
     return { rows, entities: a.entities.length, hasPreview: !!cv, lit, menuOpen, menuClosed };
   });
   ok('UI：清单条目/机位预览出图/菜单开合', ui.rows === ui.entities && ui.hasPreview && ui.lit > 100 && ui.menuOpen && ui.menuClosed, JSON.stringify(ui));

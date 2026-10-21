@@ -31,7 +31,7 @@ test('addCharacter：默认落点 = spawnPoint(顶层实体数)、默认颜色�
   const a = edit.addCharacter(doc, { name: 'A', body: 'male' });
   const b = edit.addCharacter(doc, { name: 'B', body: 'female', pos: [1, 0, 2], yaw: 90, pose: 'sit', color: '#ff0000' });
   assert.deepEqual(a.transform.pos, edit.spawnPoint(0).map((v) => Math.round(v * 1e6) / 1e6));
-  assert.equal(a.color, '#34c759');
+  assert.equal(a.color, '#468de5');
   assert.equal(a.pose.preset, null);
   assert.deepEqual(b.transform.rot, [0, 90, 0]);
   assert.equal(b.pose.preset, 'sit');

@@ -1,8 +1,9 @@
 import fs from 'node:fs';
-import { page, ok } from '../harness.mjs';
+import { page, ok, twoCharacterFixture } from '../harness.mjs';
 import { pixelDiff, sleep, settle, clickSel, pickInOutliner, scr, toastText, hdist, moveField, moveBtn, camAim, camPose, camAnim, camShot } from '../helpers.mjs';
 
 export async function run() {
+  await twoCharacterFixture();
   const OUT = 'test-output/cam';
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
@@ -227,10 +228,10 @@ export async function run() {
   await page.evaluate(() => window.__app.playback.stop());
   const camY = (await camPose(ids.c1)).pos[1];
   const camP = (await camPose(ids.c1)).pos;
-  await clickSel('#dock .dockbtn[title^="路径"]');
+  await clickSel('.scene-quick-tools .dockbtn[title^="路径"]');
   await settle();
-  const towardLabel = await page.$$eval('#dock .dockmenu.open .menu-item', (ns) => ns.map((n) => n.textContent).join(' '));
-  await page.evaluate(() => [...document.querySelectorAll('#dock .dockmenu.open .menu-item')].find((n) => n.textContent.includes('点击落点')).click());
+  const towardLabel = await page.$$eval('.dockmenu.open .menu-item', (ns) => ns.map((n) => n.textContent).join(' '));
+  await page.evaluate(() => [...document.querySelectorAll('.dockmenu.open .menu-item')].find((n) => n.textContent.includes('点击落点')).click());
   await settle();
   const hint8 = await page.$eval('.path-hint', (n) => n.textContent);
   for (const q of [[camP[0] + 1.5, camY, camP[2] + 0.6], [camP[0] + 3, camY, camP[2] - 0.8], [camP[0] + 3.4, camY, camP[2] - 2.8]]) { await page.mouse.click(...await scr(q)); await settle(); }
@@ -257,9 +258,9 @@ export async function run() {
   await page.evaluate(() => [...document.querySelectorAll('#inspector [data-sec="path"] .minibtn')].find((b) => b.textContent === '删除路径').click());
   await settle();
   await pickInOutliner(ids.c1n);
-  await clickSel('#dock .dockbtn[title^="路径"]');
+  await clickSel('.scene-quick-tools .dockbtn[title^="路径"]');
   await settle();
-  await page.evaluate(() => [...document.querySelectorAll('#dock .dockmenu.open .menu-item')].find((n) => n.textContent.includes('推到')).click());
+  await page.evaluate(() => [...document.querySelectorAll('.dockmenu.open .menu-item')].find((n) => n.textContent.includes('推到')).click());
   await settle();
   const footA = (await camPose(ids.c1)).foot[ids.A];
   await page.mouse.click(...await scr([footA[0], 0.9, footA[2]]));
@@ -290,12 +291,14 @@ export async function run() {
   const canvasVs = (camId) => page.evaluate((camId) => {
     const a = window.__app;
     const cv = a.stage.renderer.domElement;
-    a.stage.render();
-    const view = cv.toDataURL('image/png');
-    // 视口画布里没有名牌（平时是 DOM 名牌），洁净渲染自阶段 G 起画精灵名牌：比机位画面时关掉名牌
-    a.beginCleanRender({ labels: false });
-    let snap;
-    try { snap = a.stage.snapshot(a.findEntity(camId).cam).toDataURL('image/png'); } finally { a.endCleanRender(); }
+    // 比较相同的有效画幅；预览包含精灵名牌，手动机位视角仍使用 DOM 名牌。
+    a.beginCleanRender({ labels: !!a.preview });
+    let view, snap;
+    try {
+      a.stage.render();
+      view = cv.toDataURL('image/png');
+      snap = a.stage.snapshot(a.findEntity(camId).cam).toDataURL('image/png');
+    } finally { a.endCleanRender(); }
     return { view, snap, pov: a.povCameraId, t: a.playback.time };
   }, camId);
   const writePair = (r, name) => {
@@ -348,7 +351,7 @@ export async function run() {
     a.playback.stop();
     return { director: r.active === null, labelHidden: r.label };
   }, c2.id);
-  ok('验收9 导演视角下播放不切换（仍是导演相机）', directorPlay.director && directorPlay.labelHidden, JSON.stringify(directorPlay));
+  ok('验收9 导演视角下拖播放头不切换（仍是导演相机）', directorPlay.director && directorPlay.labelHidden, JSON.stringify(directorPlay));
   await page.evaluate((id) => { const a = window.__app; a.timeline.setMainCamera(null); a.remove(id); }, c2.id);
   await pickInOutliner(ids.c1n);
 

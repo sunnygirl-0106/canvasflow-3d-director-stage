@@ -1,0 +1,292 @@
+{
+  "schema": "director-stage/0.1",
+  "meta": {
+    "name": "未命名场景",
+    "createdAt": "2026-10-21T09:48:54.073Z",
+    "updatedAt": "2026-10-21T09:48:57.001Z",
+    "app": "director-stage-demo",
+    "editorView": {
+      "pos": [
+        0.780867,
+        1.743671,
+        2.577027
+      ],
+      "target": [
+        0,
+        0.667722,
+        0.093443
+      ]
+    }
+  },
+  "scene": {
+    "scale": 1,
+    "pos": [
+      0,
+      0,
+      0
+    ],
+    "rot": [
+      0,
+      0,
+      0
+    ],
+    "sky": "#060608",
+    "labels": true,
+    "ground": {
+      "visible": true,
+      "opacity": 0.4,
+      "height": 0
+    },
+    "ratio": "auto",
+    "activeCameraId": "6nkq9fao",
+    "panorama": null
+  },
+  "assets": {},
+  "entities": [
+    {
+      "type": "character",
+      "id": "orfvkkll",
+      "name": "男角色",
+      "body": "male",
+      "color": "#468be7",
+      "visible": true,
+      "transform": {
+        "pos": [
+          -1.1,
+          0,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "pose": {
+        "preset": "sit",
+        "values": {
+          "lLegFwd": 90,
+          "rLegFwd": 90,
+          "lKnee": 90,
+          "rKnee": 90,
+          "lLegAbd": 6,
+          "rLegAbd": 6,
+          "spineX": 5,
+          "lArmFwd": 12,
+          "rArmFwd": 12,
+          "lArmTwist": -33,
+          "rArmTwist": -33,
+          "lFore": 74,
+          "rFore": 74
+        }
+      },
+      "parent": null
+    },
+    {
+      "type": "character",
+      "id": "wyzv4ysb",
+      "name": "女角色",
+      "visible": true,
+      "transform": {
+        "pos": [
+          1.1,
+          0,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "body": "female",
+      "color": "#e64c55",
+      "pose": {
+        "preset": "sit",
+        "values": {
+          "lLegFwd": 90,
+          "rLegFwd": 90,
+          "lKnee": 90,
+          "rKnee": 90,
+          "lLegAbd": 6,
+          "rLegAbd": 6,
+          "spineX": 5,
+          "lArmFwd": 12,
+          "rArmFwd": 12,
+          "lArmTwist": -33,
+          "rArmTwist": -33,
+          "lFore": 74,
+          "rFore": 74
+        }
+      },
+      "parent": null
+    },
+    {
+      "type": "prop",
+      "id": "71lhm0gc",
+      "name": "长椅",
+      "kind": "box",
+      "color": "#aab8c9",
+      "visible": true,
+      "transform": {
+        "pos": [
+          0,
+          0.48,
+          -0.18
+        ],
+        "rot": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          3.4,
+          0.18,
+          0.7
+        ]
+      }
+    },
+    {
+      "type": "prop",
+      "id": "11mlaf9h",
+      "name": "椅脚左",
+      "kind": "box",
+      "color": "#6d7782",
+      "visible": true,
+      "transform": {
+        "pos": [
+          -1.3,
+          0.2,
+          -0.18
+        ],
+        "rot": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.12,
+          0.4,
+          0.5
+        ]
+      }
+    },
+    {
+      "type": "prop",
+      "id": "d1yq31rw",
+      "name": "椅脚右",
+      "kind": "box",
+      "color": "#6d7782",
+      "visible": true,
+      "transform": {
+        "pos": [
+          1.3,
+          0.2,
+          -0.18
+        ],
+        "rot": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.12,
+          0.4,
+          0.5
+        ]
+      }
+    },
+    {
+      "type": "camera",
+      "id": "6nkq9fao",
+      "name": "机位1",
+      "visible": true,
+      "transform": {
+        "pos": [
+          0,
+          1.6,
+          8
+        ],
+        "rot": [
+          -4.645078,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "fov": 40,
+      "roll": 0,
+      "lookAt": [
+        0,
+        0.95,
+        0
+      ]
+    }
+  ],
+  "paths": [],
+  "constraints": [
+    {
+      "id": "412buio0",
+      "type": "lookAt",
+      "target": "6nkq9fao",
+      "subject": [
+        0,
+        0.95,
+        0
+      ],
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "start": null,
+      "end": null
+    }
+  ],
+  "timeline": {
+    "duration": 10,
+    "fps": 30,
+    "mainCameraId": "6nkq9fao",
+    "tracks": [
+      {
+        "id": "cr7tgq4p",
+        "target": "6nkq9fao",
+        "property": "pos",
+        "keys": [
+          {
+            "t": 0,
+            "value": [
+              0,
+              1.6,
+              8
+            ],
+            "ease": "linear"
+          },
+          {
+            "t": 10,
+            "value": [
+              0.3,
+              1.6,
+              7.5
+            ],
+            "ease": "linear"
+          }
+        ]
+      }
+    ]
+  }
+}

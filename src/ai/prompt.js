@@ -72,7 +72,9 @@ export const EXAMPLES = [
 /** 系统提示。 */
 export function systemPrompt() {
   const ex = EXAMPLES.map((e, i) => [
-    `### 范例 ${i + 1}：${MODE_LABEL[e.mode]}`,
+    `
+构图缺省策略：新角色不指定颜色时省略 color，由创建入口按蓝/红调色板分配；用户显式颜色、位置、FOV 必须保留。迎面相遇未指定距离时初始间距4.8米、最终1.5米，建议正面7米高1.6米FOV48度；全程保留头脚和两侧安全边距。
+### 范例 ${i + 1}：${MODE_LABEL[e.mode]}`,
     `当前场景：\n${e.summary}`,
     `用户：${e.input}`,
     `输出：${JSON.stringify(e.output)}`,
@@ -134,3 +136,5 @@ export const README_MARKERS = ['<!-- ai-vocab:start（npm run docs:ai 生成，�
 export function aiVocabMarkdown() {
   return ['**操作（ops）**', '', '```', opsText(), '```', '', '**词汇表**', '', '```', vocabText(), '```'].join('\n');
 }
+
+// 默认构图策略：显式参数优先，见系统提示词。

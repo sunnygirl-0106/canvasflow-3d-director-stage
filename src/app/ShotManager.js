@@ -1,3 +1,4 @@
+import { exportSize } from './exportSpec.js';
 import { toast } from '../util/dom.js';
 
 /** 占位：发送到画布 / 接生成链路（首版仅打日志）。 */
@@ -44,7 +45,11 @@ export class ShotManager {
     camEnt.cam.aspect = app.viewportAspect();
     camEnt.cam.updateProjectionMatrix();
 
-    const canvas = app.withCleanRender(() => app.stage.snapshot(camEnt.cam, { crop: app.rig.frameRect }));
+    const frame = app.rig.frameRect;
+    const options = app.preview
+      ? exportSize(app.ratio, Math.round(app.stage.viewport.clientHeight * app.stage.renderer.getPixelRatio()))
+      : { crop: frame };
+    const canvas = app.withCleanRender(() => app.stage.snapshot(camEnt.cam, options));
     const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
 
     const n = (this._seq[camEnt.id] = (this._seq[camEnt.id] || 0) + 1);

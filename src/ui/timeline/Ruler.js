@@ -16,7 +16,7 @@ export class Ruler {
   /** @param {import('./TimelinePanel.js').TimelinePanel} panel */
   constructor(panel) {
     this.panel = panel;
-    this.canvas = el('canvas', { class: 'tl-ruler' });
+    this.canvas = el('canvas', { class: 'tl-ruler', title: '时间标尺：点击或拖动定位时间；左右方向键逐帧查看' });
     this.ctx = this.canvas.getContext('2d');
     this._w = 0;
     this._h = 0;
@@ -68,7 +68,7 @@ export class Ruler {
     }
 
     // 秒刻度（主刻度带标签，半刻度短线）
-    const major = MAJOR_STEPS.find((s) => s * pps >= MIN_LABEL_PX) || MAJOR_STEPS.at(-1);
+    const major = pps >= 64 && pps < 500 ? 1 : MAJOR_STEPS.find((s) => s * pps >= MIN_LABEL_PX) || MAJOR_STEPS.at(-1);
     ctx.strokeStyle = dim;
     ctx.fillStyle = txt;
     ctx.font = '10.5px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';

@@ -27,8 +27,9 @@ export const PROP_LABEL = Object.fromEntries(PROP_KINDS);
 /** 新机位的默认视场角（度）。 */
 export const CAMERA_FOV = 40;
 
-// 角色默认颜色（截图同款素体绿）
+// 旧文档缺色的兼容回退；新建角色通过公共创建入口轮换调色板。
 export const CHARACTER_COLOR = 0x34c759;
+export const CHARACTER_PALETTE = [0x468de5, 0xe35e61, 0xe8b75d, 0x65b5a0];
 
 // 道具配色（新建道具按顺序轮换）
 export const PROP_PALETTE = [0x7ee787, 0xbc8cff, 0xffb066, 0x68d6c8, 0x4f8ef7, 0xf07b6b];

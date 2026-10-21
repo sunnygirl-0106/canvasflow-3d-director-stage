@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RATIO_OPTIONS } from '../config.js';
 import { el, toast, toastError } from '../util/dom.js';
 import { tripleRow, sliderRow, colorRow, dropdownRow, infoTip, shotCard, toHex, numberRow, toggleRow } from './widgets.js';
 import { PoseSliders } from './PoseSliders.js';
@@ -22,9 +23,9 @@ const fmtS = (x) => (Math.round(x * 10) / 10).toFixed(1);
 
 // 每种实体的标签页：[key, 文案]
 const TABS = {
-  character: [['attr', '属性'], ['pose', '姿势']],
-  group: [['attr', '属性'], ['pose', '姿势']],
-  camera: [['attr', '属性'], ['shots', '摄像机截图']],
+  character: [['attr', '属性'], ['pose', '姿势'], ['motion', '运动轨迹']],
+  group: [['attr', '属性'], ['pose', '姿势'], ['motion', '运动轨迹']],
+  camera: [['attr', '属性'], ['motion', '运动轨迹'], ['shots', '截图']],
 };
 
 // 右侧属性面板：道具 / 角色（属性+姿势）/ 群众组 / 摄像机（属性+摄像机截图）。
@@ -70,7 +71,7 @@ export class Inspector {
     if (!entity) { this.container.replaceChildren(); return; }
 
     const root = el('div', { class: 'rp rp-pad' });
-    this._activeHint = el('div', { class: 'tl-active-hint', text: '时间轴激活中：修改会写入当前时刻的关键帧', hidden: true });
+    this._activeHint = el('div', { class: 'tl-active-hint', text: '当前时刻的修改将记录为关键帧', hidden: true });
     root.appendChild(this._activeHint);
     const title = { character: '角色', camera: '摄像机', group: `${entity.name} (${entity.children.length})` }[entity.type] || '道具';
     root.appendChild(el('h2', { text: title }));
@@ -80,13 +81,13 @@ export class Inspector {
       case 'group':
         root.appendChild(el('div', { class: 'multi-note', text: `已选中 ${entity.members.length} 个角色，修改将同步应用到全部选中对象` }));
         root.appendChild(el('button', { class: 'minibtn', text: '⊟ 解组（拆为独立角色）', onclick: () => this.app.ungroupCrowd(entity.id) }));
-        if (tab === 'attr') this._attr(root, entity); else this._pose(root, entity.members);
+        if (tab === 'motion') this._motion(root); else if (tab === 'attr') this._attr(root, entity); else this._pose(root, entity.members);
         break;
       case 'character':
-        if (tab === 'attr') this._attr(root, entity); else this._pose(root, [entity]);
+        if (tab === 'motion') this._motion(root); else if (tab === 'attr') this._attr(root, entity); else this._pose(root, [entity]);
         break;
       case 'camera':
-        if (tab === 'attr') this._cameraAttr(root, entity); else this._cameraShots(root);
+        if (tab === 'motion') this._motion(root); else if (tab === 'attr') this._cameraAttr(root, entity); else this._cameraShots(root);
         break;
       default:
         this._attr(root, entity);
@@ -95,6 +96,12 @@ export class Inspector {
     this.container.replaceChildren(root);
     if (this._previewEnt) this.refreshPreview();
     this._refreshAnim();
+  }
+
+  _motion(root) {
+    this._animHost = el('div');
+    root.appendChild(this._animHost);
+    this._renderAnimSections();
   }
 
   // ---- 时间轴联动 ----
@@ -114,7 +121,7 @@ export class Inspector {
   inspect({ id, section }) {
     const ent = this.app.findEntity(id);
     if (!ent) return;
-    if (ent.type in this.tabs) this.tabs[ent.type] = 'attr';
+    if (ent.type in this.tabs) this.tabs[ent.type] = 'motion';
     if (this.app.selectedId !== id) this.app.select(id); else this.show(ent);
     const sec = this.container.querySelector(`[data-sec="${section}"]`);
     if (!sec) return;
@@ -502,9 +509,8 @@ export class Inspector {
 
     root.append(pos.el, rot.el, scl.el, uni.el, col.el);
     this._keyable(ent, [['pos', pos.el], ['rot', rot.el], ['scale', scl.el]]);
-    this._animHost = el('div');
-    root.appendChild(this._animHost);
-    this._renderAnimSections();
+    if (ent.type === 'prop') this._motion(root);
+
     this._syncFn = () => { pos.syncAll(); rot.syncAll(); scl.syncAll(); uni.set(o.scale.y / ent.baseScale); };
   }
 
@@ -516,6 +522,7 @@ export class Inspector {
     const commit = (prop) => () => app.edited(ent, new Set([prop])); // 一次修改结束：按时间轴状态归属（3.3）
 
     root.appendChild(this._buildPreview(ent));
+    root.appendChild(dropdownRow({ label: '截图 / 导出画幅', value: app.ratio, options: RATIO_OPTIONS.map(([value, label]) => ({ value, label })), onChange: value => app.setRatio(value) }).el);
     root.appendChild(this._nameField(ent));
 
     const cams = app.cameras;
@@ -561,9 +568,7 @@ export class Inspector {
     fovField.el.querySelector('label')?.appendChild(infoTip(FOV_TIP));
     root.appendChild(fovField.el);
     this._keyable(ent, [['pos', pos.el], ['rot', lookRow.el], ['fov', fovField.el]]);
-    this._animHost = el('div');
-    root.appendChild(this._animHost);
-    this._renderAnimSections();
+
 
     const myShots = app.shots.shotsForCamera(ent.id);
     if (myShots.length) {

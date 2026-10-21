@@ -1,3 +1,6 @@
+import { icon } from './ui/icons.js';
+import { installTooltips } from './ui/Tooltips.js';
+import { defaultScene } from './app/defaultScene.js';
 import { Stage } from './core/Stage.js';
 import { CameraRig } from './core/CameraRig.js';
 import { NavGizmo } from './core/NavGizmo.js';
@@ -16,6 +19,7 @@ import { OpenAICompatProvider, loadSettings } from './ai/provider.js';
 import { onKey, KEY_PRIORITY } from './util/keys.js';
 
 const $ = (id) => document.getElementById(id);
+installTooltips();
 
 // ---- core ----
 const stage = new Stage($('viewport'));
@@ -33,11 +37,13 @@ app.ai = new AiAgent(app, { provider: new OpenAICompatProvider(loadSettings()) }
 // ---- ui（各自订阅 app 事件）----
 // 导出视频弹层：打开 / 导出中拦下全部快捷键（Esc = 取消），优先级见 util/keys.js
 const exportModal = new ExportModal(app);
+app.on('exportVideo', () => exportModal.open());
 new ScenePanel($('scenePanel'), app);
 new Inspector($('inspector'), app);
 new Outliner($('outliner'), app, $('search'));
 const timelinePanel = new TimelinePanel($('timeline'), app);
-const aiPanel = new AiPanel($('viewport'), app);
+const aiPanel = new AiPanel($('stageTools'), app);
+$('scenePresets').onclick = () => aiPanel.openPresets();
 new Dock($('dock'), app, { timelinePanel, exportModal, aiPanel });
 
 // 右栏：未选中 → 3D场景面板；选中 → 属性面板
@@ -52,7 +58,7 @@ $('viewtabs').addEventListener('click', (e) => {
   if (b) app.setCameraView(b.dataset.v === 'camera');
 });
 app.on('view', (on) => {
-  $('navg').style.display = on ? 'none' : 'block';
+  $('navg').title = on ? '返回导演视角并重置（不修改机位）' : '重置视角';
   for (const b of $('viewtabs').querySelectorAll('button')) b.classList.toggle('on', (b.dataset.v === 'camera') === on);
 });
 // 机位视角旁的机位名：idle 灰字 = 当前机位；时间轴 active 透过主机位 = 强调色「▶ 主机位 · 名字」
@@ -67,8 +73,12 @@ const renderPov = () => {
 };
 app.on('pov', renderPov);
 app.on('entities', renderPov); // 改名
-$('helpBtn').onclick = () =>
-  toast('空白拖动=环绕视角 · 拖三色 gizmo=变换选中 · 底部「＋」加角色/模型 · 右侧「姿势」摆全身');
+$('closeBtn').innerHTML = icon('close', 18);
+$('foldLeft').innerHTML = icon('chevron', 18);
+$('foldLeft').style.transform = 'rotate(180deg)';
+$('foldRight').innerHTML = icon('chevron', 18);
+$('foldLeft').onclick = () => $('app').classList.toggle('left-collapsed');
+$('foldRight').onclick = () => $('app').classList.toggle('right-collapsed');
 $('closeBtn').onclick = () => toast('（演示）关闭');
 
 // 撤销只订阅已提交的文档事务；交互预览由各编辑入口管理。
@@ -77,7 +87,7 @@ new AutoSave(app); // 撤销栈变化后防抖 1s 写 localStorage
 
 // 键盘：输入控件内不拦截（文本框里的 ⌘Z 留给浏览器做文字撤销）
 onKey((e) => {
-  if (isTyping(e.target)) return;
+  if (!app.ready || isTyping(e.target)) return;
   const k = e.key.toLowerCase();
   if (e.metaKey || e.ctrlKey) {
     // ⌘Z / Ctrl+Z 撤销；⌘⇧Z / Ctrl+Shift+Z / Ctrl+Y 重做
@@ -102,21 +112,33 @@ window.__aiPanel = aiPanel;
 // ---- 按需渲染循环 ----
 stage.startLoop({
   tick: () => app.tick(),
-  beforeRender: () => { app.beforeRender(); navGizmo.update(); },
+  beforeRender: () => { app.beforeRender(); navGizmo.camera = app.getRenderCamera(); navGizmo.update(); },
 });
 
-// ---- seed：男女各一个角色，默认未选中（右侧显示 3D场景面板）----
-(async () => {
+// 初始化遮罩同时阻止指针与键盘操作；失败保留遮罩并提供重试。
+const startup = document.createElement('div');
+startup.className = 'startup';
+startup.setAttribute('role', 'status');
+document.body.appendChild(startup);
+$('app').inert = true;
+app.ready = false;
+async function initialize() {
+  startup.textContent = '正在准备场景…';
   try {
-    const [a, b] = await Promise.all([app.addCharacter('male'), app.addCharacter('female')]);
-    // 只改水平位置：y 保留各素体的站立基准偏移（脚底贴地）
-    if (a) { a.root.position.x = -1.1; a.root.position.z = 0.2; }
-    if (b) { b.root.position.x = 1.1; b.root.position.z = 0.2; }
-    if (a) app.edited(a);
-    if (b) app.edited(b);
-    app.frameSubjects(); // 自动对准主体，主体占满画面
-    app.select(null);
-  } catch (e) { console.error('seed failed', e); }
-  history.reset(); // 种子场景作为撤销起点（种子角色的添加不进撤销栈）
-  AutoSave.offerRestore(app); // 有上次存档：提示可恢复（不自动恢复）
-})();
+    const doc = await defaultScene(stage.camera);
+    await app.loadDocument(doc, { history: false, applyView: true });
+    app.select(doc.entities[0].id);
+    history.reset();
+    app.ready = true;
+    $('app').inert = false;
+    startup.remove();
+    AutoSave.offerRestore(app);
+  } catch (err) {
+    startup.textContent = '场景加载失败：' + err.message;
+    const retry = document.createElement('button');
+    retry.textContent = '重试';
+    retry.onclick = initialize;
+    startup.appendChild(retry);
+  }
+}
+initialize();

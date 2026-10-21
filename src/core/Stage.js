@@ -14,7 +14,7 @@ export class Stage {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(DEFAULT_SCENE.sky);
-    this.scene.fog = new THREE.Fog(DEFAULT_SCENE.sky, 18, 46);
+    this.scene.fog = new THREE.Fog(DEFAULT_SCENE.sky, 12, 32);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }) // 截图在渲染后同步读取，无需 preserveDrawingBuffer;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -84,16 +84,16 @@ export class Stage {
     this.groundGroup = new THREE.Group();
     this.scene.add(this.groundGroup);
 
-    const mat = new THREE.MeshStandardMaterial({ color: 0x0c0e12, roughness: 1, metalness: 0, transparent: true, opacity: 0.4 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0x1c2028, roughness: 1, metalness: 0, transparent: true, opacity: 0.65 });
     this.ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), mat);
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.receiveShadow = true;
     this.groundGroup.add(this.ground);
 
     // 蓝灰网格
-    this.grid = new THREE.GridHelper(40, 40, 0x2a3a5c, 0x1b2540);
+    this.grid = new THREE.GridHelper(40, 40, 0x303840, 0x242c34);
     this.grid.material.transparent = true;
-    this.grid.material.opacity = 0.55;
+    this.grid.material.opacity = 0.35;
     this.grid.position.y = 0.002;
     this.groundGroup.add(this.grid);
 
@@ -167,7 +167,9 @@ export class Stage {
     this.render(); // 立即重绘，避免缩放时闪出空白画布
   }
 
-  render() { this.renderer.render(this.scene, this.activeCamera || this.camera); }
+  render() {
+    this.renderer.render(this.scene, this.activeCamera || this.camera);
+  }
 
   /**
    * 按需渲染循环：每帧推进 tick（返回 true 表示画面在动，如环绕阻尼），

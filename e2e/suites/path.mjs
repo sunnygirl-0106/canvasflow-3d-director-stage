@@ -1,8 +1,9 @@
 import fs from 'node:fs';
-import { page, ok } from '../harness.mjs';
+import { page, ok, twoCharacterFixture } from '../harness.mjs';
 import { pixelDiff, sleep, settle, clickSel, pickInOutliner, scr, pathMenu, toastText, toastClick, animJSON, pathOf, cleanShot, dragPath, hdist } from '../helpers.mjs';
 
 export async function run() {
+  await twoCharacterFixture();
   const OUT = 'test-output/path';
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
@@ -122,7 +123,7 @@ export async function run() {
     const R = Math.hypot(s[0] - c[0], s[2] - c[2]);
     return { R, d: p.points.map((q) => Math.hypot(q[0] - c[0], q[2] - c[2])), closed: p.closed, start: p.start, speed: p.speed, n: p.points.length };
   }, { id: ids.cyl, c: boxC });
-  await page.evaluate(() => document.querySelector('#inspector [data-sec="path"]')?.scrollIntoView());
+  await page.evaluate(() => { [...document.querySelectorAll('.ptabs button')].find(b=>b.textContent==='运动轨迹')?.click(); document.querySelector('#inspector [data-sec="path"]')?.scrollIntoView(); });
   const setSweep = await page.evaluate(() => {
     const f = [...document.querySelectorAll('#inspector [data-sec="path"] .field')].find((x) => x.querySelector('label')?.textContent === '扫过角度');
     if (!f) return false;
@@ -291,7 +292,7 @@ export async function run() {
   await page.evaluate(() => window.__app.playback.stop());
 
   // ---- 13 Inspector 路径段截图 ----
-  await page.evaluate(() => document.querySelector('#inspector [data-sec="path"]')?.scrollIntoView());
+  await page.evaluate(() => { [...document.querySelectorAll('.ptabs button')].find(b=>b.textContent==='运动轨迹')?.click(); document.querySelector('#inspector [data-sec="path"]')?.scrollIntoView(); });
   await settle();
   await page.screenshot({ path: `${OUT}/13_inspector.png`, clip: await panelClip() });
 

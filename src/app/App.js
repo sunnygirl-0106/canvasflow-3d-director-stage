@@ -20,6 +20,7 @@ import * as edit from '../doc/edit.js';
 import { round6, clone } from '../util/math.js';
 import { History } from './History.js';
 import { Timeline } from '../anim/Timeline.js';
+import { exportCamera } from './exportSpec.js';
 import { Playback } from '../anim/Playback.js';
 
 const GIZMO_PROP = { translate: 'pos', rotate: 'rot', scale: 'scale' };
@@ -53,7 +54,6 @@ export class App extends Emitter {
     this.povCameraId = null;       // 机位视角下此刻实际出画的机位
     this.mainPreview = false;     // 正透过主机位看成片（gizmo 隐藏）
     this.povUnset = false;        // 机位视角 active 但没设主机位（视口提示）
-    this.frameInsetRight = 0;      // 视口右侧被 AI 抽屉遮住的宽度（px），自动取景时扣掉
     this.labelPreview = false;     // 「预览名牌」：视口也用精灵名牌（会话态）
     this._cleanDepth = 0;          // 洁净渲染嵌套层数（>0 时 gizmo 等不显示）
 
@@ -72,6 +72,7 @@ export class App extends Emitter {
     this.history = new History(this);
     // 主机位播放：机位视角下时间轴 active ↔ idle、主机位变化时切换出画机位
     this.timeline.on('active', () => this._syncPov());
+    this.playback.on('state', (state) => { if (state === 'idle') this.endPreview(); });
     this.timeline.on('change', () => this._syncPov());
 
     const dom = stage.renderer.domElement;
@@ -268,7 +269,9 @@ export class App extends Emitter {
 
   // ---- 视角 / 取景比例 ----
   // 取景框规则：'auto' = 全幅，不画取景框；仅当显式选定某比例时才显示对应取景框。
-  _applyFrame() { this.rig.setRatio(this.ratio === 'auto' ? 'free' : this.ratio); }
+  _applyFrame() {
+    this.rig.setRatio(this.preview || this.ratio === 'auto' ? 'free' : this.ratio);
+  }
 
   setRatio(str) {
     this.store.transact('取景比例', (doc) => { doc.scene.ratio = str; });
@@ -297,7 +300,9 @@ export class App extends Emitter {
   _syncPov() {
     const tl = this.timeline;
     const main = this.cameraView && tl.active ? this.findCamera(tl.mainCameraId) : null;
-    const ent = this.cameraView ? main || this.findCamera(this.activeCameraId) : null;
+    const ent = this.cameraView ? (this.preview ? exportCamera(this)?.ent : main || this.findCamera(this.activeCameraId)) : null;
+    if (this.preview && this.povCameraId && this.povCameraId !== ent?.id) this.playback.pause();
+    if (this.preview && !ent) { this.endPreview(false); return; }
     if (ent && this.stage.activeCamera !== ent.cam) {
       ent.cam.aspect = this.viewportAspect();
       ent.cam.updateProjectionMatrix();
@@ -323,7 +328,42 @@ export class App extends Emitter {
     this.select(id);
   }
 
+  /** 用户播放入口：先切画面，再让时间推进；不写文档、不改选择。 */
+  startPreview({ play = true, returnView = this.cameraView } = {}) {
+    if (!exportCamera(this)) { toast('请先添加或选择机位'); return false; }
+    if (!this.preview) {
+      this.preview = { cameraView: returnView };
+      this.labelSprites.enable();
+      this.beginCleanRender();
+    }
+    this.cameraView = true;
+    this.rig.controls.enabled = false;
+    this._applyFrame();
+    this._syncPov();
+    this.emit('view', true);
+    if (play) this.playback.play();
+    return true;
+  }
+
+  endPreview(restore = this.preview?.cameraView) {
+    if (!this.preview) return;
+    this.playback.pause();
+    this.preview = null;
+    this.cameraView = !!restore && !!exportCamera(this);
+    this.stage.activeCamera = null;
+    this.rig.controls.enabled = !this.cameraView;
+    this.endCleanRender();
+    this.labelSprites.disable();
+    this._applyFrame();
+    this._syncPov();
+    this._syncEditCamera();
+    this.emit('view', this.cameraView);
+  }
+
+  stopPreview() { this.playback.stop(); this.endPreview(); }
+
   setCameraView(on) {
+    if (this.preview) this.endPreview(on);
     if (on) {
       // 选定出画机位：当前选中相机 > 上次 active > 第一个相机
       const sel = this.selected?.type === 'camera' ? this.selected : null;
@@ -437,16 +477,10 @@ export class App extends Emitter {
     this.stage.render();
   }
 
-  /**
-   * 自动对准主体：相机贴合所有角色/道具取景（默认加载时调用）。
-   * 视口右侧被遮住的宽度（AI 抽屉打开时由 AiPanel 设 frameInsetRight，px）从可用视口里扣掉，抽屉关了恢复为 0。
-   */
-  frameSubjects() {
-    const w = this.stage.renderer.domElement.clientWidth;
-    this.rig.frameAll(this.entities, { insetRight: w > 0 ? this.frameInsetRight / w : 0 });
-  }
+  /** 自动对准主体；AI 胶囊和选项不改变取景区域。 */
+  frameSubjects() { this.rig.frameAll(this.entities); }
 
-  resetView() { this.rig.resetView(); toast('已重置视角'); }
+  resetView() { if (this.cameraView) this.setCameraView(false); this.rig.resetView(); toast('已重置视角'); }
 
   /**
    * 实体被 gizmo / 面板修改后（一次操作结束时）调用。时间轴 idle：把指定实体的手动值提交到 Store。
@@ -501,5 +535,6 @@ export class App extends Emitter {
       hideCameras: this.cameraView,
     });
     this.labelSprites.update();
+    if (this._cleanDepth) this.hideOverlays();
   }
 }

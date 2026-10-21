@@ -32,10 +32,10 @@ export const warns = [];
 page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text() + (m.location()?.url ? ` @ ${m.location().url.slice(0, 120)}` : '')); if (m.type() === 'warn') warns.push(m.text()); });
 page.on('pageerror', (e) => errs.push('PAGEERROR: ' + e.message));
 
-/** 打开应用并等两个种子角色加载完。 */
+/** 打开应用并等待完整默认场景 ready。 */
 export async function openApp() {
   await page.goto(URL_, { waitUntil: 'networkidle0', timeout: 30000 });
-  await page.waitForFunction(() => window.__app?.history.enabled && window.__app.entities.filter((e) => e.type === 'character' && e.bones?.size > 0).length >= 2, { timeout: 30000 });
+  await page.waitForFunction(() => window.__app?.ready, { timeout: 30000 });
 }
 
 /** 关浏览器与服务，以 code 退出。 */
@@ -51,4 +51,18 @@ export async function finish() {
   const failed = results.filter((r) => !r.pass).length;
   console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
   await close(failed ? 1 : 0);
+}
+
+/** 双人业务用例显式准备自己的场景，不依赖生产 seed。 */
+export async function twoCharacterFixture() {
+  await page.evaluate(async () => {
+    const a = window.__app;
+    const { createEmptyDocument } = await import('/src/doc/schema.js');
+    const { addCharacter } = await import('/src/doc/edit.js');
+    const doc = createEmptyDocument();
+    addCharacter(doc, { name: '角色A', body: 'male', pos: [-1.1, 0, 0.2] });
+    addCharacter(doc, { name: '角色B', body: 'female', pos: [1.1, 0, 0.2] });
+    await a.loadDocument(doc, { history: false });
+    a.frameSubjects(); a.select(null); a.history.reset();
+  });
 }

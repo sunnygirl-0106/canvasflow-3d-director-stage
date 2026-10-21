@@ -83,17 +83,15 @@ export async function run() {
       const cv = a.withCleanRender(() => a.stage.snapshot(cam.cam, { width: W, height: H }));
       window.__saveFile(file, cv.toDataURL('image/png'));
       const ax = (p.x * 0.5 + 0.5) * W, ay = (-p.y * 0.5 + 0.5) * H;
-      // 在锚点上方 0–90 px、左右 ±200 px 的窗口里找名牌的白底像素
-      const x0 = Math.max(0, Math.round(ax - 200)), y0 = Math.max(0, Math.round(ay - 90));
-      const w = Math.min(W - x0, 400), h = Math.min(H - y0, Math.round(ay) + 6 - y0);
+      // 无底白字：采样实际精灵框，白字占比不能变成实心白色气泡。
+      const box = a.labelSprites.debugRects(cam.cam, W, H).find(r => r.text === m.name);
+      const x0 = Math.max(0, Math.floor(box.x)), y0 = Math.max(0, Math.floor(box.y));
+      const w = Math.ceil(box.w), h = Math.ceil(box.h);
       const px = cv.getContext('2d').getImageData(x0, y0, w, h).data;
-      let n = 0, bottom = -1;
-      const white = (i) => px[i] > 245 && px[i + 1] > 245 && px[i + 2] > 245;
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (white((y * w + x) * 4)) { n++; bottom = Math.max(bottom, y); }
-      let xmin = Infinity, xmax = -Infinity;
-      const row = bottom - 6; // 底边上方 6 px：圆角已过，左右边界即名牌框宽
-      if (row >= 0) for (let x = 0; x < w; x++) if (white((row * w + x) * 4)) { xmin = Math.min(xmin, x); xmax = Math.max(xmax, x); }
-      return { ax, ay, n, bx: x0 + (xmin + xmax + 1) / 2, by: y0 + bottom + 1, bw: xmax - xmin + 1 };
+      let n = 0;
+      for (let i = 0; i < px.length; i += 4) if (px[i] > 245 && px[i+1] > 245 && px[i+2] > 245) n++;
+      return { ax, ay, n, fraction: n / (w*h), bx: box.x + box.w/2, by: box.y + box.h, bh: box.h, bw: box.w };
+
     };
     a.playback.stop();
     a.setLabelPreview(true);
@@ -111,14 +109,14 @@ export async function run() {
     a.setLabelsVisible(true);
     return { on, onState, offState, hidden, hiddenState };
   }, ids);
-  ok('验收1 精灵名牌：快照里锚点上方采到名牌白底；DOM 名牌层隐藏',
-    lab.on.n > 1500 && lab.onState.dom === 'none' && lab.onState.vis && lab.onState.sprites >= 2,
-    `白底像素 ${lab.on.n}，DOM=${lab.onState.dom}，精灵 ${lab.onState.sprites}`);
+  ok('验收1 精灵名牌：快照里采到白字，透明底不出现白色气泡；DOM 名牌层隐藏',
+    lab.on.n > 50 && lab.on.fraction < .65 && lab.onState.dom === 'none' && lab.onState.vis && lab.onState.sprites >= 2,
+    `白字像素 ${lab.on.n}，DOM=${lab.onState.dom}，精灵 ${lab.onState.sprites}`);
   ok('验收1 关闭后 DOM 恢复、精灵移除；scene.labels=false 时两者都不显示',
     lab.offState.dom === 'block' && lab.offState.sprites === 0 && !lab.offState.groupVis && lab.hidden.n === 0 && lab.hiddenState.dom === 'none' && !lab.hiddenState.groupVis,
-    `关闭：DOM=${lab.offState.dom} 精灵 ${lab.offState.sprites}；labels=false：白底 ${lab.hidden.n} DOM=${lab.hiddenState.dom}`);
-  const dpos = Math.hypot(lab.on.bx - lab.on.ax, lab.on.by - lab.on.ay);
-  ok('验收2 精灵名牌框底边中点 与 DOM 名牌锚点 差 < 4 px（1080p）', dpos < 4,
+    `关闭：DOM=${lab.offState.dom} 精灵 ${lab.offState.sprites}；labels=false：白字 ${lab.hidden.n} DOM=${lab.hiddenState.dom}`);
+  const dpos = Math.hypot(lab.on.bx - lab.on.ax, lab.on.by - (lab.on.ay - .35 * lab.on.bh));
+  ok('验收2 精灵名牌框底边中点 与 DOM 名牌偏移后锚点 差 < 4 px（1080p）', dpos < 4,
     `锚点 (${lab.on.ax.toFixed(1)}, ${lab.on.ay.toFixed(1)}) 名牌底 (${lab.on.bx.toFixed(1)}, ${lab.on.by}) 差 ${dpos.toFixed(2)} px，框宽 ${lab.on.bw}`);
 
   // ---- 验收 5 分辨率与比例 ----
@@ -138,8 +136,8 @@ export async function run() {
   const bcdp = await browser.target().createCDPSession();
   await bcdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
   const openExport = async () => {
-    await clickSel('#dock .dockbtn[title^="场景"]');
-    await page.evaluate(() => [...document.querySelectorAll('#dock .dockmenu.open .menu-item')].find((n) => n.textContent.includes('导出视频')).click());
+    await clickSel('#sceneActions .dockbtn[title^="场景"]');
+    await page.evaluate(() => [...document.querySelectorAll('.dockmenu.open .menu-item')].find((n) => n.textContent.includes('导出视频')).click());
     await page.waitForSelector('.export-box');
     await settle();
   };
@@ -220,8 +218,8 @@ export async function run() {
   const unsup = await page.evaluate(async () => {
     window.__VE = window.VideoEncoder;
     window.VideoEncoder = undefined;
-    document.querySelector('#dock .dockbtn[title^="场景"]').click();
-    const item = [...document.querySelectorAll('#dock .dockmenu.open .menu-item')].find((n) => n.textContent.includes('导出视频'));
+    document.querySelector('#sceneActions .dockbtn[title^="场景"]').click();
+    const item = [...document.querySelectorAll('.dockmenu.open .menu-item')].find((n) => n.textContent.includes('导出视频'));
     const greyed = item.classList.contains('unsupported');
     item.click();
     const t = document.getElementById('toast').textContent;
@@ -243,6 +241,8 @@ export async function run() {
     const a = window.__app;
     const { renderFrame } = await import('/src/app/VideoExporter.js');
     const W = 960, H = 540;
+    // 此颜色探针专测辅助物：显式绿色夹具避免把新蓝/红角色材质误判为 gizmo。
+    for (const e of a.entities.filter(e => e.type === 'character')) { e.setColor('#34c759'); a.edited(e); }
     a.playback.stop();
     a.setCameraView(false);
     const plain = (await renderFrame(a, 1.0, { width: W, height: H })).toDataURL('image/png');

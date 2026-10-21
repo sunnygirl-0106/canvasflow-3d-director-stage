@@ -295,7 +295,7 @@ export async function applyOps(app, ops, { mode = 'modify' } = {}) {
     return { ok: false, applied: 0, renames: r.renames, warnings: r.warnings, errors: [`加载失败：${err?.message || err}`] };
   }
   app.history.capture(); // 一次 AI 应用 = 一步撤销
-  if (mode !== 'modify' && !app.cameraView) app.frameSubjects();
+  if (mode !== 'modify') { app.setCameraView(false); app.rig.frameAll(app.entities, { overview: true }); }
   return { ok: true, applied: r.applied, renames: r.renames, warnings: r.warnings, errors: [] };
 }
 

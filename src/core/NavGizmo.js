@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { onKey, KEY_PRIORITY } from '../util/keys.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const AXES = [
@@ -18,16 +19,19 @@ export class NavGizmo {
   constructor(svgEl_, camera, onReset) {
     this.camera = camera;
     this.C = 37; // 中心
-    this.R = 25; // 轴长
+    this.R = 20; // 轴长
     this._d = new THREE.Vector3();
     svgEl_.parentElement.addEventListener('click', onReset);
+    onKey(e => {
+      if (svgEl_.parentElement.contains(e.target) && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.stopPropagation(); onReset(); }
+    }, { priority: KEY_PRIORITY.timeline + 1 });
 
     const { C } = this;
-    svgEl_.replaceChildren(svgEl('circle', { cx: C, cy: C, r: 3, fill: '#3a3a40' }));
+    svgEl_.replaceChildren(svgEl('circle', { cx: C, cy: C, r: 33, fill: '#17191f' }));
     this.axes = AXES.map(([x, y, z, color, label]) => {
       const line = svgEl('line', { x1: C, y1: C, x2: C, y2: C, stroke: color, 'stroke-width': 1.8, opacity: 0.85 });
       const dot = svgEl('circle', { cx: C, cy: C, r: 4.5, fill: color });
-      const text = svgEl('text', { x: C, y: C, 'font-size': 6.5, fill: '#0a0a0c', 'text-anchor': 'middle', 'font-weight': 700 });
+      const text = svgEl('text', { x: C, y: C, 'font-size': 0, fill: '#0a0a0c', 'text-anchor': 'middle', 'font-weight': 700 });
       text.textContent = label;
       svgEl_.append(line, dot, text);
       return { dir: new THREE.Vector3(x, y, z), line, dot, text };

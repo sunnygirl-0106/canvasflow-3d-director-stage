@@ -16,6 +16,8 @@ export function el(tag, attrs = {}, children = []) {
       node.setAttribute(k, v);
     }
   }
+  // 图标按钮的提示同时提供给读屏器。
+  if (tag === 'button' && attrs.title && !attrs['aria-label']) node.setAttribute('aria-label', attrs.title);
   const list = Array.isArray(children) ? children : [children];
   for (const c of list) {
     if (c == null) continue;

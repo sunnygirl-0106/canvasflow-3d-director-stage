@@ -3,15 +3,8 @@ import { icon } from '../icons.js';
 
 const FPS_OPTIONS = [24, 25, 30, 60];
 
-/** 秒 → "mm:ss.cc"。 */
-export function fmtTime(t) {
-  const cs = Math.round(Math.max(0, t) * 100);
-  const m = Math.floor(cs / 6000);
-  const s = Math.floor((cs % 6000) / 100);
-  const c = cs % 100;
-  const p = (n) => String(n).padStart(2, '0');
-  return `${p(m)}:${p(s)}.${p(c)}`;
-}
+/** 主显示保留两位小数；编辑和采样精度不受格式化影响。 */
+export function fmtTime(t) { return Math.max(0, t).toFixed(2); }
 
 /**
  * 播放条：⏮ ◀ ▶/⏸ ⏹ ▶| ⏭ ｜ 当前时刻 / 时长 ｜ 循环 ｜ 吸附 ｜ 自动打键 ｜ fps ｜ 时长 ｜ 主机位 ｜ 折叠。
@@ -24,15 +17,14 @@ export class Transport {
     const { app } = panel;
     const tl = app.timeline, pb = app.playback;
 
-    const btn = (name, title, onclick, cls = '') => el('button', { class: 'tl-btn ' + cls, title, html: icon(name, 16, 2), onclick });
+    const btn = (name, title, onclick, cls = '') => el('button', { class: 'tl-btn ' + cls, title, 'aria-label': title, html: icon(name, 16, 2), onclick });
     this.playBtn = btn('play', '播放 / 暂停（Space）', () => panel.togglePlay(), 'tl-play');
-    this.loopBtn = btn('loop', '循环播放', () => panel.setPref('loop', !pb.loop));
-    this.snapBtn = btn('magnet', '吸附到帧', () => panel.setPref('snap', !panel.snap));
+    this.loopBtn = btn('loop', '循环播放：播到结尾后从头继续', () => panel.setPref('loop', !pb.loop));
+    this.snapBtn = btn('magnet', '吸附到帧：拖动播放头和关键帧时对齐到完整帧', () => panel.setPref('snap', !panel.snap));
     this.autoKeyBtn = btn('record', '自动打键：时间轴激活时，修改没有轨道的属性也会新建轨道并打键', () => panel.setPref('autoKey', !panel.autoKey), 'tl-autokey');
-    this.timeEl = el('span', { class: 'tl-time', text: '00:00.00' });
-    this.durEl = el('span', { class: 'tl-dur', text: '/ ' + fmtTime(tl.duration) });
+    this.timeEl = el('span', { class: 'tl-time', title: '当前播放时间（秒）', text: '0.00' });
 
-    this.fpsSel = el('select', { class: 'tl-sel', title: '帧率（吸附与导出）' }, FPS_OPTIONS.map((n) => el('option', { value: n, text: n + ' fps' })));
+    this.fpsSel = el('select', { class: 'tl-sel', title: '帧率（吸附与导出）' }, FPS_OPTIONS.map((n) => el('option', { value: n, text: n + ' 帧/秒' })));
     this.fpsSel.addEventListener('change', () => { try { tl.setFps(+this.fpsSel.value); } catch (e) { toastError(e); this.reflectTimeline(); } });
 
     this.durInput = el('input', { class: 'tl-num', type: 'number', min: 0.1, step: 0.5, title: '时长（秒）' });
@@ -47,22 +39,28 @@ export class Transport {
 
     this.foldBtn = btn('chevron', '折叠 / 展开时间轴', () => panel.toggleCollapsed(), 'tl-fold');
 
+    this.removeBtn = el('button', { class: 'tl-track-action', title: '新建轨道', text: '＋ 新建轨道', onclick: (e) => panel.selectedAnimation ? panel.removeSelectedAnimation() : panel.addTrackMenu(e) });
+    this.zoom = el('input', { type: 'range', min: 0, max: 100, value: 0, title: '时间轴缩放：向右拖动放大，查看更精细的时间和关键帧', class: 'tl-zoom' });
+    this.zoom.addEventListener('input', () => panel.setZoom(panel._fitPps() * Math.pow(1500 / panel._fitPps(), +this.zoom.value / 100)));
+    const fit = el('button', { class: 'tl-addkey', text: '适配', title: '适配完整时长', onclick: () => panel.setZoom(panel._fitPps()) });
+    const exp = el('button', { class: 'tl-export', text: '导出视频', onclick: () => app.emit('exportVideo') });
+    this.tools = el('div', { class: 'tl-tools' }, [this.zoom, this.foldBtn, this.fpsSel, exp]);
+    const menu = el('details', { class: 'tl-more' }, [
+      el('summary', { text: '•••', title: '帧操作与时间轴设置' }),
+      el('div', { class: 'tl-settings' }, [
+        btn('toStart', '回到开头（Home）', () => panel.seek(0)),
+        btn('prevFrame', '上一帧（←）', () => panel.stepFrames(-1)),
+        btn('stop', '停止并回到手动值（Esc）', () => app.stopPreview()),
+        btn('nextFrame', '下一帧（→）', () => panel.stepFrames(1)),
+        btn('toEnd', '跳到结尾（End）', () => panel.seek(tl.duration)),
+        this.snapBtn, this.autoKeyBtn, fit,
+        el('label', { class: 'tl-field' }, [el('span', { text: '主机位' }), this.camSel]),
+      ]),
+    ]);
     this.el = el('div', { class: 'tl-transport' }, [
-      btn('toStart', '回到开头（Home）', () => panel.seek(0)),
-      btn('prevFrame', '上一帧（←）', () => panel.stepFrames(-1)),
-      this.playBtn,
-      btn('stop', '停止并回到手动值（Esc）', () => pb.stop()),
-      btn('nextFrame', '下一帧（→）', () => panel.stepFrames(1)),
-      btn('toEnd', '跳到结尾（End）', () => panel.seek(tl.duration)),
-      el('span', { class: 'tl-clock' }, [this.timeEl, this.durEl]),
-      el('span', { class: 'tl-vsep' }),
-      this.loopBtn, this.snapBtn, this.autoKeyBtn,
-      el('span', { class: 'tl-vsep' }),
-      this.fpsSel,
-      el('label', { class: 'tl-field' }, [el('span', { text: '时长' }), this.durInput, el('span', { text: 's' })]),
-      el('label', { class: 'tl-field' }, [el('span', { text: '主机位' }), this.camSel]),
-      el('span', { class: 'tl-grow' }),
-      this.foldBtn,
+      this.playBtn, btn('stopwatch', '回到开头（Home）', () => panel.seek(0)), this.loopBtn,
+      el('span', { class: 'tl-clock' }, [this.timeEl, this.durInput, el('span', { class: 'tl-unit', text: 's' })]),
+      this.removeBtn, menu,
     ]);
     this.reflectAll();
   }
@@ -85,10 +83,9 @@ export class Transport {
 
   reflectTimeline() {
     const tl = this.panel.app.timeline;
-    this.durEl.textContent = '/ ' + fmtTime(tl.duration);
-    if (document.activeElement !== this.durInput) this.durInput.value = String(tl.duration);
+    if (document.activeElement !== this.durInput) this.durInput.value = fmtTime(tl.duration);
     if (!FPS_OPTIONS.includes(tl.fps) && !this.fpsSel.querySelector(`option[value="${tl.fps}"]`)) {
-      this.fpsSel.appendChild(el('option', { value: tl.fps, text: tl.fps + ' fps' })); // 导入文档的非常规帧率
+      this.fpsSel.appendChild(el('option', { value: tl.fps, text: tl.fps + ' 帧/秒' })); // 导入文档的非常规帧率
     }
     this.fpsSel.value = String(tl.fps);
     this.reflectCameras();

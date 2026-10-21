@@ -3,7 +3,7 @@ import { DockMenu } from './dockMenu.js';
 import { HistoryModal } from './HistoryModal.js';
 import { groupedPresets } from '../core/cameraPresets.js';
 import { listCanvasAssets } from '../util/assetLibrary.js';
-import { RATIO_OPTIONS, isPanoRatio, BODY_TYPES, PROP_KINDS } from '../config.js';
+import { isPanoRatio, BODY_TYPES, PROP_KINDS } from '../config.js';
 import { icon } from './icons.js';
 import { exportScene, pickAndImportScene } from '../app/SceneFile.js';
 import { pathModes } from '../app/PathTool.js';
@@ -42,7 +42,7 @@ export class Dock {
   }
 
   _btn(iconName, title, onClick, key) {
-    const b = el('button', { class: 'dockbtn', title, html: svg(iconName), onclick: onClick });
+    const b = el('button', { class: 'dockbtn', title, 'aria-label': title, html: svg(iconName), onclick: onClick });
     if (key) this.modeBtns[key] = b;
     return b;
   }
@@ -66,7 +66,7 @@ export class Dock {
     this.modeBtns = {};
 
     // 1 变换（移动/旋转/缩放）
-    const tf = this._btn(this._modeIcon(app.transformMode), '变换（移动 / 旋转 / 缩放）', (e) => { e.stopPropagation(); this.transformMenu.toggle(); });
+    const tf = this._btn(this._modeIcon(app.transformMode), '移动（点击选择移动 / 旋转 / 缩放）', (e) => { e.stopPropagation(); this.transformMenu.toggle(); });
     tf.classList.add('on');
     this.transformBtn = tf;
 
@@ -90,12 +90,9 @@ export class Dock {
       app.pathTool.on('mode', (m) => this.pathBtn?.classList.toggle('on', !!m));
     }
 
-    // 5 取景比例
-    const frame = this._btn('frame', '选择画幅比例', (e) => { e.stopPropagation(); this.ratioMenu.toggle(); });
-    this.ratioBtn = frame;
-
     // 6 截图
     const shot = this._btn('shot', '截图', () => app.shots.captureShot());
+    shot.dataset.tooltip = '截图：拍下当前画面，保存到摄像机截图列表';
 
     // 7 场景：撤销 / 重做 / 导出 / 导入 / 导出视频
     const scene = this._btn('scene', '场景（撤销 / 重做 / 导出 / 导入 / 导出视频）', (e) => { e.stopPropagation(); this.sceneMenu.toggle(); });
@@ -103,27 +100,27 @@ export class Dock {
 
     // 8 时间轴（展开 / 折叠底部面板）
     const tlp = this.timelinePanel;
-    const tlBtn = tlp ? this._btn('timeline', '时间轴（展开 / 折叠）', () => tlp.toggleCollapsed()) : null;
+    const tlBtn = tlp ? this._btn('timeline', '时间轴（展开 / 折叠）：编辑关键帧、人物轨迹和机位动画', () => tlp.toggleCollapsed()) : null;
     if (tlBtn) {
       tlBtn.classList.toggle('on', !tlp.collapsed);
       if (!this._tlBound) { this._tlBound = true; tlp.on('collapse', (v) => this.tlBtn?.classList.toggle('on', !v)); }
     }
     this.tlBtn = tlBtn;
 
-    // 9 全屏（发送按钮已移除，职能迁移到右侧「摄像机截图」面板）
-    const full = this._btn('expand', '全屏', () => this._toggleFullscreen());
-    this.fullBtn = full;
-
-    // 10 AI：右侧抽屉开合
-    const ai = this.aiPanel;
-    const aiBtn = ai ? this._btn('sparkle', 'AI 导演（一句话生成 / 对话修改 / 识图导入）', () => ai.toggle()) : null;
-    if (aiBtn) { aiBtn.classList.add('ai-dockbtn'); aiBtn.classList.toggle('on', ai.open); ai.onToggle = (v) => this.aiBtn?.classList.toggle('on', v); }
-    this.aiBtn = aiBtn;
-
-    c.append(...[tf, addBtn, pano, camAdd, pathBtn, this._sep(), frame, shot, this._sep(), scene, tlBtn, full, aiBtn && this._sep(), aiBtn].filter(Boolean));
+    c.append(...[tf, shot, tlBtn].filter(Boolean));
+    const rail = document.getElementById('sideRail');
+    const sceneTab = this._btn('layers', '场景列表', () => document.getElementById('app').classList.toggle('left-collapsed'));
+    const propBtn = this._btn('cube', '添加道具', (e) => { e.stopPropagation(); this.propMenu.toggle(); });
+    rail.replaceChildren(sceneTab, addBtn, camAdd, propBtn, pano);
+    document.getElementById('sceneActions').replaceChildren(scene);
+    // 路径菜单保留可见锚点；机位属性负责截图/导出画幅，场景菜单负责全屏。
+    const settings = document.createElement('div');
+    settings.className = 'scene-quick-tools';
+    settings.append(pathBtn);
+    document.querySelector('.side.left').append(settings);
 
     // ---- 菜单（统一由 DockMenu 管理）----
-    this.menu = new DockMenu(c);
+    this.menu = new DockMenu(document.body);
 
     this.transformMenu = this.menu.create({
       anchor: tf, minWidth: '150px',
@@ -131,23 +128,13 @@ export class Dock {
         this._item(icon, label, () => { app.setTransformMode(mode); this.menu.close(); }, app.transformMode === mode)),
     });
 
+    this.propMenu = this.menu.create({ anchor: propBtn, build: () => PROP_KINDS.map(([kind, label]) => this._item('cube', label, () => { app.addProp(kind); this.menu.close(); })) });
     this.addMenu = this.menu.create({ anchor: addBtn, build: () => this._buildAddItems() });
     this.panoMenu = this.menu.create({ anchor: pano, build: () => this._buildPanoItems() });
     this.camMenu = this.menu.create({ anchor: camAdd, className: 'cammenu', build: () => this._buildCamItems() });
     this.pathMenu = this.menu.create({ anchor: pathBtn, minWidth: '150px', build: () => this._buildPathItems() });
     this.sceneMenu = this.menu.create({ anchor: scene, minWidth: '170px', build: () => this._buildSceneItems() });
 
-    this.ratioMenu = this.menu.create({
-      anchor: frame, minWidth: '150px',
-      build: () => RATIO_OPTIONS.map(([val, label]) =>
-        this._item(null, label, () => { app.setRatio(val); this.menu.close(); }, app.ratio === val)),
-    });
-
-    // 全屏态高亮
-    if (!this._fsBound) {
-      this._fsBound = true;
-      document.addEventListener('fullscreenchange', () => this.fullBtn?.classList.toggle('on', !!document.fullscreenElement));
-    }
   }
 
   // ---- 添加角色/模型菜单 ----
@@ -283,6 +270,7 @@ export class Dock {
       this._item('upload', '导入场景', () => { this.menu.close(); pickAndImportScene(this.app); }),
       el('div', { class: 'menu-sep' }),
       this._exportItem(),
+      this._item('expand', '全屏', () => { this.menu.close(); this._toggleFullscreen(); }),
     ];
   }
 
@@ -307,6 +295,6 @@ export class Dock {
   _modeIcon(mode) { return mode === 'rotate' ? 'rotate' : mode === 'scale' ? 'scale' : 'pointer'; }
 
   reflectMode(mode) {
-    if (this.transformBtn) this.transformBtn.innerHTML = svg(this._modeIcon(mode));
+    if (this.transformBtn) { this.transformBtn.innerHTML = svg(this._modeIcon(mode)); this.transformBtn.title = `${TF_MODES.find(([m]) => m === mode)?.[2]}（点击选择移动 / 旋转 / 缩放）`; }
   }
 }

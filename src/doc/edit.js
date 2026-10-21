@@ -7,7 +7,7 @@
 // 不依赖 DOM / App / 场景对象，node 里可直接单测。
 import * as THREE from 'three';
 import { genId, hexColor } from '../entities/Entity.js';
-import { BODY_TYPES, CROWD_PALETTE, CHARACTER_COLOR } from '../config.js';
+import { BODY_TYPES, CROWD_PALETTE, CHARACTER_COLOR, CHARACTER_PALETTE } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
 import { defaultDuration, fitStops } from '../anim/pathGen.js';
 import { rampFor } from '../anim/Path.js';
@@ -95,7 +95,7 @@ export function characterJSON({ id, name, body, pos = [0, 0, 0], rot = [0, 0, 0]
 
 /** 新建角色并加入文档（默认落点 = spawnPoint）。返回条目。 */
 export function addCharacter(doc, { name, body, pos, yaw = 0, color, pose = null }) {
-  const json = characterJSON({ id: newId(doc), name, body, pos: pos || spawnPoint(topLevelCount(doc)), rot: [0, yaw, 0], color, pose });
+  const json = characterJSON({ id: newId(doc), name, body, pos: pos || spawnPoint(topLevelCount(doc)), rot: [0, yaw, 0], color: color ?? hexColor(CHARACTER_PALETTE[doc.entities.filter(e => e.type === 'character').length % CHARACTER_PALETTE.length]), pose });
   doc.entities.push(json);
   return json;
 }

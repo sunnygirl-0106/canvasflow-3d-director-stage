@@ -44,12 +44,16 @@ export class DockMenu {
     if (this.openItem && this.openItem !== item) this.close();
     clear(item.body);
     for (const node of item.build()) if (node) item.body.appendChild(node);
-    // 居中对齐到 anchor 按钮正上方
-    const cx = item.anchor.offsetLeft + item.anchor.offsetWidth / 2;
-    item.el.style.left = cx + 'px';
+    const anchor = item.anchor.getBoundingClientRect();
+    item.el.style.position = 'fixed';
+    item.el.style.left = anchor.left + anchor.width / 2 + 'px';
     item.el.style.transform = 'translateX(-50%)';
     item.el.style.display = 'block';
+    const height = item.el.getBoundingClientRect().height;
+    item.el.style.bottom = 'auto';
+    item.el.style.top = Math.max(8, Math.min(innerHeight - height - 8, anchor.top > height + 12 ? anchor.top - height - 8 : anchor.bottom + 8)) + 'px';
     item.el.classList.add('open');
+    item.wasOn = item.anchor.classList.contains('on');
     item.anchor.classList.add('on');
     this.openItem = item;
     // 防溢出：测量后水平夹取到视口内
@@ -70,7 +74,7 @@ export class DockMenu {
     if (!this.openItem) return;
     this.openItem.el.classList.remove('open');
     this.openItem.el.style.display = 'none';
-    this.openItem.anchor.classList.remove('on');
+    this.openItem.anchor.classList.toggle('on', this.openItem.wasOn);
     this.openItem = null;
   }
 }

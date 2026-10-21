@@ -156,9 +156,9 @@ export async function scr(p) {
 
 /** Dock「路径」→ 选一种方式。 */
 export async function pathMenu(label) {
-  await clickSel('#dock .dockbtn[title^="路径"]');
+  await clickSel('.scene-quick-tools .dockbtn[title^="路径"]');
   await settle();
-  await page.evaluate((l) => [...document.querySelectorAll('#dock .dockmenu.open .menu-item')].find((n) => n.textContent.includes(l)).click(), label);
+  await page.evaluate((l) => [...document.querySelectorAll('.dockmenu.open .menu-item')].find((n) => n.textContent.includes(l)).click(), label);
   await settle();
 }
 
@@ -201,6 +201,7 @@ export function hdist(a, b) { return Math.hypot(a[0] - b[0], a[2] - b[2]); }
 // ---- 阶段 F：机位运镜 ----
 /** Inspector 运镜段：按标签找下拉 / 输入并设值（触发 change）。 */
 export async function moveField(label, value) {
+  await page.evaluate(()=>[...document.querySelectorAll('.ptabs button')].find(b=>b.textContent==='运动轨迹')?.click());
   await page.evaluate((label, value) => {
     const f = [...document.querySelectorAll('#inspector [data-sec="move"] .field')].find((x) => x.querySelector('label')?.textContent === label);
     const n = f.querySelector('select, input');
@@ -383,6 +384,7 @@ export function aiFixturesSrc() {
 }
 
 export async function aiSend(mode, text, { confirm = true } = {}) {
+  if (await page.$eval('.ai-details', n => n.hidden)) await page.click('.ai-plus');
   await page.click(`.ai-mode[data-mode="${mode}"]`);
   await page.$eval('.ai-text', (t) => { t.value = ''; });
   if (text) await page.type('.ai-text', text);
@@ -406,6 +408,6 @@ export function aiState() {
 }
 
 export async function aiPanelShot(file) {
-  const clip = await page.$eval('.ai-drawer', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; });
+  const clip = await page.$eval('.ai-capsule', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; });
   await page.screenshot({ path: file, clip });
 }

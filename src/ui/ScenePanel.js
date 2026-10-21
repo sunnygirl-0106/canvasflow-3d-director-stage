@@ -51,7 +51,7 @@ export class ScenePanel {
       thumb.querySelector('.pano-preview').style.backgroundImage = `url(${pano.info.thumb})`;
       panoField.appendChild(thumb);
     } else {
-      panoField.appendChild(el('div', { class: 'placeholder-box', html: '<span>⃝</span><span>底部「全景图」按钮：本地上传或选历史记录</span>' }));
+      panoField.appendChild(el('div', { class: 'placeholder-box', html: '<span>⃝</span><span>左侧「全景」按钮：本地上传或选历史记录</span>' }));
     }
     sec2.appendChild(panoField);
     sec2.appendChild(colorRow({ label: '天空颜色', hex: toHex(s.sky), onChange: (h) => app.setSkyColor(h, preview), onCommit: commit }).el);

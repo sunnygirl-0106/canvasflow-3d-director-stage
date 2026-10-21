@@ -1,5 +1,9 @@
 // 内联描边图标（全站唯一一份）：只存 path 主体，统一由 icon() 包成 <svg>。
 const PATHS = {
+  plus: '<path d="M12 4v16M4 12h16"/>',
+  send: '<path d="M12 20V4M5 11l7-7 7 7"/>',
+  stopwatch: '<circle cx="12" cy="14" r="7"/><path d="M12 14V9M10 3h4M12 3v4M18 7l2-2"/>',
+
   pointer: '<path d="M5 3l15 8-6 1.6L11 19z"/>',
   move: '<path d="M12 3v18M3 12h18"/><path d="M12 3l-2.4 2.6M12 3l2.4 2.6M12 21l-2.4-2.6M12 21l2.4 2.6M3 12l2.6-2.4M3 12l2.6 2.4M21 12l-2.6-2.4M21 12l-2.6 2.4"/>',
   rotate: '<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/>',
@@ -21,6 +25,7 @@ const PATHS = {
   undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
   redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
   download: '<path d="M12 4v11M8 11l4 4 4-4M5 19h14"/>',
+  layers: '<path d="m12 3 9 5-9 5-9-5z M3 12l9 5 9-5 M3 16l9 5 9-5"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><rect x="14" y="14" width="7" height="7" rx="1.4"/>',
   sort: '<path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
@@ -32,7 +37,7 @@ const PATHS = {
   groupFrame: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="9" y="9" width="6" height="6" rx="1.2"/>',
   copy: '<rect x="3.5" y="8.5" width="11" height="12" rx="2"/><path d="M8.5 8.5V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2.5"/><path d="M19.2 13.6l.55 1.45 1.45.55-1.45.55-.55 1.45-.55-1.45-1.45-.55 1.45-.55z"/>',
   // 时间轴
-  timeline: '<path d="M3 6h18M3 12h18M3 18h18"/><path d="M8 4v4M15 10v4M11 16v4"/>',
+  timeline: '<path d="M13 4a8 8 0 1 0 0 16M15 4l5 4-5 4M19 8h-7a4 4 0 0 0 0 8h2M17 14l3 3-3 3"/>',
   play: '<path d="M7 5l12 7-12 7z" fill="currentColor"/>',
   pause: '<path d="M8 5v14M16 5v14"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>',

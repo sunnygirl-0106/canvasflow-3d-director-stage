@@ -1,9 +1,9 @@
 import { el, toastError } from '../../util/dom.js';
 import { icon } from '../icons.js';
-import { toggleKey } from './animState.js';
+import { toggleKey, propState } from './animState.js';
 
 /** 轨道行名（词汇表 → 中文）。 */
-export const PROP_LABEL = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视野' };
+export const PROP_LABEL = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视角（FOV）' };
 const CONSTRAINT_LABEL = { lookAt: '注视', follow: '跟随' };
 const TYPE_ICON = { character: 'person', prop: 'cube', camera: 'video', group: 'group' };
 const PROP_ORDER = ['pos', 'rot', 'scale', 'fov'];
@@ -23,13 +23,15 @@ export class TrackRows {
   /** @param {import('./TimelinePanel.js').TimelinePanel} panel */
   constructor(panel) {
     this.panel = panel;
-    this.collapsedEnts = new Set(); // 折叠的实体分组（会话态）
+    this.collapsedEnts = new Set();
+    this.expandedEnts = new Set();
+    this.pathEditors = new Set(); // 折叠的实体分组（会话态）
     this.groups = [];               // [{ ent, rows:[{ kind, data }] }]
   }
 
   /**
    * 当前文档 → 分组数据。所有实体都列一行，顺序同大纲（顶层实体，成员紧跟其组）；
-   * 没有动画数据的只有表头（rows 为空：灰字 + 「◇ 打键」）。
+   * 无动画角色只显示主行；道具在有动画时才显示，不创建虚构关键帧。
    */
   _collect() {
     const { app } = this.panel;
@@ -42,6 +44,7 @@ export class TrackRows {
     const groups = [];
     for (const e of app.entities) {
       for (const ent of [e, ...e.children]) {
+        if (!['character', 'camera'].includes(ent.type) && !by.has(ent.id)) continue;
         groups.push({ ent, rows: (by.get(ent.id) || []).sort((a, b) => a.order - b.order) });
       }
     }
@@ -58,19 +61,20 @@ export class TrackRows {
     }
     for (const g of this.groups) {
       frag.appendChild(this._headRow(g));
-      if (this.collapsedEnts.has(g.ent.id)) continue;
+      if (this._folded(g.ent.id)) continue;
       for (const r of g.rows) frag.appendChild(this._row(g.ent, r));
     }
     return frag;
   }
 
+  _folded(id) { return this.collapsedEnts.has(id) || (!this.expandedEnts.has(id) && !this.panel.app.selectedIds.has(id)); }
+
   _headRow({ ent, rows }) {
-    if (!rows.length) return this._bareRow(ent);
-    const folded = this.collapsedEnts.has(ent.id);
-    const caret = el('span', { class: 'tl-caret' + (folded ? ' folded' : ''), html: icon('chevron', 12, 2) });
+    const folded = !rows.length || this._folded(ent.id);
+    const caret = el('button', { class: 'tl-caret' + (folded ? ' folded' : ''), title: folded ? '展开此对象的动画属性' : '折叠此对象的动画属性', html: icon('chevron', 12, 2) });
     caret.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (folded) this.collapsedEnts.delete(ent.id); else this.collapsedEnts.add(ent.id);
+      if (folded) { this.collapsedEnts.delete(ent.id); this.expandedEnts.add(ent.id); } else { this.collapsedEnts.add(ent.id); this.expandedEnts.delete(ent.id); }
       this.panel.rebuild();
     });
     const delAll = el('button', { class: 'tl-op', title: '删除全部动画', html: icon('trash', 13) });
@@ -78,52 +82,39 @@ export class TrackRows {
     const name = el('div', { class: 'tl-name' }, [
       caret,
       el('span', { class: 'tl-type', html: icon(TYPE_ICON[ent.type] || 'cube', 14) }),
-      el('span', { class: 'tl-label', text: ent.name }),
+      el('span', { class: 'tl-label', text: (ent.id === this.panel.app.timeline.mainCameraId ? '主机位 · ' : '') + ent.name }),
+      el('button', { class: 'tl-addkey', text: '绘制轨迹', title: '为此对象绘制路径', onclick: (e) => {
+        e.stopPropagation();
+        const app = this.panel.app;
+        app.setCameraView(false); app.select(ent.id); app.pathTool.request('points');
+      } }),
       delAll,
     ]);
     // 表头的轨道区：所有键时刻的汇总（只读）
     const times = new Set();
     for (const r of rows) if (r.kind === 'track') for (const k of r.data.keys) times.add(k.t);
     const lane = el('div', { class: 'tl-lane' }, [...times].map((t) => vars(el('i', { class: 'tl-sum' }), { '--t': t })));
-    return el('div', { class: 'tl-row tl-head', 'data-ent': ent.id }, [name, lane]);
-  }
-
-  /**
-   * 没有动画的实体：只有表头（灰字），右侧「◇ 打键」= Inspector 位置菱形（在当前时刻打位置键，idle 时在 0 秒）。
-   * 按下时行照常选中该实体（属性面板随之切过去）。
-   */
-  _bareRow(ent) {
-    const btn = el('button', { class: 'tl-addkey', title: '在当前时刻给位置打一个关键帧（同属性面板「位置」旁的 ◇）', text: '◇ 打键' });
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      try { toggleKey(this.panel.app, ent, 'pos'); } catch (err) { toastError(err); }
-    });
-    const name = el('div', { class: 'tl-name' }, [
-      el('span', { class: 'tl-caret-gap' }),
-      el('span', { class: 'tl-type', html: icon(TYPE_ICON[ent.type] || 'cube', 14) }),
-      el('span', { class: 'tl-label', text: ent.name }),
-      btn,
-    ]);
-    return el('div', { class: 'tl-row tl-head is-bare', 'data-ent': ent.id }, [name, el('div', { class: 'tl-lane' })]);
+    lane.prepend(el('div', { class: 'tl-presence', title: '场景持续存在范围（非动画片段）' }));
+    return el('div', { class: 'tl-row tl-head' + (ent.type === 'camera' ? ' camera' : ''), 'data-ent': ent.id }, [name, lane]);
   }
 
   _row(ent, { kind, data }) {
     let label, lane;
     const attrs = { 'data-ent': ent.id };
-    if (kind === 'track') {
+    if (kind === 'track' || kind === 'property') {
       label = PROP_LABEL[data.property];
-      attrs['data-track'] = data.id;
+      if (data.id) attrs['data-track'] = data.id;
       lane = el('div', { class: 'tl-lane' }, data.keys.map((k) => vars(el('i', {
         class: 'tl-key ease-' + k.ease,
-        title: `${k.t.toFixed(2)}s · ${k.ease}`,
+        title: `关键帧 ${k.t.toFixed(2)} 秒 · ${{ linear: '匀速', smooth: '缓入缓出', step: '阶跃' }[k.ease] || k.ease}；拖动改时间，双击设置过渡`,
         'data-track': data.id, 'data-t': String(k.t),
       }), { '--t': k.t })));
     } else if (kind === 'path') {
-      label = '路径';
+      label = '位置（路径驱动）';
       attrs['data-path'] = data.id;
-      lane = el('div', { class: 'tl-lane' }, [this._bar('path', data.id, data.start, data.start + data.duration, '')]);
+      lane = el('div', { class: 'tl-lane' }, this.pathEditors.has(data.id) ? [this._bar('path', data.id, data.start, data.start + data.duration, '')] : [vars(el('button', { class: 'tl-path-line', title: '打开轨迹编辑与区间设置', onclick: () => this.panel.app.emit('inspect', { id: ent.id, section: 'path' }) }), { '--t0': data.start, '--t1': data.start + data.duration })]);
     } else {
-      label = CONSTRAINT_LABEL[data.type];
+      label = data.type === 'lookAt' ? '焦点' : CONSTRAINT_LABEL[data.type];
       attrs['data-constraint'] = data.id;
       const full = data.start == null && data.end == null;
       const { duration } = this.panel.app.timeline;
@@ -133,20 +124,54 @@ export class TrackRows {
     }
     const empty = kind === 'track' && !data.keys.length;
     return el('div', { class: 'tl-row tl-track' + (empty ? ' is-empty' : ''), ...attrs }, [
-      el('div', { class: 'tl-name' }, [el('span', { class: 'tl-label', text: label })]),
+      el('div', { class: 'tl-name' }, [el('span', { class: 'tl-label', text: label }), ...(kind === 'path' ? [el('button', { class: 'tl-addkey tl-path-edit', title: '展开或收起路径区间编辑', html: icon('chevron', 14), onclick: () => { if (this.pathEditors.has(data.id)) this.pathEditors.delete(data.id); else this.pathEditors.add(data.id); this.panel.rebuild(); this.panel.app.emit('inspect', { id: ent.id, section: 'path' }); } })] : []), ...(data.property ? this._propertyControls(ent, data.property) : kind === 'constraint' && data.type === 'lookAt' ? [el('span', { class: 'tl-value', text: '注视：' + (Array.isArray(data.subject) ? data.subject.map(v => v.toFixed(1)).join(', ') : this.panel.app.findEntity(data.subject)?.name || '目标') })] : [])]),
       lane,
     ]);
+  }
+
+  _propertyControls(ent, property) {
+    const app = this.panel.app;
+    const nav = (direction) => {
+      const keys = propState(app, app.timeline.view(), ent.id, property, app.playback.time).track?.keys || [];
+      const candidates = keys.filter((k) => direction < 0 ? k.t < app.playback.time - 1e-6 : k.t > app.playback.time + 1e-6);
+      const key = direction < 0 ? candidates.at(-1) : candidates[0];
+      if (key) { app.playback.pause(); app.playback.seek(key.t); }
+    };
+    const value = el('span', { class: 'tl-value', 'data-value-ent': ent.id, 'data-property': property });
+    const key = el('button', { class: 'tl-addkey tl-key-toggle', text: '◇', title: '关键帧：在当前时刻记录属性值；已有关键帧时再次点击删除', 'data-key-ent': ent.id, 'data-property': property, onclick: () => {
+      try { app.select(ent.id); toggleKey(app, ent, property); } catch (err) { toastError(err); }
+    } });
+    return [
+      el('button', { class: 'tl-addkey', text: '‹', title: '上一个关键帧', onclick: () => nav(-1) }),
+      key,
+      el('button', { class: 'tl-addkey', text: '›', title: '下一个关键帧', onclick: () => nav(1) }), value,
+    ];
+  }
+
+  reflectValues() {
+    const app = this.panel.app, anim = app.timeline.view();
+    for (const node of this.panel.rows.querySelectorAll('[data-value-ent]')) {
+      const ent = app.findEntity(node.dataset.valueEnt);
+      if (!ent) continue;
+      const value = app.timeline.valueOf(ent, node.dataset.property);
+      node.textContent = (Array.isArray(value) ? value : [value]).map((v) => v.toFixed(1)).join(', ');
+    }
+    for (const node of this.panel.rows.querySelectorAll('[data-key-ent]')) {
+      const st = propState(app, anim, node.dataset.keyEnt, node.dataset.property, app.playback.time);
+      node.textContent = st.key ? '◆' : '◇';
+      node.disabled = !!st.forced;
+    }
   }
 
   /** 区间条：起止两颗菱形 + 中间填充。 */
   _bar(kind, id, t0, t1, text, { openStart = false, openEnd = false } = {}) {
     return vars(el('div', {
       class: `tl-bar tl-bar-${kind}`,
-      'data-kind': kind, 'data-id': id,
+      'data-kind': kind, 'data-id': id, title: kind === 'path' ? '路径动画：拖动条形调整开始时间，拖动两端调整起止时间' : '约束生效范围：拖动调整注视或跟随的时间范围',
     }, [
-      el('i', { class: 'tl-bar-end start' + (openStart ? ' open' : ''), 'data-edge': 'start' }),
+      el('i', { class: 'tl-bar-end start' + (openStart ? ' open' : ''), 'data-edge': 'start', title: '拖动调整开始时间' }),
       el('span', { class: 'tl-bar-text', text }),
-      el('i', { class: 'tl-bar-end end' + (openEnd ? ' open' : ''), 'data-edge': 'end' }),
+      el('i', { class: 'tl-bar-end end' + (openEnd ? ' open' : ''), 'data-edge': 'end', title: '拖动调整结束时间' }),
     ]), { '--t0': t0, '--t1': t1 });
   }
 }

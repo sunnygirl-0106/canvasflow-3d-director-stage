@@ -10,22 +10,17 @@
 </head>
 <body>
   <div id="app">
-    <header>
-      <div class="logo">3D导演台</div>
-      <div class="viewtabs" id="viewtabs">
-        <button data-v="director" class="on">导演视角</button>
-        <button data-v="camera">机位视角</button>
-        <span class="pov-label" id="povLabel" hidden></span>
-      </div>
-      <div class="right">
-        <button class="ic" id="helpBtn" title="操作说明">?</button>
-        <button class="ic" id="closeBtn" title="关闭">×</button>
-      </div>
-    </header>
     <main>
+      <nav id="sideRail" aria-label="场景工具"></nav>
       <!-- 左：场景清单 -->
       <aside class="side left">
+        <header>
+          <button class="ic" id="closeBtn" title="关闭">×</button>
+          <div class="logo">3D导演台</div><div id="sceneActions"></div>
+          <button class="ic" id="foldLeft" title="折叠场景列表">‹</button>
+        </header>
         <h3>场景</h3>
+        <button id="scenePresets" title="预制场景：展开原有 8 个场景，选中后填入 AI 输入框" type="button" aria-label="打开预制场景">预制场景</button>
         <div class="searchbox">
           <input id="search" placeholder="请输入搜索内容" />
           <span class="si" aria-hidden="true">
@@ -37,14 +32,20 @@
 
       <!-- 中：视口 -->
       <div id="viewport">
+        <div class="viewtabs" id="viewtabs">
+          <button data-v="director" class="on" title="导演视角：自由旋转、移动视角，编辑场景">导演视角</button>
+          <button data-v="camera" title="机位视角：查看当前摄像机的构图">机位视角</button>
+          <span class="pov-label" id="povLabel" hidden></span>
+        </div>
+        <button id="foldRight" class="panel-fold" title="折叠属性面板">›</button>
         <div id="frame"></div>
         <div id="labelLayer"></div>
         <div class="pov-hint" id="povHint" hidden>未设主机位 · 播放时使用当前机位</div>
-        <div id="navg" title="重置视角">
+        <div id="navg" role="button" tabindex="0" title="重置视角">
           <svg width="74" height="74" viewBox="0 0 74 74" id="navsvg"></svg>
           <div class="lab">重置视角</div>
         </div>
-        <div id="dock"></div>
+        <div id="stageTools"><div id="dock"></div></div>
       </div>
 
       <!-- 右：未选中=场景面板 / 选中=属性·姿势 -->

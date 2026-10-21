@@ -6,12 +6,6 @@ import { SCENE_PRESETS } from '../ai/presets.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 识图：原图 ≤ 2 MB
 const IMAGE_EDGE = 1024;                 // 压到长边 1024 px（JPEG）
-const MODE_HINT = {
-  generate: '描述一个完整场景：人物、站位、姿势、机位运镜、时长…（会先清空当前场景）',
-  modify: '说要改什么：「让男的走到女的旁边」「机位改成推」「加一个方块当桌子」…',
-  image: '附一张站位参考图，可补充说明（只识别人数、站位、朝向和机位方向）',
-};
-
 /** 图片文件 → 压到长边 IMAGE_EDGE 的 JPEG data URL。 */
 export async function compressImage(file) {
   const url = URL.createObjectURL(file);
@@ -37,7 +31,7 @@ export async function compressImage(file) {
 }
 
 /**
- * AI 抽屉：视口右侧，Dock「AI」按钮开合。
+ * 常驻 AI 输入胶囊；加号展开模式、参考图、预制、历史和设置。
  * - 模式：生成新场景（发送前确认清空）/ 修改当前场景（默认；场景为空时自动切生成）/ 识图导入（附图）。
  * - 对话流：每轮显示输入、各次尝试的错误、模型 note、「已应用 n 项」/ 失败原因；每轮应用是一步撤销，
  *   「撤销这一轮」= history.undo（只在这一轮之后没有别的改动时可用）。
@@ -52,48 +46,63 @@ export class AiPanel {
     this.mode = 'modify';
     this.image = null;      // 识图：压缩后的 data URL
     this.showSettings = false;
-    this.presetsOpen = true;
+    this.presetsOpen = false;
     this.settings = loadSettings();
     this.testState = null;  // 测试连接结果文案
-    this.root = el('div', { class: 'ai-drawer', hidden: true });
+    this.root = el('div', { class: 'ai-capsule' });
     this.root.addEventListener('keydown', (e) => e.stopPropagation()); // 抽屉内按键不触发全局快捷键（Del / V / R / S…）
     viewport.appendChild(this.root);
     this.agent.on('turn', () => this.renderFlow());
     this.agent.on('update', () => { this.renderFlow(); this.renderInput(); });
     this.agent.on('busy', () => this.renderInput());
-    app.on('entities', () => { if (this.open) this.renderInput(); });
-    app.on('document', () => { if (this.open) this.renderInput(); });
-    app.history.on('change', () => { if (this.open) this.renderFlow(); });
+    app.on('entities', () => { this.renderInput(); });
+    app.on('document', () => { this.renderInput(); });
+    app.history.on('change', () => { this.renderFlow(); });
     this.render();
   }
 
   toggle(v = !this.open) {
     this.open = v;
-    this.root.hidden = !v;
-    this.root.parentElement.classList.toggle('ai-open', v); // 视口：Dock 让出抽屉的位置
-    // 自动取景（frameSubjects）避开抽屉：被遮住的宽度 = 视口右边 − 抽屉左边；关了恢复 0
-    this.app.frameInsetRight = v ? Math.max(0, this.root.parentElement.getBoundingClientRect().right - this.root.getBoundingClientRect().left) : 0;
-    if (v) { this.render(); this.textarea?.focus(); }
+    if (!v) this.browsePresets = false;
+    this.render();
+    if (v) this.textarea?.focus();
     this.onToggle?.(v);
+  }
+
+  openPresets() {
+    this.presetsOpen = true;
+    this.showSettings = false;
+    this.showHistory = false;
+    this.browsePresets = true;
+    this.toggle(true);
+    this.optionsEl.querySelector('.ai-presets')?.scrollIntoView({ block: 'nearest' });
   }
 
   /** 实际生效的模式：修改模式遇空场景自动切生成。 */
   get effectiveMode() { return this.mode === 'modify' && !this.app.entities.length ? 'generate' : this.mode; }
 
   render() {
+    const draft = this.textarea?.value ?? '';
     clear(this.root);
+    this.root.classList.toggle('continuing', !!this.continuing);
+    this.root.classList.toggle('browsing-presets', !!this.browsePresets);
     const head = el('div', { class: 'ai-head' }, [
-      el('span', { class: 'ai-title', html: icon('sparkle', 17) + '<span>AI 导演</span>' }),
-      el('button', {
-        class: 'ai-icbtn' + (this.showSettings ? ' on' : ''), title: '设置（模型接口）', html: icon('gear', 17),
-        onclick: () => { this.showSettings = !this.showSettings; this.render(); },
-      }),
+      el('button', { class: 'ai-icbtn', title: '设置（模型接口）', html: icon('gear', 17), onclick: () => { this.showSettings = !this.showSettings; this.render(); } }),
+      el('button', { class: 'minibtn', text: '会话历史', onclick: () => { this.showHistory = !this.showHistory; this.render(); } }),
       el('button', { class: 'ai-icbtn', title: '关闭', html: icon('close', 17), onclick: () => this.toggle(false) }),
     ]);
-    this.settingsEl = el('div', { class: 'ai-settings', hidden: this.showSettings ? undefined : true });
-    this.flowEl = el('div', { class: 'ai-flow' });
+    this.settingsEl = el('div', { class: 'ai-settings', hidden: !this.showSettings || undefined });
+    this.flowEl = el('div', { class: 'ai-flow', hidden: !this.showHistory || undefined });
+    this.optionsEl = el('div', { class: 'ai-options' });
+    this.detailsEl = el('div', { class: 'ai-details', hidden: !this.open || undefined }, [head, this.settingsEl, this.flowEl, this.optionsEl]);
+    this.statusEl = el('div', { class: 'ai-result', role: 'status' });
     this.inputEl = el('div', { class: 'ai-input' });
-    this.root.append(head, this.settingsEl, this.flowEl, this.inputEl);
+    const historyHead = el('div', { class: 'ai-history-head', hidden: !this.continuing || undefined }, [
+      el('button', { class: 'ai-icbtn', title: '返回', html: icon('chevron', 16), onclick: () => { this.continuing = false; this.showHistory = false; this.toggle(false); } }),
+      el('button', { text: '历史对话 ›', onclick: () => { this.showHistory = !this.showHistory; this.open = this.showHistory; this.render(); } }),
+    ]);
+    this.root.append(this.detailsEl, this.statusEl, historyHead, this.inputEl);
+    if (this.textarea) this.textarea.value = draft;
     this.renderSettings();
     this.renderFlow();
     this.renderInput();
@@ -153,6 +162,7 @@ export class AiPanel {
   renderFlow() {
     if (!this.flowEl) return;
     const turns = this.agent.turns;
+    this.renderStatus();
     clear(this.flowEl);
     if (!turns.length) {
       this.flowEl.appendChild(el('div', { class: 'ai-empty' }, [
@@ -163,6 +173,18 @@ export class AiPanel {
     }
     for (const t of turns) this.flowEl.appendChild(this._turn(t));
     this.flowEl.scrollTop = this.flowEl.scrollHeight;
+  }
+
+  renderStatus() {
+    if (!this.statusEl) return;
+    const t = this.agent.turns.at(-1);
+    this.statusEl.replaceChildren();
+    this.statusEl.hidden = !t || t.status === 'ok';
+    if (!t || t.status === 'ok') return;
+    const text = { running: '正在搭建场景…', ok: `已应用 ${t.result?.applied || 0} 项修改`, failed: '生成结果未通过校验，请重试', error: t.error || '生成失败，请重试', cancelled: '已取消' }[t.status];
+    this.statusEl.append(el('span', { text }));
+    if (t.status === 'ok') this.statusEl.append(el('button', { class: 'minibtn', text: t.undone ? '已撤销' : '撤销', disabled: t.undone || this.app.history.index !== t.historyIndex || undefined, onclick: async () => { t.undone = true; await this.app.history.undo(); this.renderFlow(); } }));
+    if (['error', 'failed'].includes(t.status)) this.statusEl.append(el('button', { class: 'minibtn', text: '重试', onclick: () => this.send() }));
   }
 
   _turn(t) {
@@ -214,14 +236,15 @@ export class AiPanel {
     const mode = this.effectiveMode;
     const draft = this.textarea?.value ?? '';
     clear(this.inputEl);
+    clear(this.optionsEl);
     const seg = el('div', { class: 'ai-modes' }, MODES.map((m) => el('button', {
       class: 'ai-mode' + (m === mode ? ' on' : ''), text: MODE_LABEL[m], 'data-mode': m, disabled: busy || undefined,
       title: m === 'modify' && !this.app.entities.length ? '场景为空，将按「生成新场景」处理' : '',
       onclick: () => { this.mode = m; if (m !== 'image') this.image = null; this.renderInput(); },
     })));
-    this.inputEl.appendChild(seg);
+    this.optionsEl.appendChild(seg);
 
-    if (mode !== 'image') {
+    if (mode !== 'image' || this.browsePresets) {
       const presets = el('details', { class: 'ai-presets', open: this.presetsOpen ? true : undefined });
       presets.append(
         el('summary', { text: '预制场景 · 点选填入', onclick: (event) => {
@@ -242,13 +265,13 @@ export class AiPanel {
         }, [el('strong', { text: preset.title }), el('span', { text: preset.detail })]))),
         el('div', { class: 'ai-preset-hint', text: '选好后可直接发送，也可改字；将使用「生成新场景」。' }),
       );
-      this.inputEl.appendChild(presets);
+      this.optionsEl.appendChild(presets);
     }
 
     if (mode === 'image') {
       const file = el('input', { type: 'file', accept: 'image/*', hidden: true });
       file.addEventListener('change', () => this._pickImage(file.files?.[0]));
-      this.inputEl.appendChild(el('div', { class: 'ai-imgrow' }, [
+      this.optionsEl.appendChild(el('div', { class: 'ai-imgrow' }, [
         file,
         this.image
           ? el('div', { class: 'ai-imgprev' }, [
@@ -259,24 +282,27 @@ export class AiPanel {
       ]));
     }
 
-    const configured = this.agent.provider?.configured;
     this.textarea = el('textarea', {
-      class: 'ai-text', rows: 3, disabled: busy || undefined,
-      placeholder: configured ? MODE_HINT[mode] + '\n（Enter 发送，⇧Enter 换行）' : '还没配置模型接口：点右上角 ⚙ 填写 baseURL / apiKey / model',
+      class: 'ai-text', rows: 1, 'aria-label': '描述想搭建的场景', disabled: busy || undefined,
+      placeholder: this.continuing ? '继续描述想调整的内容' : '描述想搭建的场景',
     });
     this.textarea.value = draft;
     this.textarea.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); this.send(); }
     });
-    this.inputEl.appendChild(this.textarea);
-
-    const running = this.agent.turns[this.agent.turns.length - 1];
-    this.inputEl.appendChild(el('div', { class: 'ai-sendrow' }, [
-      el('span', { class: 'ai-busy', text: busy ? `生成中 · 第 ${running?.attempts.length || 1} 次尝试` : '' }),
-      busy
-        ? el('button', { class: 'minibtn', text: '取消', onclick: () => this.agent.cancel() })
-        : el('button', { class: 'minibtn primary ai-send', text: '发送', onclick: () => this.send() }),
-    ]));
+    const send = el('button', { class: 'ai-send ai-icbtn', title: busy ? '取消生成' : '发送', 'aria-label': busy ? '取消生成' : '发送', html: icon(busy ? 'stop' : 'send', 20), onclick: () => busy ? this.agent.cancel() : this.send() });
+    const resize = () => {
+      this.textarea.style.height = '24px';
+      this.textarea.style.height = Math.min(72, this.textarea.scrollHeight) + 'px';
+      send.disabled = !busy && !this.textarea.value.trim() && !this.image;
+    };
+    this.textarea.addEventListener('input', resize);
+    this.inputEl.append(
+      el('button', { class: 'ai-plus ai-icbtn', title: '添加参考图、预制、历史和设置', 'aria-label': 'AI 更多选项', html: icon('plus', 22), onclick: () => this.toggle() }),
+      this.textarea, send,
+    );
+    resize();
+    this.renderStatus();
   }
 
   async _pickImage(f) {
@@ -293,7 +319,7 @@ export class AiPanel {
     if (this.agent.busy) return;
     const input = this.textarea.value.trim();
     const mode = this.effectiveMode;
-    if (!this.agent.provider?.configured) { this.showSettings = true; this.render(); toast('请先在设置里填写模型接口'); return; }
+    if (!this.agent.provider?.configured) { this.showSettings = true; this.open = true; this.render(); toast('请先在设置里填写模型接口'); return; }
     if (mode === 'image' && !this.image) { toast('请先附一张参考图'); return; }
     if (mode !== 'image' && !input) { this.textarea.focus(); return; }
     const go = () => this._run({ input, mode, image: mode === 'image' ? this.image : null });
@@ -304,7 +330,7 @@ export class AiPanel {
   async _run(req) {
     this.textarea.value = '';
     const turn = await this.agent.run(req);
-    if (turn.status === 'ok') turn.historyIndex = this.app.history.index;
+    if (turn.status === 'ok') { turn.historyIndex = this.app.history.index; this.continuing = true; this.mode = 'modify'; this.open = false; this.showHistory = false; this.render(); toast('场景已更新'); }
     else if (turn.status !== 'cancelled' && !this.textarea.value) this.textarea.value = req.input; // 失败：输入放回去方便改
     if (turn.status === 'ok' && req.mode === 'image') this.image = null;
     this.renderFlow();

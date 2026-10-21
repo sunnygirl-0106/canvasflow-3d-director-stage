@@ -6,16 +6,19 @@ export async function run() {
   const OUT = 'test-output/tl';
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
-  // 清掉会话偏好后重新加载：窗口 810 高 < 900，应默认折叠
+  // 清掉会话偏好后重新加载：常见笔记本高度默认展开
   await page.evaluate(() => { localStorage.removeItem('director-stage.timeline'); });
   await page.reload({ waitUntil: 'networkidle0' });
   await page.waitForFunction(() => window.__app?.history.enabled, { timeout: 30000 });
   await page.addStyleTag({ content: '#toast{visibility:hidden!important}' });
   const defCollapsed = await page.evaluate(() => document.getElementById('timeline').classList.contains('collapsed'));
-  await clickSel('#dock .dockbtn[title^="时间轴"]');
   await settle(120);
   const expanded = await page.evaluate(() => document.getElementById('timeline').offsetHeight);
-  ok('折叠：窗口高 < 900 默认折叠，Dock「时间轴」按钮展开到 220px', defCollapsed && expanded === 220, `default=${defCollapsed} h=${expanded}`);
+  ok('笔记本高度默认展开，轨道按参考比例占页面约 28%', !defCollapsed && Math.abs(expanded - 810 * (322 / 1152)) < 1, `default=${defCollapsed} h=${expanded}`);
+
+  await clickSel('.tl-more summary');
+  await clickSel('.tl-settings .tl-addkey');
+  await clickSel('.tl-more summary'); // 显式适配全长，供本套件 0–10s 手势使用
 
   // ---- 场景：1 角色 + 2 道具 + 1 机位，导演相机俯视地面中心 ----
   const ids = await page.evaluate(async () => {
@@ -60,7 +63,9 @@ export async function run() {
   ok('验收1 播放头回 1.5s：角色位于两键中点 ±1cm', mid.t === 1.5 && err1 < 0.01, `pos=${JSON.stringify(mid.v)} 中点=${JSON.stringify(want.map((v) => +v.toFixed(4)))} 误差=${(err1 * 100).toFixed(3)}cm`);
 
   // ---- 2 自动打键 ----
+  await clickSel('#timeline .tl-more summary');
   await clickSel('#timeline .tl-autokey');
+  await clickSel('#timeline .tl-more summary');
   await dragPlayhead(2);
   await pickInOutliner(ids.p1Name);
   const n0 = await page.evaluate(() => window.__app.timeline.toJSON().timeline.tracks.length);
@@ -69,7 +74,9 @@ export async function run() {
   ok('验收2 自动打键开：t=2 拖无轨道道具 → 新建 pos 轨道 + 1 键',
     auto.autoKey && auto.tracks.length === 1 && auto.tracks[0].property === 'pos' && auto.tracks[0].keys.length === 1 && auto.tracks[0].keys[0].t === 2,
     JSON.stringify(auto.tracks.map((t) => [t.property, t.keys.map((k) => k.t)])));
+  await clickSel('#timeline .tl-more summary');
   await clickSel('#timeline .tl-autokey');
+  await clickSel('#timeline .tl-more summary');
   await pickInOutliner(ids.p2Name);
   const docPos = () => page.evaluate((id) => window.__app.exportDocument().entities.find((e) => e.id === id).transform.pos, ids.p2);
   const p2a = await docPos();
@@ -97,12 +104,13 @@ export async function run() {
   await pickInOutliner(ids.p2Name);
   const dNone = await diaState(`${OUT}/3_dia_none.png`);
   ok('验收3 菱形：t=0 实心 / t=1.5 空心亮 / 无轨道空心灰',
-    dKey.cls.endsWith(' key') && dKey.bg === 'rgb(59, 130, 246)' && dTrack.cls.endsWith(' track') && dTrack.bg === 'rgba(0, 0, 0, 0)' && dNone.cls.endsWith(' none'),
+    dKey.cls.endsWith(' key') && dKey.bg === 'rgb(2, 163, 197)' && dTrack.cls.endsWith(' track') && dTrack.bg === 'rgba(0, 0, 0, 0)' && dNone.cls.endsWith(' none'),
     `${dKey.cls}(${dKey.bg}) / ${dTrack.cls} / ${dNone.cls}`);
 
   // ---- 4 拖键 3s → 4s（吸附开，fps 30）+ 撤销 / 重做 ----
   const trackId = await page.evaluate((id) => window.__app.timeline.toJSON().timeline.tracks.find((t) => t.target === id && t.property === 'pos').id, ids.m);
   const fps = await page.evaluate(() => [window.__app.timeline.fps, window.__timelinePanel.snap]);
+  await page.evaluate(id=>window.__app.select(id),ids.m);
   const keySel = `.tl-key[data-track="${trackId}"][data-t="3"]`;
   const [kx, ky] = await centerOf(keySel);
   const pps = await page.evaluate(() => window.__timelinePanel.pps);
@@ -129,6 +137,10 @@ export async function run() {
   }, ids.p2);
   await settle();
   const pathOf = () => page.evaluate((pid) => { const p = window.__app.timeline.toJSON().paths.find((x) => x.id === pid); return { start: p.start, duration: p.duration }; }, pathId);
+  await page.evaluate(id=>window.__app.select(id),ids.p2);
+  await clickSel('.tl-path-edit');
+  await page.$eval('.tl-bar-path', n => n.scrollIntoView({block:'nearest', inline:'nearest'}));
+  await settle();
   const endXY = await centerOf('.tl-bar-path .tl-bar-end.end');
   await dragFromTo(endXY, [endXY[0] + pps * 2, endXY[1]]);
   const pa = await pathOf();
@@ -144,6 +156,7 @@ export async function run() {
 
   // ---- 6 约束段 ----
   await pickInOutliner(ids.camName);
+  await page.evaluate(()=>{const b=[...document.querySelectorAll('.ptabs button')].find(b=>b.textContent==='运动轨迹');b?.click();});
   const cnsSel = async (i) => (await page.$$('#inspector [data-sec="constraint"] select'))[i];
   await (await cnsSel(0)).select(ids.m);
   await settle();
@@ -253,13 +266,17 @@ export async function run() {
     m.root.position.x = -1; f.root.position.x = 1; a.edited(m); a.edited(f);
     a.select(null);
     await new Promise((r) => setTimeout(r, 100));
-    const rows = [...document.querySelectorAll('#timeline .tl-row')].map((r) => ({ ent: r.dataset.ent, bare: r.classList.contains('is-bare'), btn: !!r.querySelector('.tl-addkey'), color: getComputedStyle(r.querySelector('.tl-label')).color }));
+    const rows = [...document.querySelectorAll('#timeline .tl-head')].map((r) => ({ ent: r.dataset.ent, presence: !!r.querySelector('.tl-presence'), btn: !!r.querySelector('.tl-addkey') }));
+    const fakeKeys = document.querySelectorAll('#timeline .tl-key').length;
+    if (fakeKeys) throw new Error('未动画实体不能生成假关键帧');
     return { m: m.id, f: f.id, fName: f.name, rows };
   });
   await page.screenshot({ path: `${OUT}/20_bare_rows.png`, clip: await page.$eval('#timeline', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; }) });
-  ok('面板列出所有实体：新建场景两个角色即出现（灰字表头 + 「◇ 打键」）',
-    bare.rows.length === 2 && bare.rows.every((r) => r.bare && r.btn) && bare.rows.some((r) => r.ent === bare.m) && bare.rows.some((r) => r.ent === bare.f), JSON.stringify(bare.rows));
-  await clickSel(`#timeline .tl-row[data-ent="${bare.f}"] .tl-addkey`);
+  ok('面板列出所有实体：新建场景两个角色即出现（实体持续条，无空位置子行、无假关键帧）',
+    bare.rows.length === 2 && bare.rows.every((r) => r.presence && r.btn) && bare.rows.some((r) => r.ent === bare.m) && bare.rows.some((r) => r.ent === bare.f), JSON.stringify(bare.rows));
+  await clickSel(`#timeline .tl-head[data-ent="${bare.f}"] .tl-label`);
+  await clickSel('.tl-track-action');
+  await page.evaluate(() => [...document.querySelectorAll('.tl-menu .ctx-item')].find(n => n.textContent.includes('位置')).click());
   await settle(150);
   const keyed = await page.evaluate((id) => {
     const a = window.__app;
@@ -321,6 +338,7 @@ export async function run() {
   await page.evaluate(() => window.__app.playback.stop());
 
   // ---- 9 折叠：视口高 +184px，刷新保持 ----
+  const expandedHeight = await page.$eval('#timeline', (n) => n.offsetHeight);
   const vh0 = await page.evaluate(() => document.getElementById('viewport').clientHeight);
   await clickSel('#timeline .tl-fold');
   await settle(150);
@@ -328,7 +346,7 @@ export async function run() {
   await page.reload({ waitUntil: 'networkidle0' });
   await page.waitForFunction(() => window.__app?.history.enabled, { timeout: 30000 });
   const kept = await page.evaluate(() => ({ collapsed: document.getElementById('timeline').classList.contains('collapsed'), h: document.getElementById('timeline').offsetHeight, vh: document.getElementById('viewport').clientHeight }));
-  ok('验收9 折叠后视口高度增加 184px', vh1 - vh0 === 184, `${vh0} → ${vh1}`);
-  ok('验收9 刷新页面保持折叠', kept.collapsed && kept.h === 36 && kept.vh === vh1, JSON.stringify(kept));
+  ok('验收9 折叠后释放时间轴轨道高度', Math.abs(vh1 - vh0 - (expandedHeight - 41)) <= 1, `${vh0} → ${vh1}`);
+  ok('验收9 刷新页面保持折叠', kept.collapsed && kept.h === 41 && kept.vh === vh1, JSON.stringify(kept));
   console.log(`📁 产物：${OUT}/`);
 }
