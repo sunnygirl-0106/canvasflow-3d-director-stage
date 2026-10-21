@@ -35,7 +35,7 @@ page.on('pageerror', (e) => errs.push('PAGEERROR: ' + e.message));
 /** 打开应用并等两个种子角色加载完。 */
 export async function openApp() {
   await page.goto(URL_, { waitUntil: 'networkidle0', timeout: 30000 });
-  await page.waitForFunction(() => window.__app && window.__app.entities.filter((e) => e.type === 'character' && e.bones?.size > 0).length >= 2, { timeout: 30000 });
+  await page.waitForFunction(() => window.__app?.history.enabled && window.__app.entities.filter((e) => e.type === 'character' && e.bones?.size > 0).length >= 2, { timeout: 30000 });
 }
 
 /** 关浏览器与服务，以 code 退出。 */

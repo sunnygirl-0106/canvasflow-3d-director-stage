@@ -12,7 +12,9 @@ export async function run() {
   const ids = await page.evaluate(() => {
     const a = window.__app;
     a.playback.stop();
-    const [A, B] = a.entities.filter((e) => e.type === 'character');
+    // 种子模型并发加载，entities 的入列顺序不代表左右位置。
+    const A = a.entities.find((e) => e.type === 'character' && e.body === 'male');
+    const B = a.entities.find((e) => e.type === 'character' && e.body === 'female');
     const box = a.addProp('box'); box.root.position.set(1.6, 0, 2.6);
     const cyl = a.addProp('cylinder'); cyl.root.position.set(3.4, 0, 0.9);
     const box2 = a.addProp('box'); box2.root.position.set(-2.6, 0, 2.4);
