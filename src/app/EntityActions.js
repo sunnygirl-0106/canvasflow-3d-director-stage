@@ -8,7 +8,6 @@ import { BODY_TYPES, PROP_LABEL, CAMERA_FOV } from '../config.js';
 import { worldBox } from '../util/measure.js';
 import { toast } from '../util/dom.js';
 import { xyz, round6, clone } from '../util/math.js';
-import { updateDraft } from '../doc/Store.js';
 import * as edit from '../doc/edit.js';
 
 /** 实体创建、复制及父子结构变更。先准备资源，再提交文档。 */
@@ -83,7 +82,7 @@ export class EntityActions {
     toast(`加载群众阵列 ${res.rows}×${res.cols} …`);
     const byId = new Map(doc.entities.map((e) => [e.id, e]));
     let crowd;
-    try { crowd = await Crowd.fromJSON(res.group, { app: this, assets: {}, entity: (id) => byId.get(id) }); }
+    try { crowd = await Crowd.fromJSON(res.group, { app: this.app, assets: {}, entity: (id) => byId.get(id) }); }
     catch (err) { console.error(err); toast('群众加载失败'); return null; }
     Object.assign(crowd, { rows: res.rows, cols: res.cols }); // 阵列规格（会话态，文档里不存）
     this._registerEntity(crowd, { msg: this._rigWarning(crowd.members[0]) || `已添加群众阵列（共 ${crowd.members.length} 人）` });
@@ -92,7 +91,7 @@ export class EntityActions {
 
   /** 把若干已选角色打成一个组，保留各自世界位姿。 */
   groupCharacters(ids) {
-    const members = (ids || [])
+    const members = [...new Set(ids || [])]
       .map((id) => this.app.entities.find((e) => e.id === id))
       .filter((e) => e && e.type === 'character');
     if (members.length < 2) { toast('请至少选择 2 个角色再打组'); return null; }
@@ -107,6 +106,7 @@ export class EntityActions {
     // 数据（组条目 / 成员相对轴心的 transform）由 edit.groupCharacters 生成（与 AI 同一份），再按条目改父子关系
     const doc = clone(this.app.store.document);
     const res = edit.groupCharacters(doc, members.map((m) => m.id), { name: '组' + (++this.app._groupCount), pivot });
+    const change = this._prepareStructure(() => this.app.store.prepareReplacement('打组', doc));
     const group = new THREE.Group();
     const crowd = new Crowd(res.group.name, group, members, {}, res.group.id);
     crowd.applyTransform(res.group.transform);
@@ -115,10 +115,19 @@ export class EntityActions {
     this.app.entities = this.app.entities.filter((e) => !members.includes(e));
     this.app.entities.push(crowd);
     this.app.labels.attach(crowd);
-    this.app.store.transact('打组', (draft) => updateDraft(draft, doc));
+    this.app.store.commit(change);
     this.app.select(crowd.id);
     toast(`已打组：${members.length} 个角色 → ${crowd.name}`);
     return crowd;
+  }
+
+  /** 结构准备失败时恢复 release 暂时移除的动画预览。 */
+  _prepareStructure(prepare) {
+    try { return prepare(); }
+    catch (err) {
+      if (this.app.timeline.active) this.app.timeline.evaluate(this.app.timeline.time);
+      throw err;
+    }
   }
 
   /** 解组：把群众拆为独立角色（保留各自世界位姿），轴心组移除。 */
@@ -126,19 +135,28 @@ export class EntityActions {
     const crowd = this.app.entities.find((e) => e.id === id && e.type === 'group');
     if (!crowd) return;
     this.app.timeline.release([crowd.id, ...crowd.members.map((m) => m.id)]); // 先写回手动值，再改父节点
+    // 先在独立变换上计算解组后的条目并校验，不能在校验失败前改动父子树。
+    const members = crowd.members.map((m) => {
+      m.root.updateWorldMatrix(true, false);
+      const matrix = new THREE.Matrix4().copy(this.app.stage.world.matrixWorld).invert().multiply(m.root.matrixWorld);
+      const root = new THREE.Object3D();
+      matrix.decompose(root.position, root.quaternion, root.scale);
+      return { ...m.toJSON(), transform: m.transformJSON(root) };
+    });
+    const change = this._prepareStructure(() => this.app.store.prepare('解组', (doc) => {
+      doc.entities = doc.entities.filter((e) => e.id !== crowd.id && !crowd.members.some((m) => m.id === e.id));
+      doc.entities.push(...members);
+      const anim = edit.pruneAnim({ tracks: doc.timeline.tracks, paths: doc.paths, constraints: doc.constraints }, [crowd.id]);
+      const dropped = edit.dropTransformAnim(anim, crowd.members.map((m) => m.id));
+      doc.timeline.tracks = dropped.tracks; doc.paths = dropped.paths; doc.constraints = anim.constraints;
+    }));
     for (const m of crowd.release()) {
-      this.app.stage.world.attach(m.root); // attach 保留世界变换
+      this.app.stage.world.attach(m.root);
       this.app.entities.push(m);
     }
     this.app.stage.remove(crowd.root);
     this.app.entities.splice(this.app.entities.indexOf(crowd), 1);
-    this.app.store.transact('解组', (doc) => {
-      doc.entities = doc.entities.filter((e) => e.id !== crowd.id && !crowd.members.some((m) => m.id === e.id));
-      for (const member of crowd.members) doc.entities.push(member.toJSON());
-      const anim = edit.pruneAnim({ tracks: doc.timeline.tracks, paths: doc.paths, constraints: doc.constraints }, [crowd.id]);
-      const dropped = edit.dropTransformAnim(anim, crowd.members.map((m) => m.id));
-      doc.timeline.tracks = dropped.tracks; doc.paths = dropped.paths; doc.constraints = anim.constraints;
-    });
+    this.app.store.commit(change);
     this.app.emit('entities');
     this.app.select(null);
     toast(`已解组：${crowd.members.length} 个角色已独立`);
@@ -200,8 +218,11 @@ export class EntityActions {
       copies.forEach((e) => e.dispose());
       toast('复制未完成：场景已改变或模型加载失败，请重试'); return;
     }
+    let change;
+    try { change = this.app.store.prepare('复制实体', (doc) => { doc.entities.push(...json); }); }
+    catch (err) { copies.forEach((e) => e.dispose()); throw err; }
     for (const ent of copies) { this.app.stage.add(ent.root); this.app.labels.attach(ent); this.app.entities.push(ent); }
-    this.app.store.transact('复制实体', (doc) => { doc.entities.push(...json); });
+    this.app.store.commit(change);
     if (copies.length) this.app.select(copies.at(-1).id);
   }
 

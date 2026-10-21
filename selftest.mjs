@@ -17,7 +17,7 @@
 //     对三个档案逐个预设 + 步态（走 / 跑各 8 相位，可用 gait 指代）做穿模检测（src/dev/poseCollision.js），
 //     列出穿模部位与最大深度；有穿模则退出码 1。
 //   node selftest.mjs doc
-//     场景文档验收：搭场景 → 截图 A → toDocument → 清空 → loadDocument → 截图 B → toDocument，
+//     场景文档验收：搭场景 → 截图 A → exportDocument → 清空 → loadDocument → 截图 B → exportDocument，
 //     断言两份文档深度相等、两图像素差 < 0.5%；5 种坏文档被定位并拒绝；撤销/重做画面一致。产物在 test-output/doc/。
 //   node selftest.mjs anim
 //     动画内核验收（阶段 C）：纯函数 / 跳转一致 / 手动值保持 / 导出不污染 / 往返 / 撤销 / 步态 / 约束 / 坏文档。

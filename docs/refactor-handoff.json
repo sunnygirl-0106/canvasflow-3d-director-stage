@@ -1,8 +1,8 @@
 {
-  "purpose": "新对话接手状态：先读取本文件，再检查 git status 和相关源码；沿用用户已经批准的计划继续。",
+  "purpose": "文档 Store 重构验收记录：已完成原交接列出的修复、审查及隔离全套验收。",
   "date": "2026-10-21",
   "branch": "refactor/cleanup",
-  "status": "WIP checkpoint，核心迁移已实现，最终验收和收尾未完成；未 push。",
+  "status": "收尾完成；check/build/全部 9 个 e2e 套件通过。本次变更作为本地收尾提交保存；未 push。",
   "authorization": "用户要求接手 Claude 清理优化，审核计划后已说开始吧。最新要求是解决对话容量不足；保存检查点后可在新对话继续。不需要重新申请常规代码编辑许可。",
   "prior_commits": [
     "50ddaf1 原始接手点：撤销复用实体",
@@ -19,22 +19,16 @@
     "新增 store e2e 套件，更新测试夹具显式提交编辑。"
   ],
   "validation": {
-    "check": "最近 npm run check 通过：128 unit tests，83 modules layering；见 /tmp/canvasflow-check-finalprep.log 和 /tmp/canvasflow-check-new3.log。",
-    "build": "最近 build 成功；主包 gzip 282.74 kB，对比基线 275.85 kB。见 /tmp/canvasflow-build-new.log。",
-    "latest_full_e2e": "已完成 /tmp/canvasflow-e2e-final.log：9 suites 中 8 个通过，default 因旧私有方法调用报错。doc20/20 anim49/49 tl26/26 path25/25 cam34/34 export24/24 ai15/15 store7/7。不能报告全绿。",
-    "known_failure": "e2e/suites/default.mjs:158 仍调用 a._nextCharName()；提取后位于 a.entityActions._nextCharName()。尚未修复，优先修复并扫描其他旧私有方法引用。",
-    "performance": "单次观察 undo 约 2.4ms，基线约1.6ms；均复用实体，不构成严谨性能比较。",
-    "logs_note": "/tmp 日志可能被系统清理；上述结果已保存在本文件。最终代码仍须运行 check/build/e2e。"
+    "check": "隔离工作树 npm run check 通过：128/128 unit tests，83 modules 无循环依赖/分层倒置；/tmp/canvasflow-check-isolated.log。",
+    "build": "隔离工作树 npm run build 通过：主包 960.19 kB，gzip 282.85 kB；较原交接基线 275.85 kB 增加 7.00 kB（约 2.54%）；/tmp/canvasflow-build-isolated.log。",
+    "latest_full_e2e": "隔离工作树 npm run test:e2e:all 退出码 0：9/9 suites、243/243 断言通过；default35/35 doc20/20 anim49/49 tl26/26 path25/25 cam34/34 export24/24 ai15/15 store15/15；/tmp/canvasflow-e2e-isolated.log。",
+    "known_failure": null,
+    "performance": "本轮隔离 doc 套件单次 undo 约 2.6ms；原交接基线约1.6ms，上次迁移约2.4ms。均复用实体；单次观察不构成严格性能比较，不宣称性能提升。时间轴 100 键/10 轨道播放测试通过。",
+    "logs_note": "最终验收日志位于 /tmp/canvasflow-{check,build,e2e}-isolated.log，可能被系统清理；结果与限制已记录于本文件。",
+    "targeted": "default 35/35；新增审查回归后的 store 15/15；/tmp/canvasflow-default-resume.log、/tmp/canvasflow-store-final.log。",
+    "environment": "验收使用 /tmp/canvasflow-store-acceptance 隔离工作树（基于 c4d769b + 本次 Store 改动），复用已安装 node_modules。原工作区验收期间出现其它并行 AI 改动，Vite localAiPlugin 启动错误使首轮 ai/store 未运行；未将该错误算作 Store 验收通过，也未改动或提交该并行工作。隔离后从头完整验收全部通过。"
   },
-  "next_steps": [
-    "修复 default 测试遗留私有调用，检查 EntityActions 提取后的其他引用；重跑失败套件。",
-    "检查 EntityActions.addCrowd 的 Crowd.fromJSON 上下文 {app:this}，应为 {app:this.app}。",
-    "检查 Store.preparePatches：目前无调用且 inversePatches 为空；删除无用接口或补齐正确语义。修正 batch 注释：实际子事务仍做校验。",
-    "清理 Timeline、README 等仍声称 snapshot History / toDocument / Timeline 自持数据的注释文档。",
-    "审查 group/ungroup/duplicate 原子性、预览与撤销交互；gizmo Esc/pointercancel 已实现但缺真实拖拽取消验收。通用 widgets pointercancel 仍旧行为，必要时核实。",
-    "跑 npm run check、npm run build、npm run test:e2e:all，全部通过后再完成验收；若更改了测试夹具，不要削弱原断言。",
-    "更新本交接状态，提交收尾变更，报告性能/包体积变化及尚存限制；用户未要求 push。"
-  ],
+  "next_steps": [],
   "important_files": [
     "src/doc/Store.js",
     "src/doc/serialize.js",
@@ -47,6 +41,19 @@
     "tests/store.test.mjs",
     "tests/history.test.mjs"
   ],
-  "workflow": "没有发现适用 AGENTS.md；未调用 skills；不要擅自创建子代理。当前迁移改动一起保存为 WIP 提交以防上下文丢失，不表示已完成验收。",
-  "new_chat_prompt": "读取 docs/refactor-handoff.json，检查当前分支和代码，沿用已批准计划继续文档 Store 重构。先修复记录中的 default 测试失败，再完成剩余审查和全套验收，不要 push。"
+  "workflow": "未调用 skills；未创建子代理。仅选择性提交 Store 收尾涉及的 13 个文件，保留工作区中其它 AI/配置变更；不 push。",
+  "new_chat_prompt": "本轮 Store 重构收尾已完成。需要后续工作时，先查看当前 git status；其它并行 AI/配置改动不属于本次提交。性能限制见 limitations。",
+  "review": [
+    "修复 default 遗留 a._nextCharName 调用；扫描 src/e2e/tests 未发现其它已提取私有方法的旧调用。",
+    "修正 Crowd.fromJSON 上下文为 app:this.app。删除无调用且逆补丁语义不完整的 preparePatches；batch 注释明确子事务仍校验。",
+    "打组输入去重；打组/解组/复制先准备和校验文档，再修改运行时父子树或添加副本；复制失败释放已准备副本。",
+    "结构校验失败恢复被 release 临时移除的动画预览；回归验证播放帧及文档保持。",
+    "真实鼠标拖动验证 gizmo Esc、pointercancel 和拖动中撤销；通用数值轴 pointercancel 恢复起始值和显示，不提交。",
+    "结构回归注入打组/解组校验失败及部分复制资源失败；验证无部分入场、世界位置保持、单步撤销/重做与字段内容一致。",
+    "更新 README、Timeline、App、edit、CameraMoveTool、selftest 中旧的数据持有和快照描述；未弱化原有断言。"
+  ],
+  "limitations": [
+    "History 存储 Immer 正反补丁，但 undo/redo 仍走 loadDocument 全文档校验及实体复用流程，尚未实现仅按补丁路径投影。",
+    "性能为单次浏览器观察，不构成严格基准比较；未宣称撤销速度提升。"
+  ]
 }

@@ -155,7 +155,7 @@ export async function run() {
   // 4b 角色命名超过 26 个不溢出成标点
   const names = await page.evaluate(() => {
     const a = window.__app; const saved = a.charSeq;
-    a.charSeq = 25; const z = a._nextCharName(); const a2 = a._nextCharName();
+    a.charSeq = 25; const z = a.entityActions._nextCharName(); const a2 = a.entityActions._nextCharName();
     a.charSeq = saved; return { z, a2 };
   });
   ok('角色命名：Z 之后为 A2', names.z === '角色Z' && names.a2 === '角色A2', JSON.stringify(names));

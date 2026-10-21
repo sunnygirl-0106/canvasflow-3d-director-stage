@@ -110,7 +110,7 @@ export async function dragPlayhead(t) {
  * 真实拖 gizmo 的某个轴箭头，使选中对象沿该轴移动 worldDelta（世界坐标）：
  * 按在箭头上（拾取体 0..0.6 × 手柄尺度），拖到"箭头点 + 位移"的投影处。
  */
-export async function gizmoDrag(axis, delta) {
+export async function gizmoDrag(axis, delta, { hold } = {}) {
   const pts = await page.evaluate((axis, delta) => {
     const a = window.__app;
     a.stage.render();
@@ -129,6 +129,7 @@ export async function gizmoDrag(axis, delta) {
   await sleep(40);
   await page.mouse.down();
   await page.mouse.move(...pts[1], { steps: 16 });
+  if (hold) await hold();
   await page.mouse.up();
   await settle();
 }

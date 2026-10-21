@@ -1,4 +1,4 @@
-import { enablePatches, produceWithPatches, applyPatches, freeze, isDraft, original } from 'immer';
+import { enablePatches, produceWithPatches, freeze, isDraft, original } from 'immer';
 import { Emitter } from '../util/Emitter.js';
 import { clone } from '../util/math.js';
 import { createEmptyDocument, validate, DocumentError } from './schema.js';
@@ -69,7 +69,7 @@ export class DocumentStore extends Emitter {
 
   transact(label, recipe, options) { return this.commit(this.prepare(label, recipe), options); }
 
-  /** 同步复合命令只校验、发布和投影最终结果；中间步骤不通知 UI / 历史。 */
+  /** 同步复合命令逐步校验，只发布和投影最终结果；中间步骤不通知 UI / 历史。 */
   batch(label, fn) {
     if (this._batchDocument) return fn();
     this._batchDocument = this.document;
@@ -85,9 +85,4 @@ export class DocumentStore extends Emitter {
 
   prepareReplacement(label, document) { return this.prepare(label, (draft) => updateDraft(draft, document)); }
 
-  preparePatches(label, patches) {
-    const after = applyPatches(this.document, patches);
-    this._validate(after);
-    return { label, before: this.document, after, patches, inversePatches: [], revision: this.revision };
-  }
 }

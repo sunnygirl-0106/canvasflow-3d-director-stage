@@ -17,7 +17,7 @@ const GOLDEN = 0.6180339887; // 群众成员步伐错开：第 i 个成员相位
 const T_EPS = 1e-9; // 同一时刻判定（setKey 覆盖 / removeKey）
 
 /**
- * 时间轴：持有场景文档里的 timeline / paths / constraints 三个字段（文档形状的纯数据，是唯一的源），
+ * 时间轴：通过 getter 读取 Store 里的 timeline / paths / constraints，
  * 并由它们算出任意时刻的场景状态 evaluate(t)。
  *
  * 手动值与动画值共存：
@@ -25,7 +25,7 @@ const T_EPS = 1e-9; // 同一时刻判定（setKey 覆盖 / removeKey）
  * - active：对每个被驱动的实体记一份 base（transform / fov / pose.values 的拷贝）。evaluate(t) 每次都从 base 出发，
  *   按固定顺序 关键帧轨道 → 路径轨道 → 约束 叠加，最后写入 root / camera。内部没有"上一帧"状态，
  *   同一份文档同一个 t 结果逐数值相同。
- * - active 期间 toDocument() 对被驱动实体导出 base（baseOf），所以播放中导出 / 撤销快照不会把瞬时值当成手动值。
+ * - active 期间编辑提交使用 baseOf 保留手动值；导出与补丁历史只读取 Store，不写入播放瞬时值。
  *
  * 事件：'change' —— 轨道 / 路径 / 约束 / 时长等文档数据变化；'active'(bool) —— idle ↔ active。
  */
@@ -492,7 +492,7 @@ export class Timeline extends Emitter {
 
   /**
    * 实体被删除：引用它的轨道 / 路径 / 约束（target 或 subject）与主机位一并删除。
-   * 由 App 在删除实体的同一同步流程里调用，因此与删除记在同一次撤销快照里。
+   * 由 App 在删除实体的同一同步流程里调用，因此与删除记在同一次补丁历史里。
    * @param {Iterable<string>} ids
    */
   pruneEntities(ids) {

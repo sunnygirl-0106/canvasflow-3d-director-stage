@@ -1,6 +1,6 @@
 // 作用于场景文档的纯函数：新建角色 / 群众 / 打组 / 路径 / 运镜的"数据部分"。
 // 界面入口（App / PathTool / CameraMoveTool）与 AI（src/ai/apply.js）调用同一份函数：
-// 界面先在 toDocument() 的拷贝上算出结果，再按结果建场景对象（Character.fromJSON 等）或整体提交动画字段；
+// 界面先在 exportDocument() 的拷贝上算出结果，再按结果建场景对象（Character.fromJSON 等）或整体提交动画字段；
 // AI 在临时文档上连续调用，最后整份 loadDocument。
 //
 // 约定：函数直接修改传入的 doc（调用方传拷贝），返回新建 / 改动的条目；坐标一律文档口径。

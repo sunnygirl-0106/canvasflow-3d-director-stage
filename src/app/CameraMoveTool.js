@@ -55,7 +55,7 @@ export class CameraMoveTool {
 
   _aheadPoint(cam) { return aheadPoint(cam.transformJSON(this.app.timeline.baseOf(cam) || cam.root)); }
 
-  /** 只含本机位条目 + 动画字段的文档视图（edit.moveContext 用；不必整份 toDocument）。 */
+  /** 只含本机位条目 + 动画字段的文档视图（edit.moveContext 用；不必整份 exportDocument）。 */
   _camDoc(cam) {
     return this.app.store.document;
   }

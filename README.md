@@ -300,7 +300,9 @@ src/
 │  └─ agent.js          重试回路 AiAgent（app.ai）
 ├─ app/
 │  ├─ App.js            应用状态：实体清单 / 选择 / 视角切换 / 场景参数；变化以事件广播
-│  ├─ History.js        撤销 / 重做（场景文档快照栈）
+│  ├─ DocumentController.js 文档导出 / 运行时投影 / 异步加载编排
+│  ├─ EntityActions.js  实体创建 / 复制 / 打组与解组
+│  ├─ History.js        撤销 / 重做（Immer 正反补丁历史）
 │  ├─ SceneFile.js      导出 / 导入 .json + localStorage 自动保存与恢复
 │  ├─ PathTool.js       路径绘制：五种方式的状态机 / 冲突确认 / 起点规则 / 绘制态改键
 │  ├─ PathEditor.js     顶点编辑：拖动 / ⇧平移 / 插入 / 删除（松手一次写入）
@@ -319,12 +321,13 @@ src/
 │  ├─ NavGizmo.js       右上角坐标指示器
 │  └─ cameraPresets.js  机位景别预设
 ├─ doc/                 场景文档：导演台全部场景状态 ↔ 一份可校验的 JSON
+│  ├─ Store.js          不可变 JSON 文档源 / 校验 / 事务与补丁 / revision 冲突检查
 │  ├─ schema.js         版本号 / 文档形状说明 / 默认值 / validate（错误定位到字段路径）
-│  ├─ serialize.js      toDocument / loadDocument（先建好再一次性替换，失败不留半个场景）
+│  ├─ serialize.js      loadDocument（先建好再一次性替换，失败不留半个场景）
 │  ├─ edit.js           作用于文档的纯函数：新建角色 / 群众 / 打组 / 路径 / 运镜 / 删除（界面与 AI 共用）
 │  └─ migrate.js        按版本逐级升级
 ├─ anim/                动画内核（无界面）：文档里的 timeline / paths / constraints → evaluate(t)
-│  ├─ Timeline.js       数据持有 + idle/active + base 快照 + evaluate（关键帧 → 路径/步态 → 约束）+ 编辑 API
+│  ├─ Timeline.js       Store 数据视图 + idle/active + base 快照 + evaluate（关键帧 → 路径/步态 → 约束）+ 编辑 API
 │  ├─ Playback.js       play / pause / stop / seek / loop（挂在 Stage 按需渲染循环上）
 │  ├─ Channel.js        关键帧插值（位置/缩放/FOV 线性，旋转四元数 slerp）· Track.js 轨道
 │  ├─ Path.js           Catmull-Rom + 弧长表 + 速度曲线 · PathTrack.js 沿路径移动 / 切线朝向

@@ -43,7 +43,13 @@ function attachScrub(elm, { get, set, step, after, end }) {
     if (e.clientX !== startX) end?.();
   };
   elm.addEventListener('pointerup', stop);
-  elm.addEventListener('pointercancel', stop);
+  elm.addEventListener('pointercancel', (e) => {
+    if (!dragging) return;
+    dragging = false;
+    set(startV);
+    after?.();
+    try { elm.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+  });
 }
 
 // 三元 XYZ 行。axes: [{key:'x', get:()=>num, set:(v)=>{}, step?}]; deg=true 显示整数度；

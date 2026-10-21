@@ -449,7 +449,7 @@ export class App extends Emitter {
   resetView() { this.rig.resetView(); toast('已重置视角'); }
 
   /**
-   * 实体被 gizmo / 面板修改后（一次操作结束时）调用。时间轴 idle：什么都不做（root 就是手动值）。
+   * 实体被 gizmo / 面板修改后（一次操作结束时）调用。时间轴 idle：把指定实体的手动值提交到 Store。
    * 时间轴 active：
    * - props 含 'pos' / 'rot' / 'scale' / 'fov' → Timeline.editAt：有轨道写当前时刻的键，无轨道按「自动打键」
    *   新建轨道写键或改手动值；被路径 / 跟随 / 注视驱动的属性不记并提示；
