@@ -95,7 +95,12 @@ export function characterJSON({ id, name, body, pos = [0, 0, 0], rot = [0, 0, 0]
 
 /** 新建角色并加入文档（默认落点 = spawnPoint）。返回条目。 */
 export function addCharacter(doc, { name, body, pos, yaw = 0, color, pose = null }) {
-  const json = characterJSON({ id: newId(doc), name, body, pos: pos || spawnPoint(topLevelCount(doc)), rot: [0, yaw, 0], color: color ?? hexColor(CHARACTER_PALETTE[doc.entities.filter(e => e.type === 'character').length % CHARACTER_PALETTE.length]), pose });
+  const characterCount = doc.entities.filter(e => e.type === 'character').length;
+  const defaultColor = CHARACTER_PALETTE[characterCount % CHARACTER_PALETTE.length];
+  const json = characterJSON({
+    id: newId(doc), name, body, pos: pos || spawnPoint(topLevelCount(doc)),
+    rot: [0, yaw, 0], color: color ?? hexColor(defaultColor), pose,
+  });
   doc.entities.push(json);
   return json;
 }

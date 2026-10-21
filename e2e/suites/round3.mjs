@@ -95,6 +95,15 @@ export async function run() {
   });
   ok('继续对话默认修改，修改不改变导演视角',modify.ok&&modify.same&&modify.mode==='modify');
   await clickSel('.ai-history-head button:last-child');
+  ok('历史恢复失败不提前标记已撤销', await page.evaluate(async () => {
+    const a = window.__app, panel = window.__aiPanel, turn = panel.agent.turns.at(-1);
+    const undo = a.history.undo;
+    try {
+      a.history.undo = async () => false;
+      await panel._undoTurn(turn);
+      return !turn.undone && !turn.undoing;
+    } finally { a.history.undo = undo; }
+  }));
   const undos=await page.$$('.ai-undo');await undos.at(-1).evaluate(n=>n.scrollIntoView({block:'center'}));await shot('history-before-undo');await undos.at(-1).click();await settle(150);
   ok('历史当前轮撤销可达并恢复姿势',await page.evaluate(()=>window.__app.exportDocument().entities.find(e=>e.name==='蓝').pose.preset!=='wave'));
   await shot('history-undo');

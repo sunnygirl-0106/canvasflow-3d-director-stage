@@ -3,14 +3,11 @@
   --tl-animation: #45c9cf;
   --accent: #45c9cf;
   --green: #45c9cf;
-  --tl-playhead: #45c9cf;
-  --tl-row-h: 30px;
-  flex: 0 0 auto; height: 26vh; min-height: 180px;
+  flex: 0 0 auto; min-height: 180px;
   display: flex; flex-direction: column;
   background: var(--surface-timeline); border-top: 1px solid var(--line);
   user-select: none; position: relative; z-index: 4;
 }
-#timeline.collapsed { height: 36px; min-height: 36px; }
 #timeline.collapsed .tl-rows, #timeline.collapsed .tl-ph-line { display: none; }
 #timeline.collapsed .tl-scroll { overflow: hidden; }
 
@@ -211,19 +208,16 @@
 .move-seg:not(:last-child) .move-seg-del { opacity: .35; }
 
 /* 首行冻结操作区与标尺共用时间原点；设置弹层向上展开。 */
-#timeline .tl-tools { position: absolute; top: 0; right: 0; width: 340px; height: 36px; z-index: 9; display: flex; align-items: center; justify-content: space-evenly; background: var(--panel); border-left: 1px solid var(--line); }
-#timeline .tl-zoom { width: 70px; accent-color: var(--accent); }
-#timeline .tl-export { border: 0; border-radius: 5px; background: var(--accent); padding: 5px 9px; color: #10292b; cursor: pointer; }
+#timeline .tl-tools { position: absolute; top: 0; right: 0; width: 340px; z-index: 9; display: flex; align-items: center; justify-content: space-evenly; background: var(--panel); border-left: 1px solid var(--line); }
+#timeline .tl-export { border: 0; border-radius: 5px; padding: 5px 9px; cursor: pointer; }
 #timeline .tl-clock .tl-num { width: 57px; padding: 0; background: transparent; color: var(--dim); appearance: textfield; }
 #timeline .tl-num::-webkit-inner-spin-button { appearance: none; }
-#timeline .tl-more summary { list-style: none; padding: 5px; cursor: pointer; }
-#timeline .tl-settings { position: fixed; bottom: calc(26vh + 4px); left: 12px; display: flex; flex-wrap: wrap; width: 310px; padding: 12px; background: #242428; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 18px #0008; }
+#timeline .tl-more summary { list-style: none; cursor: pointer; }
+#timeline .tl-settings { position: fixed; left: 12px; display: flex; flex-wrap: wrap; width: 310px; padding: 12px; background: #242428; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 18px #0008; }
 #timeline.collapsed .tl-settings { bottom: 40px; }
-#timeline .tl-presence { position: absolute; left: var(--gutter); width: calc(var(--dur) * var(--pps) * 1px); top: 6px; bottom: 6px; border-radius: 3px; background: #30979d; opacity: .65; }
-#timeline .tl-value { font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dim); }
-#timeline .tl-track .tl-addkey { padding: 2px 4px; }
+#timeline .tl-presence { position: absolute; left: var(--gutter); width: calc(var(--dur) * var(--pps) * 1px); border-radius: 3px; }
+#timeline .tl-value { font-variant-numeric: tabular-nums; color: var(--dim); }
 #timeline button:disabled { opacity: .3; cursor: default; }
-#timeline .tl-key { background: #45c9cf; }
 
 #timeline .tl-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
 #timeline .tl-scroll::-webkit-scrollbar-track { background: #19191d; }

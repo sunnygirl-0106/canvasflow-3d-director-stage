@@ -23,3 +23,20 @@ test('new character palette follows creation order and preserves explicit colors
   assert.equal(addCharacter(doc, { name: 'B', body: 'female' }).color, '#e35e61');
   assert.equal(addCharacter(doc, { name: 'C', body: 'male', color: '#abcdef' }).color, '#abcdef');
 });
+
+test('fitBounds rejects invalid projection inputs and handles degenerate view directions', () => {
+  const box = new THREE.Box3(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 2, 1));
+  const original = box.clone();
+  for (const options of [{ fov: 0, aspect: 1 }, { fov: 48, aspect: 0 }, { fov: 48, aspect: 1, occupancy: 0 }]) {
+    assert.throws(() => fitBounds(box, options), RangeError);
+  }
+  assert.throws(() => fitBounds(new THREE.Box3(), { fov: 48, aspect: 1 }), RangeError);
+  for (const direction of [new THREE.Vector3(), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0)]) {
+    const before = direction.clone();
+    const fit = fitBounds(box, { fov: 48, aspect: 1, direction });
+    assert.ok(fit.position.toArray().every(Number.isFinite));
+    assert.ok(fit.position.distanceTo(fit.target) >= 1.5);
+    assert.ok(direction.equals(before));
+  }
+  assert.ok(box.equals(original));
+});

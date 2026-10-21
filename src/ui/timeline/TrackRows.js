@@ -112,7 +112,7 @@ export class TrackRows {
     } else if (kind === 'path') {
       label = '位置（路径驱动）';
       attrs['data-path'] = data.id;
-      lane = el('div', { class: 'tl-lane' }, this.pathEditors.has(data.id) ? [this._bar('path', data.id, data.start, data.start + data.duration, '')] : [vars(el('button', { class: 'tl-path-line', title: '打开轨迹编辑与区间设置', onclick: () => this.panel.app.emit('inspect', { id: ent.id, section: 'path' }) }), { '--t0': data.start, '--t1': data.start + data.duration })]);
+      lane = this._pathLane(ent, data);
     } else {
       label = data.type === 'lookAt' ? '焦点' : CONSTRAINT_LABEL[data.type];
       attrs['data-constraint'] = data.id;
@@ -124,9 +124,40 @@ export class TrackRows {
     }
     const empty = kind === 'track' && !data.keys.length;
     return el('div', { class: 'tl-row tl-track' + (empty ? ' is-empty' : ''), ...attrs }, [
-      el('div', { class: 'tl-name' }, [el('span', { class: 'tl-label', text: label }), ...(kind === 'path' ? [el('button', { class: 'tl-addkey tl-path-edit', title: '展开或收起路径区间编辑', html: icon('chevron', 14), onclick: () => { if (this.pathEditors.has(data.id)) this.pathEditors.delete(data.id); else this.pathEditors.add(data.id); this.panel.rebuild(); this.panel.app.emit('inspect', { id: ent.id, section: 'path' }); } })] : []), ...(data.property ? this._propertyControls(ent, data.property) : kind === 'constraint' && data.type === 'lookAt' ? [el('span', { class: 'tl-value', text: '注视：' + (Array.isArray(data.subject) ? data.subject.map(v => v.toFixed(1)).join(', ') : this.panel.app.findEntity(data.subject)?.name || '目标') })] : [])]),
+      el('div', { class: 'tl-name' }, [el('span', { class: 'tl-label', text: label }), ...this._rowControls(ent, kind, data)]),
       lane,
     ]);
+  }
+
+  _pathLane(ent, path) {
+    const end = path.start + path.duration;
+    const content = this.pathEditors.has(path.id)
+      ? this._bar('path', path.id, path.start, end, '')
+      : vars(el('button', {
+        class: 'tl-path-line', title: '打开轨迹编辑与区间设置',
+        onclick: () => this.panel.app.emit('inspect', { id: ent.id, section: 'path' }),
+      }), { '--t0': path.start, '--t1': end });
+    return el('div', { class: 'tl-lane' }, [content]);
+  }
+
+  _rowControls(ent, kind, data) {
+    if (data.property) return this._propertyControls(ent, data.property);
+    if (kind === 'path') return [el('button', {
+      class: 'tl-addkey tl-path-edit', title: '展开或收起路径区间编辑', html: icon('chevron', 14),
+      onclick: () => {
+        if (this.pathEditors.has(data.id)) this.pathEditors.delete(data.id);
+        else this.pathEditors.add(data.id);
+        this.panel.rebuild();
+        this.panel.app.emit('inspect', { id: ent.id, section: 'path' });
+      },
+    })];
+    if (kind === 'constraint' && data.type === 'lookAt') {
+      const subject = Array.isArray(data.subject)
+        ? data.subject.map(v => v.toFixed(1)).join(', ')
+        : this.panel.app.findEntity(data.subject)?.name || '目标';
+      return [el('span', { class: 'tl-value', text: '注视：' + subject })];
+    }
+    return [];
   }
 
   _propertyControls(ent, property) {

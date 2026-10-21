@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { fitBounds, OVERVIEW_DIRECTION } from './framing.js';
+import { fitBounds, OVERVIEW_DIRECTION, FRAMING } from './framing.js';
 import { worldBox } from '../util/measure.js';
 
 // OrbitControls + 自动取景 + 取景比例 overlay + 重置视角
@@ -67,14 +67,21 @@ export class CameraRig {
     for (const e of subjects.length ? subjects : visible) box.union(worldBox(e.root, { useBones: e.type === 'character' }));
     if (box.isEmpty()) return;
     // 近景道具参与取景；远处布景不能把主角缩成点。
-    const near = box.clone().expandByScalar(1.5);
+    const near = box.clone().expandByScalar(FRAMING.nearbyPropDistance);
     for (const e of visible.filter(e => e.type === 'prop')) {
       const bounds = worldBox(e.root);
       if (near.containsBox(bounds)) box.union(bounds);
     }
-    box.expandByScalar(0.12);
+    box.expandByScalar(FRAMING.subjectPadding);
     const direction = overview ? OVERVIEW_DIRECTION : this.camera.position.clone().sub(this.controls.target).normalize();
-    const fit = fitBounds(box, { fov: this.camera.fov, aspect: this.camera.aspect, direction, occupancy: overview ? (subjects.length > 1 ? 0.55 : 0.38) : 0.75, horizontalOccupancy: 0.72 });
+    const overviewOccupancy = subjects.length > 1
+      ? FRAMING.groupOverviewOccupancy
+      : FRAMING.singleOverviewOccupancy;
+    const fit = fitBounds(box, {
+      fov: this.camera.fov, aspect: this.camera.aspect, direction,
+      occupancy: overview ? overviewOccupancy : FRAMING.focusOccupancy,
+      horizontalOccupancy: FRAMING.horizontalOccupancy,
+    });
     this.controls.target.copy(fit.target);
     this.camera.position.copy(fit.position);
     this.controls.update();

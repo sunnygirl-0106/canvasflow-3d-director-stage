@@ -136,5 +136,3 @@ export const README_MARKERS = ['<!-- ai-vocab:start（npm run docs:ai 生成，�
 export function aiVocabMarkdown() {
   return ['**操作（ops）**', '', '```', opsText(), '```', '', '**词汇表**', '', '```', vocabText(), '```'].join('\n');
 }
-
-// 默认构图策略：显式参数优先，见系统提示词。

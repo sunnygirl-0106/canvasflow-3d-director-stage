@@ -43,6 +43,9 @@ export class AiPanel {
     this.app = app;
     this.agent = app.ai;
     this.open = false;
+    this.continuing = false;
+    this.showHistory = false;
+    this.browsePresets = false;
     this.mode = 'modify';
     this.image = null;      // 识图：压缩后的 data URL
     this.showSettings = false;
@@ -67,6 +70,12 @@ export class AiPanel {
     this.render();
     if (v) this.textarea?.focus();
     this.onToggle?.(v);
+  }
+
+  leaveConversation() {
+    this.continuing = false;
+    this.showHistory = false;
+    this.toggle(false);
   }
 
   openPresets() {
@@ -98,14 +107,13 @@ export class AiPanel {
     this.statusEl = el('div', { class: 'ai-result', role: 'status' });
     this.inputEl = el('div', { class: 'ai-input' });
     const historyHead = el('div', { class: 'ai-history-head', hidden: !this.continuing || undefined }, [
-      el('button', { class: 'ai-icbtn', title: '返回', html: icon('chevron', 16), onclick: () => { this.continuing = false; this.showHistory = false; this.toggle(false); } }),
+      el('button', { class: 'ai-icbtn', title: '返回', html: icon('chevron', 16), onclick: () => this.leaveConversation() }),
       el('button', { text: '历史对话 ›', onclick: () => { this.showHistory = !this.showHistory; this.open = this.showHistory; this.render(); } }),
     ]);
     this.root.append(this.detailsEl, this.statusEl, historyHead, this.inputEl);
-    if (this.textarea) this.textarea.value = draft;
     this.renderSettings();
     this.renderFlow();
-    this.renderInput();
+    this.renderInput(draft);
   }
 
   // ---- 设置 ----
@@ -181,9 +189,8 @@ export class AiPanel {
     this.statusEl.replaceChildren();
     this.statusEl.hidden = !t || t.status === 'ok';
     if (!t || t.status === 'ok') return;
-    const text = { running: '正在搭建场景…', ok: `已应用 ${t.result?.applied || 0} 项修改`, failed: '生成结果未通过校验，请重试', error: t.error || '生成失败，请重试', cancelled: '已取消' }[t.status];
+    const text = { running: '正在搭建场景…', failed: '生成结果未通过校验，请重试', error: t.error || '生成失败，请重试', cancelled: '已取消' }[t.status];
     this.statusEl.append(el('span', { text }));
-    if (t.status === 'ok') this.statusEl.append(el('button', { class: 'minibtn', text: t.undone ? '已撤销' : '撤销', disabled: t.undone || this.app.history.index !== t.historyIndex || undefined, onclick: async () => { t.undone = true; await this.app.history.undo(); this.renderFlow(); } }));
     if (['error', 'failed'].includes(t.status)) this.statusEl.append(el('button', { class: 'minibtn', text: '重试', onclick: () => this.send() }));
   }
 
@@ -212,11 +219,11 @@ export class AiPanel {
       const renames = Object.entries(r.renames || {}).map(([a, b]) => `「${a}」重名，改为「${b}」`);
       reply.push(el('div', { class: 'ai-status ok', text: `✓ 已应用 ${r.applied} 项${t.attempts.length > 1 ? `（第 ${t.attempts.length} 次尝试）` : ''}` }));
       for (const w of [...renames, ...(r.warnings || [])]) reply.push(el('div', { class: 'ai-warn', text: w }));
-      const latest = this.app.history.index === t.historyIndex && !t.undone;
+      const latest = this.app.history.index === t.historyIndex && !t.undone && !t.undoing;
       reply.push(el('button', {
         class: 'minibtn ai-undo', text: t.undone ? '已撤销' : '撤销这一轮', disabled: !latest || undefined,
         title: latest ? '撤销这一轮的全部改动（= ⌘Z 一次）' : '之后还有别的改动，请用 ⌘Z 逐步撤销',
-        onclick: async () => { t.undone = true; await this.app.history.undo(); this.renderFlow(); },
+        onclick: () => this._undoTurn(t),
       }));
     } else if (t.status === 'failed') {
       reply.push(el('div', { class: 'ai-status err', text: `✕ 尝试 ${t.attempts.length} 次都没通过校验，场景未改动` }));
@@ -229,12 +236,26 @@ export class AiPanel {
     return el('div', { class: 'ai-turn', 'data-status': t.status }, nodes);
   }
 
+  async _undoTurn(turn) {
+    const history = this.app.history;
+    history.capture();
+    if (turn.undone || turn.undoing || history.index !== turn.historyIndex) return;
+    turn.undoing = true;
+    this.renderFlow();
+    try {
+      turn.undone = await history.undo();
+      if (!turn.undone) toast('撤销未完成，场景保持不变');
+    } finally {
+      turn.undoing = false;
+      this.renderFlow();
+    }
+  }
+
   // ---- 输入 ----
-  renderInput() {
+  renderInput(draft = this.textarea?.value ?? '') {
     if (!this.inputEl) return;
     const busy = this.agent.busy;
     const mode = this.effectiveMode;
-    const draft = this.textarea?.value ?? '';
     clear(this.inputEl);
     clear(this.optionsEl);
     const seg = el('div', { class: 'ai-modes' }, MODES.map((m) => el('button', {
@@ -330,9 +351,20 @@ export class AiPanel {
   async _run(req) {
     this.textarea.value = '';
     const turn = await this.agent.run(req);
-    if (turn.status === 'ok') { turn.historyIndex = this.app.history.index; this.continuing = true; this.mode = 'modify'; this.open = false; this.showHistory = false; this.render(); toast('场景已更新'); }
-    else if (turn.status !== 'cancelled' && !this.textarea.value) this.textarea.value = req.input; // 失败：输入放回去方便改
-    if (turn.status === 'ok' && req.mode === 'image') this.image = null;
+    if (turn.status === 'ok') {
+      turn.historyIndex = this.app.history.index;
+      this.continuing = true;
+      this.mode = 'modify';
+      this.open = false;
+      this.showHistory = false;
+      this.browsePresets = false;
+      if (req.mode === 'image') this.image = null;
+      this.render();
+      toast('场景已更新');
+      return;
+    }
+    // 失败时恢复输入方便修正；取消不覆盖用户后续输入。
+    if (turn.status !== 'cancelled' && !this.textarea.value) this.textarea.value = req.input;
     this.renderFlow();
     this.renderInput();
   }
