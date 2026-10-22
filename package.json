@@ -5,7 +5,7 @@
   "type": "module",
   "description": "3D 导演台融合 Demo — 多角色 GLB 摆姿 + 几何道具 + 取景截图",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "dev": "vite",
