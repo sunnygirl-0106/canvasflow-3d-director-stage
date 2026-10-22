@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import { EASE, smoothDeriv, clamp01 } from './ease.js';
-import { cycleFactor } from './Locomotion.js';
 
 const MIN_SEGMENTS = 200;
 const SEGMENTS_PER_POINT = 64;
-const GAIT_SAMPLES = 512; // 步态相位积分表的采样数
+const ARC_TOLERANCE = 1e-6; // 米；控制弧长反解的线性插值误差，尤其是起点和密集节点。
 
 /**
  * 角色 / 组 speed=smooth 的起步 / 收步时长（秒）。整段 smoothstep 会把加速拉满全程（5 s 的路第 1 s 才到均速，
@@ -15,6 +14,9 @@ export const WALK_RAMP = 0.4;
 
 /** 实体类型 → Path 的 ramp 选项。 */
 export const rampFor = (type) => (type === 'camera' ? 0 : WALK_RAMP);
+
+/** 人物整段按「总弧长 / 时长」匀速；旧文档的 smooth 也不再使人物加减速。 */
+export const pathOptionsFor = (type) => ({ ramp: rampFor(type), uniform: ['character', 'group'].includes(type) });
 
 /**
  * 一段时长 dt、长 L 的位移曲线：x ∈ [0,dt] 秒 → [已走路程, 瞬时速度]。
@@ -34,27 +36,45 @@ function profile(x, dt, L, ease, ramp) {
   return [V * r / 2 + V * (x - r), V];
 }
 
-/** 一段 centripetal Catmull-Rom 曲线 + 弧长表（均匀参数 u 采样，累计弦长）。 */
+/** 一段 centripetal Catmull-Rom 曲线 + 自适应弧长表。 */
 class Curve {
   constructor(points, closed) {
     this.curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)), closed, 'centripetal');
     this.edges = closed ? points.length : points.length - 1; // 顶点间的边数
     const n = Math.max(MIN_SEGMENTS, points.length * SEGMENTS_PER_POINT);
-    this._s = new Float64Array(n + 1);
-    const prev = this.curve.getPoint(0), cur = new THREE.Vector3();
+    const parameters = [0], distances = [0];
+    let prev = this.curve.getPoint(0);
+    const append = (u0, p0, u1, p1, depth = 0) => {
+      const mid = (u0 + u1) / 2, p = this.curve.getPoint(mid);
+      // 仅检查弦长误差会漏掉直线上的非匀速参数化；同时控制参数中点的位置误差。
+      if (depth < 12 && p.distanceTo(p0.clone().lerp(p1, 0.5)) > ARC_TOLERANCE) {
+        append(u0, p0, mid, p, depth + 1);
+        append(mid, p, u1, p1, depth + 1);
+      } else {
+        parameters.push(u1);
+        distances.push(distances.at(-1) + p1.distanceTo(p0));
+      }
+    };
     for (let i = 1; i <= n; i++) {
-      this.curve.getPoint(i / n, cur);
-      this._s[i] = this._s[i - 1] + cur.distanceTo(prev);
-      prev.copy(cur);
+      const cur = this.curve.getPoint(i / n);
+      append((i - 1) / n, prev, i / n, cur);
+      prev = cur;
     }
-    this._n = n;
-    this.length = this._s[n];
+    this._u = new Float64Array(parameters);
+    this._s = new Float64Array(distances);
+    this._n = distances.length - 1;
+    this.length = distances.at(-1);
   }
 
   /** 曲线参数 u → 弧长（弧长表线性插值）。 */
   sAt(u) {
-    const x = Math.min(Math.max(u, 0), 1) * this._n, i = Math.min(Math.floor(x), this._n - 1);
-    return this._s[i] + (this._s[i + 1] - this._s[i]) * (x - i);
+    u = clamp01(u);
+    let lo = 0, hi = this._n;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (this._u[mid] <= u) lo = mid; else hi = mid;
+    }
+    return this._s[lo] + (this._s[hi] - this._s[lo]) * (u - this._u[lo]) / (this._u[hi] - this._u[lo]);
   }
 
   /** 弧长 s → 曲线参数 u（二分 + 段内线性）。 */
@@ -69,7 +89,41 @@ class Curve {
       if (S[mid] <= s) lo = mid; else hi = mid;
     }
     const seg = S[hi] - S[lo];
-    return (lo + (seg > 0 ? (s - S[lo]) / seg : 0)) / n;
+    return this._u[lo] + (this._u[hi] - this._u[lo]) * (seg > 0 ? (s - S[lo]) / seg : 0);
+  }
+}
+
+/** Exact line segments; u assigns an equal interval to each edge, s uses true edge length. */
+class Polyline {
+  constructor(points, closed) {
+    this.points = points.map(p => new THREE.Vector3(...p));
+    if (closed) this.points.push(this.points[0].clone());
+    this.edges = this.points.length - 1;
+    this._s = [0];
+    for (let i = 0; i < this.edges; i++) this._s.push(this._s[i] + this.points[i].distanceTo(this.points[i + 1]));
+    this.length = this._s[this.edges];
+    this.curve = {
+      getPoint: (u, out = new THREE.Vector3()) => {
+        const x = clamp01(u) * this.edges, i = Math.min(this.edges - 1, Math.floor(x));
+        return out.copy(this.points[i]).lerp(this.points[i + 1], x - i);
+      },
+      getTangent: (u, out = new THREE.Vector3()) => {
+        let i = Math.min(this.edges - 1, Math.floor(clamp01(u) * this.edges));
+        while (i < this.edges - 1 && this._s[i + 1] === this._s[i]) i++;
+        return out.subVectors(this.points[i + 1], this.points[i]).normalize();
+      },
+    };
+  }
+  sAt(u) {
+    const x = clamp01(u) * this.edges, i = Math.min(this.edges - 1, Math.floor(x));
+    return this._s[i] + (this._s[i + 1] - this._s[i]) * (x - i);
+  }
+  uAt(s) {
+    if (!(this.length > 0) || s <= 0) return 0;
+    if (s >= this.length) return 1;
+    let i = 0;
+    while (i < this.edges - 1 && s >= this._s[i + 1]) i++;
+    return (i + (s - this._s[i]) / (this._s[i + 1] - this._s[i])) / this.edges;
   }
 }
 
@@ -85,19 +139,21 @@ class Curve {
  * 闭合路径有 stops 时按 [p0 … pn−1, p0] 的开放点列处理。
  */
 export class Path {
-  /** @param {object} json 文档 Path @param {{ramp?:number}} [opts] ramp：smooth 的起步 / 收步秒数（0 = 整段缓入缓出；角色传 rampFor(type)） */
-  constructor(json, { ramp = 0 } = {}) {
-    this.json = json;
-    this.ramp = ramp;
+  /** @param {object} json 文档 Path @param {{ramp?:number, uniform?:boolean}} [opts] uniform：人物匀速；显式停顿仍按段处理。 */
+  constructor(json, { ramp = 0, uniform = false } = {}) {
+    this.json = uniform ? { ...json, speed: 'linear' } : json;
+    this.ramp = uniform && !json.stops?.length ? 0 : ramp;
+    const geometry = (points, closed) => json.interpolation === 'polyline' || (!closed && points.length === 2)
+      ? new Polyline(points, closed) : new Curve(points, closed);
     const stops = json.stops?.length ? json.stops : null;
     if (!stops) {
-      this.curves = [new Curve(json.points, json.closed)];
+      this.curves = [geometry(json.points, json.closed)];
       this._vs = [0];
     } else {
       const pts = json.closed ? [...json.points, json.points[0]] : json.points;
       const cuts = [0, ...stops, pts.length - 1];
       this.curves = [];
-      for (let i = 0; i + 1 < cuts.length; i++) this.curves.push(new Curve(pts.slice(cuts[i], cuts[i + 1] + 1), false));
+      for (let i = 0; i + 1 < cuts.length; i++) this.curves.push(geometry(pts.slice(cuts[i], cuts[i + 1] + 1), false));
       this._vs = cuts.slice(0, -1); // 各段首顶点的索引
     }
     // 各段起点弧长 S[k] 与（相对 start 的）起点时刻 T[k]，末项为全长 / 时长
@@ -151,6 +207,20 @@ export class Path {
     return this._S[k] + c.sAt((i - this._vs[k]) / c.edges);
   }
 
+  /** 路径节点的实际到达时刻，反解运动曲线（含缓入缓出和停顿）。闭合末节点回到起点。 */
+  vertexTime(i) {
+    const { start, duration, points, closed } = this.json;
+    if (i <= 0) return start;
+    if (i >= points.length - (closed ? 0 : 1)) return start + duration;
+    const distance = this.vertexDistance(i);
+    let lo = start, hi = start + duration;
+    for (let j = 0; j < 40; j++) {
+      const mid = (lo + hi) / 2;
+      if (this.distanceAt(mid) < distance) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
   /** 各段到达终点的时刻（相对 start，秒；末项 = duration）。 */
   get segmentTimes() { return this._T.slice(1); }
 
@@ -178,25 +248,6 @@ export class Path {
     const [k, x, dt] = this._segTime(t);
     const ease = this.curves.length === 1 ? this.json.speed : 'smooth';
     return this._S[k] + profile(clamp01(x) * dt, dt, this._S[k + 1] - this._S[k], ease, this.ramp)[0];
-  }
-
-  /**
-   * 步态路程：∫ v / cycleFactor(v) dt（从 start 积到 t）。除以身高即得相位（周期数）。
-   * 纯走 / 纯跑时等于 路程 ÷ 周期系数；走跑混合时周期长度随速度变，积分保证相位单调、不倒退。
-   * 积分表在首次调用时建（梯形法，GAIT_SAMPLES 段），之后线性插值 —— 只依赖文档，仍是纯函数。
-   */
-  gaitDistanceAt(t) {
-    const { start, duration } = this.json;
-    if (!this._gait) {
-      const n = GAIT_SAMPLES, g = new Float64Array(n + 1);
-      const f = (i) => { const v = this.speedAt(start + (i / n) * duration); return v / cycleFactor(v); };
-      let prev = f(0);
-      for (let i = 1; i <= n; i++) { const cur = f(i); g[i] = g[i - 1] + (prev + cur) / 2 * (duration / n); prev = cur; }
-      this._gait = g;
-    }
-    const x = clamp01((t - start) / duration) * GAIT_SAMPLES;
-    const i = Math.min(Math.floor(x), GAIT_SAMPLES - 1);
-    return this._gait[i] + (this._gait[i + 1] - this._gait[i]) * (x - i);
   }
 
   /** t 时刻的瞬时速度（米/秒）：弧长对时间的导数（解析式；区间外为 0）。 */

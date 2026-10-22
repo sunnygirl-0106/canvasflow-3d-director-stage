@@ -73,11 +73,12 @@ export async function run() {
   await page.evaluate(()=>{const p=window.__aiPanel;p.textarea.value='草稿保留';});
   await clickSel('.ai-history-head button:first-child');
   ok('退出继续对话保留草稿',await page.evaluate(()=>window.__aiPanel.textarea.value==='草稿保留'&&!window.__aiPanel.continuing));
+  await page.evaluate(() => window.__timelinePanel.setCollapsed(false));
   for (const [name,selector] of [
     ['transform-menu','#dock button:first-child'], ['add-character','#sideRail button[title^="添加角色"]'],
-    ['add-camera','#sideRail button[title^="添加机位"]'], ['add-prop','#sideRail button[title="添加道具"]'],
+    ['add-camera','#sideRail button[title^="添加机位"]'], ['add-prop','#sideRail button[title="选择画幅比例"]'],
     ['assets','#sideRail button[title^="全景"]'], ['scene-actions','#sceneActions button'],
-    ['path-menu','.scene-quick-tools button']
+    ['path-menu','.tl-head .tl-addkey']
   ]) { await clickSel(selector); await shot(name); await page.keyboard.press('Escape'); await page.click('#viewtabs [data-v="director"]'); }
   await clickSel('.tl-export');await shot('export-dialog');await page.keyboard.press('Escape');
   await page.evaluate(()=>{const p=window.__aiPanel;p.showSettings=true;p.toggle(true);});await shot('ai-settings');

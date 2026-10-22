@@ -20,7 +20,7 @@ export async function calib(ids) {
   return errs.length ? 1 : 0;
 }
 
-/** 穿模检测：三个档案逐个预设 + 步态（走 / 跑各 8 相位）。返回退出码。 */
+/** 穿模检测：三个档案逐个预设 + 步态（正常 / 加速走各 8 相位）。返回退出码。 */
 export async function collide(only) {
   await page.goto(new URL('calib.html?profile=xbot', URL_).href, { waitUntil: 'networkidle0', timeout: 30000 });
   await page.waitForFunction(() => window.__calibReady, { timeout: 60000 });
@@ -38,11 +38,11 @@ export async function collide(only) {
         ch.applyPosePreset(pr.key);
         out.push({ profile: p.id, preset: pr.key, hits: detectPenetration(ch.model) });
       }
-      // 步态：走 / 跑各 8 个相位（w=1 的完整步态，阶段 C Locomotion）
+      // 步态：正常 / 加速走各 8 个相位（w=1 的完整步态，阶段 C Locomotion）
       if (!only || only.split(',').includes('gait')) {
-        for (const [name, k] of [['walk', 0], ['run', 1]]) {
+        for (const [name, speed] of [['walk', 1.6], ['fastWalk', 4]]) {
           for (let i = 0; i < 8; i++) {
-            const g = gaitPose(ch.legGeom, i / 8, k);
+            const g = gaitPose(ch.legGeom, i / 8, speed);
             ch.resetPose();
             Object.assign(ch.values, g.values);
             ch.applyPose();

@@ -84,9 +84,9 @@ export function simplify(points, tolerance = 0.05) {
 }
 
 /** 路径曲线全长（米）：与求值同一条 centripetal Catmull-Rom（复用 Path 的弧长表；有 stops 时按段）。 */
-export function pathLength(points, closed = false, stops = null) {
+export function pathLength(points, closed = false, stops = null, interpolation) {
   if (points.length < 2) return 0;
-  return new Path({ points, closed, start: 0, duration: 1, speed: 'linear', ...(stops?.length ? { stops } : {}) }).length;
+  return new Path({ points, closed, interpolation, start: 0, duration: 1, speed: 'linear', ...(stops?.length ? { stops } : {}) }).length;
 }
 
 // ---- 停顿 stops / stopTimes：文档口径的纯函数 ----
@@ -119,6 +119,15 @@ export function fitStops(old, next, patch = {}) {
     if (times?.length) out.stopTimes = times.slice();
   }
   return out;
+}
+
+/** 固定场景时长：保留完整路线，将超时路径加速到终点；整段在场景外时按比例前移。 */
+export function fitPathToDuration(path, total) {
+  const end = path.start + path.duration;
+  if (!(total > 0) || !Number.isFinite(total) || !(path.start >= 0) || !(path.duration > 0) || !Number.isFinite(end) || end <= total) return path;
+  const start = path.start >= total ? round6(path.start * total / end) : path.start;
+  const duration = round6(total - start);
+  return fitStops(path, { ...path, start, duration });
 }
 
 /** 插入顶点（新顶点下标 index）后的停顿：之后的索引 +1。 */
@@ -174,16 +183,17 @@ export function toggleStop(path, index, on) {
   return { stops, stopTimes: times };
 }
 
-/** 默认步速（m/s）：匀速段的速度。1.7 = 快一点的正常走（纯走上限 1.8，再快就开始混跑）。 */
-export const WALK_PACE = 1.7;
+/** 默认步速（m/s）：匀速段的速度。1.2 为舒缓的正常走路，配合完整步幅降低迈腿频率。 */
+export const WALK_PACE = 1.2;
 
 /**
  * 默认时长：让匀速段的速度 = speed（m/s）。smooth 角色路径有起步 / 收步（ramp 秒，Path 的 ramp 选项），
  * 匀速 V = 长 / (时长 − r)、r = min(ramp, 时长/2) → 时长 = 长/speed + ramp（很短时 = 2·长/speed）；ramp=0 即 长 ÷ speed。
  * 向上取 0.1 s，最短 1 s。
  */
-export function defaultDuration(points, { speed = WALK_PACE, closed = false, ramp = WALK_RAMP } = {}) {
-  const base = pathLength(points, closed) / speed;
+export function defaultDuration(points, { speed = WALK_PACE, closed = false, ramp = WALK_RAMP, interpolation } = {}) {
+  const length = pathLength(points, closed, null, interpolation);
+  const base = length / speed;
   const t = base >= ramp ? base + ramp : 2 * base;
   return Math.max(1, Math.ceil(t * 10 - 1e-9) / 10);
 }
@@ -208,4 +218,10 @@ export const ARC_SEG_DEG = 22.5;
 export function arcPoints({ center, radius, startDeg, sweepDeg }, y) {
   const segments = Math.max(2, Math.ceil(Math.min(360, Math.abs(sweepDeg)) / ARC_SEG_DEG));
   return arc({ center, radius, startDeg, sweepDeg, y, segments });
+}
+
+/** Local XZ rectangle, first corner equals the entity base position. */
+export function rectangle(start, opposite) {
+  if (Math.abs(start[0] - opposite[0]) < 0.1 || Math.abs(start[2] - opposite[2]) < 0.1) return null;
+  return [start.slice(), [opposite[0], start[1], start[2]], [opposite[0], start[1], opposite[2]], [start[0], start[1], opposite[2]]];
 }

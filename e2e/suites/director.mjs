@@ -11,7 +11,7 @@ export async function run() {
     return { doc: d, ready: a.ready, selected: a.selectedId, collapsed: window.__timelinePanel.collapsed, hist: a.history.entries.length };
   });
   const d = seed.doc, char = d.entities.find(e => e.type === 'character'), cam = d.entities.find(e => e.type === 'camera');
-  ok('新鲜启动完整一人一机，10s/30fps，无动画，角色选中，时间轴展开', seed.ready && d.entities.length === 2 && !!char && !!cam && d.timeline.duration === 10 && d.timeline.fps === 30 && d.timeline.mainCameraId === cam.id && d.scene.activeCameraId === cam.id && !d.paths.length && !d.timeline.tracks.length && !d.constraints.length && seed.selected === char.id && !seed.collapsed && seed.hist === 1);
+  ok('第四轮双人一机、两条路径、10s/30fps、选中角色、时间轴关闭', seed.ready && d.entities.length === 3 && !!char && !!cam && d.timeline.duration === 10 && d.timeline.fps === 30 && d.timeline.mainCameraId === cam.id && d.scene.activeCameraId === cam.id && d.paths.length === 2 && !d.timeline.tracks.length && !d.constraints.length && seed.selected === char.id && seed.collapsed && seed.hist === 1);
   const calibration = [];
   for (const [width, height] of [[1440,900], [1920,1080], [1440,810]]) {
     await page.setViewport({ width, height }); await settle(160);
@@ -26,7 +26,7 @@ export async function run() {
     await page.screenshot({ path: `${OUT}/director-${width}x${height}.png` });
   }
   fs.writeFileSync(`${OUT}/calibration.json`, JSON.stringify(calibration, null, 2));
-  ok('第三轮导演构图：人物高度25–40%，脚底留安全边距', calibration.every(x => x.director.height >= .25 && x.director.height <= .4 && x.director.feet >= .55 && x.director.feet <= .8), JSON.stringify(calibration.map(x => x.director)));
+  ok('第四轮导演构图：人物高度18–22%，脚底约62%', calibration.every(x => x.director.height >= .18 && x.director.height <= .22 && x.director.feet >= .58 && x.director.feet <= .65), JSON.stringify(calibration.map(x => x.director)));
   await page.setViewport({width:1440,height:900}); await settle();
   const preview = await page.evaluate(() => {
     const a = window.__app, before = JSON.stringify(a.store.document), sel = a.selectedId, hist = a.history.entries.length;
@@ -118,7 +118,7 @@ export async function run() {
     return {forward,back,display,edge,duration:a.timeline.duration};
   });
   ok('30次步进到1s再返回0；299帧显示9.97；非整帧终点夹取',frames.forward===1&&frames.back===0&&frames.display==='9.97'&&frames.edge===1.01&&frames.duration===10,JSON.stringify(frames));
-  const track=await page.evaluate(()=>{const a=window.__app;const t=a.timeline.addTrack({target:a.entities[0].id,property:'pos'});a.timeline.setKey(t.id,0,[0,0,0]);a.timeline.setKey(t.id,4,[0.4,0,0]);a.timeline.setKey(t.id,10,[1,0,0]);a.history.capture();return t.id;});await settle();
+  const track=await page.evaluate(()=>{const a=window.__app;window.__timelinePanel.setCollapsed(false);window.__timelinePanel.trackRows.expandedEnts.add(a.entities[0].id);a.timeline.removePath(a.timeline.toJSON().paths.find(p=>p.target===a.entities[0].id).id);const t=a.timeline.addTrack({target:a.entities[0].id,property:'pos'});a.timeline.setKey(t.id,0,[0,0,0]);a.timeline.setKey(t.id,4,[0.4,0,0]);a.timeline.setKey(t.id,10,[1,0,0]);a.history.capture();return t.id;});await settle();
   const coords=await page.evaluate(()=>{
     const p=window.__timelinePanel, r=p.scroll.getBoundingClientRect();
     p.setZoom(900);p.scroll.scrollLeft=3100;
@@ -134,7 +134,7 @@ export async function run() {
   await clickSel('#timeline button[title^="移除选中"]'); await settle();
   const deleted=await page.evaluate(id=>!window.__app.timeline.tracks.some(t=>t.id===id),track);
   await page.evaluate(()=>window.__app.history.undo());
-  ok('移除轨道保留实体，一步撤销恢复',deleted&&await page.evaluate(id=>window.__app.entities.length===2&&window.__app.timeline.tracks.some(t=>t.id===id),track));
+  ok('移除轨道保留实体，一步撤销恢复',deleted&&await page.evaluate(id=>window.__app.entities.length===3&&window.__app.timeline.tracks.some(t=>t.id===id),track));
   await page.evaluate(async doc=>{const a=window.__app;await a.loadDocument(doc);const c=a.cameras[0],pos=c.toJSON().transform.pos;a.timeline.addPath({target:c.id,points:[pos,[pos[0]+1,pos[1],pos[2]]],duration:10,orient:'keep'});a.history.capture();a.startPreview();},d);await settle(150);
   await page.screenshot({path:`${OUT}/moving.png`});
   const video=await page.evaluate(async()=>{
@@ -153,9 +153,9 @@ export async function run() {
   ok('10s/30fps视频300帧，末样本299/30；取消/失败恢复预览与文档',video.frames===300&&video.last===299/30&&video.cancelled&&video.failed&&video.restored&&info.frames===300,JSON.stringify({...video,bytes:undefined,info}));
   fs.writeFileSync(`${OUT}/video-info.json`,JSON.stringify({...video,bytes:undefined,info},null,2));
   // 已存在存档不会被新鲜启动覆盖；明确恢复仍保留旧场景。
-  const saved=await page.evaluate(async()=>{const a=window.__app;a.stopPreview();await a.addCharacter('female');a.timeline.setDuration(7);const text=JSON.stringify(a.exportDocument());localStorage.setItem('director-stage:autosave',text);return text;});
+  const saved=await page.evaluate(async()=>{const a=window.__app;a.stopPreview();a.timeline.setDuration(7);const text=JSON.stringify(a.exportDocument());localStorage.setItem('director-stage:autosave',text);return text;});
   await page.reload({waitUntil:'networkidle0'});await page.waitForFunction(()=>window.__app?.ready);await settle(1200);
-  ok('刷新不累积对象、不覆盖旧存档',await page.evaluate(text=>window.__app.entities.length===2&&localStorage.getItem('director-stage:autosave')===text,saved));
+  ok('刷新不累积对象、不覆盖旧存档',await page.evaluate(text=>window.__app.entities.length===3&&localStorage.getItem('director-stage:autosave')===text,saved));
   await page.evaluate(async text=>window.__app.loadDocument(JSON.parse(text)),saved);
   ok('旧双人场景恢复保留实体和7秒时长',await page.evaluate(()=>window.__app.entities.filter(e=>e.type==='character').length===2&&window.__app.timeline.duration===7));
   // 加载资源失败：不能 ready，遮罩阻止交互；解除故障后点击重试。
@@ -167,5 +167,5 @@ export async function run() {
   ok('资源失败不暴露半成品，提供重试',await page.evaluate(()=>!window.__app.ready&&window.__app.entities.length===0&&document.querySelector('#app').inert));
   const expected=errs.splice(oldErrors);ok('故障注入只产生预期资源错误',expected.every(e=>e.includes('ERR_FAILED')||e.includes('ERR_ABORTED')),expected.join(' | '));
   fail=false;await page.click('.startup button');await page.waitForFunction(()=>window.__app.ready);page.off('request',intercept);await page.setRequestInterception(false);
-  ok('重试成功恢复完整默认场景',await page.evaluate(()=>window.__app.entities.length===2&&!document.querySelector('#app').inert));
+  ok('重试成功恢复完整默认场景',await page.evaluate(()=>window.__app.entities.length===3&&!document.querySelector('#app').inert));
 }

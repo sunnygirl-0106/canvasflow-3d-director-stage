@@ -185,7 +185,7 @@ export const OP_SPECS = {
   remove: { fields: { target: req(T.ref) }, note: '删除实体（连同引用它的路径 / 约束 / 关键帧；删组连成员一起删）' },
   move: { fields: { target: req(T.ref), pos: opt(T.pos), yaw: opt(T.yaw), scale: opt(T.scale) }, note: '改手动位置 / 朝向 / 缩放（机位只能改 pos，并保持对准原注视点）' },
   set_pose: { fields: { target: req(T.ref), preset: req(E.pose) }, note: '换姿势（对组 = 全部成员）' },
-  set_path: { fields: { target: req(T.ref), path: req(T.path), start: opt(T.time), duration: opt(T.duration), speed: opt(E.speed), orient: opt(E.orient) }, note: `沿路径移动（替换已有路径）；duration 默认按步速 ${WALK_PACE} m/s 估算；points 写法可加 stops = 在哪几个点停一下（各段时长按路程比例分）` },
+  set_path: { fields: { target: req(T.ref), path: req(T.path), start: opt(T.time), duration: opt(T.duration), speed: opt(E.speed), orient: opt(E.orient) }, note: `沿路径移动（替换已有路径）；人物 / 群众 duration 默认按正常步速估算并适配剩余时间，重画保留原时长；其他类型默认按 ${WALK_PACE} m/s 估算；points 写法可加 stops = 在哪几个点停一下（各段时长按路程比例分）` },
   clear_path: { fields: { target: req(T.ref) }, note: '删除路径' },
   camera_move: { fields: { target: req(T.ref), preset: req(E.move), subject: opt(T.refOrPoint), amount: opt(T.amount), dir: opt(T.dir), sweep: opt(T.sweep), duration: opt(T.duration), append: opt(T.bool) }, note: '运镜：生成机位路径并注视主体（subject 默认最近的角色）；append=true 接在已有运镜之后，否则替换已有运镜' },
   clear_moves: { fields: { target: req(T.ref) }, note: '清除机位的运镜（路径 + 约束 + 旋转关键帧）' },

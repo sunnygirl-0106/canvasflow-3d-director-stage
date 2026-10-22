@@ -26,6 +26,15 @@ async function proxy(t, handler, enabled = true) {
 const message = { messages: [{ role: 'user', content: '两个人在广场对话' }] };
 const post = (url, body = message, headers = {}) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
+test('运行时配置发现只返回模型名，不暴露凭据；未配置时返回空对象', async (t) => {
+  for (const enabled of [true, false]) {
+    const url = await proxy(t, (_req, res) => res.end('{}'), enabled);
+    const res = await fetch(url.replace('/chat/completions', '/settings'));
+    assert.equal(res.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await res.json(), enabled ? { model: 'server-model' } : {});
+  }
+});
+
 test('Vite 代理实际启动、转发中文请求；固定服务端模型与凭据并过滤上游回显', async (t) => {
   let received;
   const url = await proxy(t, async (req, res) => {

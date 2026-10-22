@@ -6,6 +6,7 @@ import { Character } from '../entities/Character.js';
 import { Prop } from '../entities/Prop.js';
 import { CameraEntity } from '../entities/Camera.js';
 import { Crowd } from '../entities/Crowd.js';
+import { fitPathToDuration } from '../anim/pathGen.js';
 
 /* global __APP_VERSION__ */
 export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
@@ -57,6 +58,8 @@ export async function loadDocument(app, input, opts = {}) {
   const doc = migrate(input);
   const { ok, errors } = validate(doc);
   if (!ok) throw new DocumentError(errors);
+  // 兼容旧存档中超过场景终点的轨迹：保留几何路线，加载时适配总时长。
+  doc.paths = doc.paths.map((p) => fitPathToDuration(p, doc.timeline.duration));
   const view = doc.meta.editorView;
   doc.meta.editorView = null;
   doc.meta.updatedAt = app.store.document.meta.updatedAt;

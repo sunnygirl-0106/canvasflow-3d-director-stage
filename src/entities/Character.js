@@ -87,7 +87,7 @@ export class Character extends Entity {
       if (o.isMesh) {
         o.castShadow = true;
         o.frustumCulled = false;
-        const m = new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.62, metalness: 0.05 });
+        const m = new THREE.MeshStandardMaterial({ color: this.color, fog: false, roughness: 0.62, metalness: 0.05 });
         o.material = m;
         this._mats.push(m);
       }

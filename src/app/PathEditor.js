@@ -1,21 +1,19 @@
-import { toast, toastError, isTyping, CLICK_PX } from '../util/dom.js';
+import { el, toast, toastError, isTyping, CLICK_PX } from '../util/dom.js';
 import { stopsAfterInsert, stopsAfterDelete } from '../anim/pathGen.js';
 import { round4 } from '../util/math.js';
 import { onKey, KEY_PRIORITY } from '../util/keys.js';
 
 
 /**
- * 顶点编辑：选中实体后直接在视口操作，不需要进绘制态。
- * - 拖顶点：在该顶点所在的水平面上投影拖动；拖动中只改 overlay 预览（不写文档、不求值），松手 updatePath 一次撤销。
- *   ⇧ 拖任意顶点 = 整条路径平移。拖动开始时暂停播放、隐藏 gizmo；Esc 取消拖动回到原位。
- * - 点击曲线：选中实体的路径 → 在该处插入顶点（插在最近两顶点之间，点落在曲线上）；其它实体的路径 → 选中该实体。
- * - 点击顶点 = 选中顶点；Del 删除（删后不足 2 点则拒绝）。Del 的优先级：选中键 > 选中顶点 > 实体。
- * 命中优先级：顶点 > gizmo 轴 > 曲线 > 实体（顶点只有 10px，点中了就是要拖它）。
+ * 两层选择：选实体只显示轨迹线；点线选中轨迹，显示顶点 / 箭头并隐藏实体 gizmo。
+ * 单击线只选中；双击线插点；拖点编辑，⇧ 拖点整体平移。预览不写文档，松手提交一次撤销。
+ * Backspace 删除整条轨迹；Delete 删除选中顶点（未选顶点则删轨迹）；Esc 取消拖动或退出编辑。
  */
 export class PathEditor {
   constructor(app) {
     this.app = app;
     this.drag = null;          // { pathId, index, orig, offset, all, moved, points }
+    this._pathDeleteHeld = false; // 长按删除轨迹后，不让重复按键误删人物
     this._consumed = false;    // 本次按下落在路径元素上：视口点选跳过
     this._lineDown = null;     // 按下在曲线上：{ hit, x, y }，松手不动才算点击
 
@@ -25,10 +23,31 @@ export class PathEditor {
     dom.addEventListener('pointerdown', (e) => this._onDown(e), true);
     dom.addEventListener('pointermove', (e) => this._onMove(e));
     dom.addEventListener('pointerup', (e) => this._onUp(e), true);
+    dom.addEventListener('dblclick', (e) => this._onDoubleClick(e));
+    dom.addEventListener('pointercancel', () => { this._lineDown = null; if (this.drag) this._endDrag(); });
     dom.addEventListener('pointerleave', () => { if (!this.drag) this._setHover(null); });
     onKey((e) => this._onEscape(e), { priority: KEY_PRIORITY.pathDrag });                  // 拖动中 Esc：先于时间轴的 Esc = 停止
-    onKey((e) => this._onDelete(e), { priority: KEY_PRIORITY.pathVertex, phase: 'bubble' }); // 时间轴（选中键）之后、全局删实体之前
-    app.on('selection', () => this.app.pathOverlay.setSelectedVertex(null));
+    window.addEventListener('keyup', e => { if (['Delete', 'Backspace'].includes(e.key)) this._pathDeleteHeld = false; });
+    window.addEventListener('blur', () => { this._pathDeleteHeld = false; });
+    onKey((e) => this._onDelete(e), { priority: KEY_PRIORITY.pathDrag }); // 轨迹聚焦时先于时间轴和实体删除
+    this.barTitle = el('span', { class: 'path-edit-title' });
+    this.bar = el('div', { class: 'path-edit-bar', hidden: true, role: 'toolbar', 'aria-label': '轨迹编辑' }, [
+      this.barTitle,
+      el('span', { class: 'path-edit-help', text: '拖动点调整 · 双击线加点' }),
+      el('button', { class: 'path-edit-delete', title: '删除整条轨迹，保留人物（Backspace）', onclick: () => this.deletePath() }, ['删除轨迹 ', el('kbd', { text: '⌫' })]),
+      el('button', { class: 'path-edit-done', title: '退出轨迹编辑（Esc）', onclick: () => app.pathOverlay.setSelectedPath(null) }, ['完成 ', el('kbd', { text: 'esc' })]),
+    ]);
+    app.stage.viewport.appendChild(this.bar);
+    const sync = () => this._syncSelection();
+    app.on('pathSelection', sync);
+    app.on('pathVisibility', sync);
+    app.on('selection', sync);
+    app.on('view', sync);
+    app.pathTool.on('mode', sync);
+    // 时间轴接手焦点后，删除键由时间轴处理。
+    document.addEventListener('pointerdown', e => {
+      if (e.target.closest?.('#timeline')) app.pathOverlay.setSelectedPath(null);
+    }, true);
   }
 
   /** 视口点选是否应跳过（本次按下落在路径元素上 / 正在拖顶点）。 */
@@ -37,6 +56,14 @@ export class PathEditor {
   get _enabled() { return !this.app.cameraView && !this.app.pathTool.mode; }
 
   _hit(e) { return this._enabled ? this.app.pathOverlay.hitTest(e.clientX, e.clientY) : null; }
+
+  _syncSelection() {
+    const ov = this.app.pathOverlay;
+    this.bar.hidden = !ov.selectedPathId || !ov.visible || !!this.app.pathTool.mode;
+    this.barTitle.textContent = `${this.app.selected?.name || '对象'} · 轨迹`;
+    this.app.gizmo.setVisible(!this.drag && !this.app.pathTool.mode && this.app.gizmoShouldShow());
+    this.app.selection.setRingVisible(!ov.selectedPathId && !this.app._cleanDepth);
+  }
 
   // ---- 指针 ----
   _onDown(e) {
@@ -54,7 +81,7 @@ export class PathEditor {
       return;
     }
     ov.setSelectedVertex(null);
-    if (hit?.kind === 'line' && !this.app.gizmo.overAxis) {
+    if (hit?.kind === 'line' && (!this.app.gizmo.visible || !this.app.gizmo.overAxis)) {
       this._consumed = true; // 不 stopPropagation：拖动仍是环绕，松手不动才算点线
       this._lineDown = { hit, x: e.clientX, y: e.clientY };
     }
@@ -107,7 +134,17 @@ export class PathEditor {
     if (!ld || e.button !== 0 || Math.hypot(e.clientX - ld.x, e.clientY - ld.y) > CLICK_PX) return;
     const { hit } = ld;
     if (this.app.selectedId !== hit.target) this.app.select(hit.target); // 点其它实体的路径线 = 选中它
-    else this.insertAt(hit.pathId, hit.s);
+    this.app.playback.pause();
+    this.app.pathOverlay.setSelectedPath(hit.pathId);
+  }
+
+  _onDoubleClick(e) {
+    if (e.button !== 0 || !this._enabled) return;
+    const hit = this._hit(e);
+    if (hit?.kind === 'line' && this.app.pathOverlay.selectedPathId === hit.pathId) {
+      e.preventDefault();
+      this.insertAt(hit.pathId, hit.s);
+    }
   }
 
   _endDrag() {
@@ -131,19 +168,33 @@ export class PathEditor {
 
   // ---- 键盘 ----
   _onEscape(e) {
-    if (e.key !== 'Escape' || !this.drag) return;
+    if (e.key !== 'Escape' || isTyping(e.target) || !this._enabled) return;
+    if (!this.drag && !this.app.pathOverlay.selectedPathId) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    this._endDrag(); // 回到原位：预览丢掉，文档没动过
+    if (this.drag) this._endDrag(); // 先取消本次拖动，保留轨迹选择
+    else this.app.pathOverlay.setSelectedPath(null);
   }
 
   _onDelete(e) {
-    if (!(e.key === 'Delete' || e.key === 'Backspace') || e.metaKey || e.ctrlKey || isTyping(e.target)) return;
-    const sv = this.app.pathOverlay.selVertex;
-    if (!sv) return;
+    if (!['Delete', 'Backspace'].includes(e.key) || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target) || !this._enabled) return;
+    const ov = this.app.pathOverlay;
+    if (!ov.selectedPathId && !(e.repeat && this._pathDeleteHeld)) return;
+    this._pathDeleteHeld = true;
     e.preventDefault();
-    e.stopImmediatePropagation(); // 不再删实体
-    this.deleteVertex(sv.pathId, sv.index);
+    e.stopImmediatePropagation();
+    if (this.drag || !ov.selectedPathId) return; // 拖动期间不提交删除，长按时不落到实体
+    if (e.key === 'Delete' && ov.selVertex) this.deleteVertex(ov.selVertex.pathId, ov.selVertex.index);
+    else this.deletePath();
+  }
+
+  deletePath() {
+    const id = this.app.pathOverlay.selectedPathId;
+    if (!id || this.drag) return;
+    try {
+      this.app.timeline.removePath(id);
+      toast('已删除轨迹 · 可用 ⌘Z / Ctrl+Z 撤销');
+    } catch (err) { toastError(err); }
   }
 
   // ---- 编辑命令（selftest 也走这里）----
@@ -162,7 +213,7 @@ export class PathEditor {
   deleteVertex(pathId, index) {
     const json = this.app.timeline.toJSON().paths.find((p) => p.id === pathId);
     if (!json || !json.points[index]) { this.app.pathOverlay.setSelectedVertex(null); return; }
-    if (json.points.length <= 2) { toast('路径至少需要 2 个顶点（可在属性面板删除整条路径）'); return; }
+    if (json.points.length <= 2) { toast('路径至少需要 2 个顶点（Backspace 可删除整条轨迹）'); return; }
     const pts = json.points.filter((_, i) => i !== index);
     this.app.pathOverlay.setSelectedVertex(null);
     this._write(pathId, { points: pts, ...stopsAfterDelete(json, index) });

@@ -12,6 +12,8 @@
   --text-primary: #f7f7f7;
   --text-secondary: #cccccc;
   --text-muted: #919191;
+  --icon-color: #c3cbd4;
+  --icon-hover: #f4f7fa;
   --bg: #08080a;
   --panel: var(--surface-panel);
   --panel2: var(--surface-field);
@@ -35,7 +37,7 @@ html, body {
   color: var(--txt);
   font-size: 13px;
 }
-#app { display: flex; flex-direction: column; height: 100vh; }
+#app { display: flex; flex-direction: column; height: 100vh; position: relative; --timeline-visible-height: 0px; }
 input { font-family: inherit; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--surface-search); border-radius: 4px; }
@@ -69,6 +71,8 @@ header .ic {
 header .ic:hover { color: #fff; }
 
 main { flex: 1; display: flex; min-height: 0; }
+/* 时间轴不参与画布布局；侧栏仍在面板上沿结束，内容可正常滚动。 */
+main > .side, #sideRail { height: calc(100% - var(--timeline-visible-height)); }
 
 /* ===== side panels ===== */
 .side {
@@ -141,10 +145,10 @@ main { flex: 1; display: flex; min-height: 0; }
   padding: 3px 14px; border-radius: 8px; pointer-events: none; white-space: nowrap;
   box-shadow: 0 2px 10px rgba(0,0,0,.5);
 }
-/* 相机名牌：比角色小一号，配橙色调以呼应相机体 */
+/* 机位名牌保持紧凑，与摄影机的中性配色一致。 */
 .label3d.cam {
-  font-size: 12px; font-weight: 600; padding: 2px 9px;
-  background: #ff8a3d; color: #1a0d00; transform: translate(-50%, -160%);
+  font-size: 11px; font-weight: 500; padding: 2px 9px;
+  letter-spacing: .04em; transform: translate(-50%, -160%);
 }
 #frame {
   position: absolute; border: 1px solid rgba(255,255,255,.5);
@@ -332,21 +336,24 @@ select.dropdown:focus { border-color: var(--line2); }
 .infotip:hover .infotip-bubble { display: block; }
 
 /* 相机 POV 预览框 */
+.cam-monitor { overflow: hidden; border: 1px solid var(--line2); border-radius: 4px; background: #16191c; }
+.cam-monitor-head { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 8px; border-bottom: 1px solid #34383c; }
+.cam-monitor-title { margin-right: auto; color: #b5bdc5; font-size: 10px; letter-spacing: .08em; }
 .cam-preview {
-  position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
-  background: #000; border: 1px solid var(--line2);
+  position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #000;
 }
 .cam-preview canvas { display: block; width: 100%; height: 100%; object-fit: cover; }
 .cam-fov-badge {
-  position: absolute; top: 7px; left: 7px; background: rgba(0,0,0,.6); color: #fff;
-  font-size: 11px; padding: 3px 8px; border-radius: 6px; font-variant-numeric: tabular-nums;
+  color: #c9d1d9; font-size: 10px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .cam-expand {
-  position: absolute; bottom: 7px; right: 7px; width: 26px; height: 26px; border-radius: 7px;
-  border: 1px solid rgba(255,255,255,.25); background: rgba(0,0,0,.5); color: #fff; cursor: pointer; font-size: 14px;
+  flex: 0 0 24px; width: 24px; height: 24px; border-radius: 3px;
+  border: none; background: transparent; color: #aab5bf; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
-.cam-expand:hover { background: rgba(0,0,0,.75); }
+.cam-expand:hover { background: #30363c; color: #fff; }
+.cam-expand:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 
 /* 截图缩略卡片网格 */
 .shot-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
@@ -605,12 +612,10 @@ body.exporting #viewport { pointer-events: none; }
 .ai-flow { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
 .ai-empty { color: var(--dim); font-size: 12.5px; line-height: 1.7; margin: auto 0; text-align: center; }
 .ai-eg { margin-top: 8px; color: var(--dim2); font-size: 12px; }
-.ai-presets summary { color: var(--dim); font-size: 12px; cursor: pointer; padding: 3px 0; }
 .ai-preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-height: 190px; overflow-y: auto; margin-top: 7px; }
 .ai-preset { display: flex; flex-direction: column; gap: 4px; text-align: left; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); color: inherit; padding: 9px 10px; cursor: pointer; font: inherit; }
 .ai-preset strong { font-size: 12px; font-weight: 600; }
-.ai-preset span, .ai-preset-hint { font-size: 11px; color: var(--dim2); }
-.ai-preset-hint { margin-top: 6px; line-height: 1.5; }
+.ai-preset span { font-size: 11px; color: var(--dim2); }
 .ai-preset:hover:not(:disabled), .ai-preset:focus-visible { border-color: var(--accent); background: var(--panel); }
 .ai-preset:disabled { opacity: .45; cursor: default; }
 @media (max-height: 900px) {
@@ -666,7 +671,6 @@ header .logo { font-size: 15px; white-space: nowrap; }
 .side.right { width: var(--side-w); flex-basis: var(--side-w); }
 #sideRail { flex: 0 0 var(--rail-w); width: var(--rail-w); background: var(--surface-sidebar); border-right: 1px solid var(--line); padding-top: 65px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 #sideRail .dockbtn { width: 36px; height: 36px; }
-.scene-quick-tools { display: flex; gap: 5px; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 8px; }
 #viewtabs { position: absolute; top: 9px; left: 50%; transform: translateX(-50%); z-index: 8; border: 1px solid var(--line); border-radius: 15px; background: var(--surface-panel); }
 #viewtabs button { padding: 8px 18px; border-radius: 12px; white-space: nowrap; }
 #povLabel { position: absolute; left: 50%; top: 19px; margin-left: 120px; transform: none; white-space: nowrap; font-size: 11px; }
@@ -679,6 +683,7 @@ header .logo { font-size: 15px; white-space: nowrap; }
 #dock .dockbtn svg { width: 23px; height: 23px; }
 .dockmenu { z-index: 80; }
 .label3d, .label3d.cam { background: transparent; color: #fff; box-shadow: none; text-shadow: 0 1px 3px #000, 1px 0 1px #000; padding-left: 2px; padding-right: 2px; line-height: 1.25; }
+.label3d.cam { color: #c8d0d8; }
 .ai-capsule { width: 246.5625px; position: relative; }
 .ai-capsule .ai-input { border: 1px solid var(--line2); border-radius: 28px; background: var(--surface-dock); min-height: 51.5625px; display: flex; flex-direction: row; align-items: center; gap: 4px; padding: 7px 6px; overflow: visible; }
 .ai-capsule .ai-text { background: transparent; border: 0; border-radius: 0; font-size: 12px; line-height: 24px; padding: 0; min-height: 24px; max-height: 72px; overflow-y: auto; }
@@ -703,12 +708,22 @@ button:focus-visible, summary:focus-visible { outline: 2px solid #5ed9e1; outlin
 @media (max-width: 1050px) { :root { --side-w: 220px; --rail-w: 44px; } #stageTools { gap: 6px; } }
 @media (max-width: 760px) { .side.right { display: none; } #stageTools { max-width: calc(100% - 8px); } .ai-capsule { width: 210px; } }
 
-/* 预制场景常驻入口；复用 AI 的同一组场景卡片。 */
-#scenePresets { width: 100%; min-height: 36px; margin-bottom: 12px; padding: 8px 12px; border: 1px solid var(--line2); border-radius: 9px; background: var(--surface-search); color: var(--dim); text-align: left; font: inherit; cursor: pointer; }
-#scenePresets:hover { background: var(--surface-button-active); border-color: var(--dim2); }
-#app.left-collapsed #scenePresets { display: none; }
+/* 预制入口只占一个图标位，提示通过统一 tooltip 显示，不挤占描述文字。 */
+#stageTools #scenePresets { display: inline-flex; align-items: center; justify-content: center; width: 26px; min-width: 26px; height: 28px; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--icon-color); font: inherit; white-space: nowrap; cursor: pointer; transition: color .18s, background .18s; }
+.ai-presets-icon { display: flex; align-items: center; transition: transform .24s ease; }
+.ai-presets-label { display: none; }
+#stageTools .ai-capsule:hover #scenePresets, #stageTools .ai-capsule:focus-within #scenePresets { color: var(--icon-hover); }
+#stageTools #scenePresets:hover, #stageTools #scenePresets[aria-expanded="true"] { color: #ededee; background: #ffffff08; }
+.ai-presets-trigger:hover .ai-presets-icon { transform: translateY(-1px); }
+.ai-presets-trigger:disabled { opacity: .35; cursor: default; }
 
-.ai-capsule.browsing-presets .ai-preset-grid { max-height: min(340px, 40vh); }
+.ai-preset-tray { position: absolute; bottom: calc(100% + 8px); right: 0; width: min(420px, calc(100vw - 32px)); max-height: 220px; overflow: auto; padding: 12px; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px #0005; }
+.ai-preset-heading, .ai-preset-confirm { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.ai-preset-tray .ai-preset-grid { max-height: 134px; margin-top: 0; overflow: auto; }
+.ai-preset-tray button { cursor: pointer; }
+.ai-preset-heading button, .ai-preset-confirm button { color: var(--txt); background: var(--panel2); border: 1px solid var(--line2); border-radius: 6px; padding: 4px 8px; }
+.ai-preset-tray .ai-preset { min-height: 64px; }
+
 
 /* 固定到窗口的提示层，不被侧栏/时间轴滚动区域裁切。 */
 #uiTooltip { position: fixed; z-index: 2000; max-width: min(300px, calc(100vw - 16px)); padding: 8px 11px; border: 1px solid #555; border-radius: 7px; background: #16181cf5; color: #f2f2f5; box-shadow: 0 4px 16px #0006; font-size: 12px; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; }
@@ -721,3 +736,58 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px
 
 #stageTools:has(.continuing) #dock { display: none; }
 .ai-history-head .ai-icbtn { position: absolute; left: -64px; bottom: 0; width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--line2); background: var(--surface-dock); transform: rotate(180deg); }
+
+/* 底部工具保持一条 44px 基线，少量中性灰反馈，不叠加大块按钮。 */
+#stageTools { width: min(432px, calc(100% - 24px)); bottom: calc(14px + var(--timeline-visible-height)); gap: 8px; }
+#dock { flex: 0 0 118px; width: 118px; height: 44px; padding: 5px; gap: 2px; border: 1px solid #ffffff12; border-radius: 22px; background: #202123f5; box-shadow: 0 4px 16px #0002; }
+#dock .dockbtn { position: relative; width: 34px; height: 32px; border: 0; border-radius: 16px; color: var(--icon-color); background: transparent; transition: background .18s, color .18s, transform .18s; }
+#dock .dockbtn svg { width: 18px; height: 18px; stroke-width: 1.5; transition: transform .18s; }
+#dock .dockbtn:hover { background: #ffffff08; color: var(--icon-hover); }
+#dock .dockbtn:hover svg { transform: translateY(-1px); }
+#dock .dockbtn:active { transform: scale(.94); }
+#dock .dockbtn.on { background: #ffffff0b; color: #e5e5e7; box-shadow: none; }
+#dock .dockbtn:first-child::after { content: ''; position: absolute; right: -3px; top: 10px; height: 14px; width: 1px; background: linear-gradient(transparent, #ffffff14, transparent); pointer-events: none; }
+#sideRail { border-right-color: #ffffff0b; gap: 8px; overflow-y: auto; }
+#sideRail .dockbtn { border: 1px solid transparent; border-radius: 10px; color: var(--icon-color); transition: color .18s, background .18s, border-color .18s; }
+#sideRail .dockbtn svg { width: 19px; height: 19px; stroke-width: 1.55; }
+#sideRail .dockbtn:hover { color: var(--icon-hover); background: #ffffff05; border-color: #ffffff0a; }
+#stageTools .ai-capsule { flex: 1; width: auto; min-width: 0; }
+#stageTools .ai-input { display: grid; grid-template-columns: 26px minmax(0, 1fr) 26px 28px; align-items: center; min-height: 44px; padding: 7px 8px; gap: 5px; border: 1px solid #ffffff16; border-radius: 22px; background: #202123f5; box-shadow: 0 4px 16px #0002; transition: border-color .18s; }
+#stageTools .ai-capsule:hover .ai-input { border-color: #ffffff24; }
+#stageTools .ai-capsule:focus-within .ai-input { border-color: #ffffff38; box-shadow: 0 4px 16px #0002; }
+#stageTools .ai-text { width: 100%; min-width: 0; color: #d1d1d3; white-space: pre; font-size: 12px; }
+.ai-capsule .ai-text:focus-visible { outline: none; }
+#stageTools .ai-text::placeholder { color: #83858a; }
+#stageTools .ai-input > .ai-icbtn { width: 26px; height: 28px; border-radius: 50%; color: var(--icon-color); transition: color .18s, background .18s; }
+#stageTools .ai-input > .ai-icbtn svg { width: 17px; height: 17px; stroke-width: 1.5; }
+#stageTools .ai-icbtn:hover { color: #ededee; background: #ffffff08; }
+#stageTools .ai-send { width: 28px; color: #26272a; background: #d4d4d7; }
+#stageTools .ai-send:disabled { color: #73767b; background: transparent; opacity: 1; }
+#stageTools .ai-send:hover:not(:disabled) { color: #202124; background: #f1f1f2; }
+.ai-preset-tray { border-color: #ffffff16; background: #20252afc; box-shadow: 0 12px 36px #0005, inset 0 1px #ffffff05; animation: preset-tray-in .16s ease-out; }
+.ai-preset-tray .ai-preset { border-color: #ffffff0c; border-radius: 9px; background: #ffffff03; transition: border-color .18s, background .18s, transform .18s; }
+.ai-preset-tray .ai-preset:hover { background: #91b5c00b; border-color: #7ba6b343; transform: translateY(-1px); }
+@keyframes preset-tray-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media (hover: none) { .ai-presets-label { display: none; } }
+@media (max-width: 760px) { #stageTools { gap: 6px; } #dock { flex-basis: 112px; width: 112px; padding-inline: 4px; } #dock .dockbtn { width: 32px; } }
+@media (prefers-reduced-motion: reduce) { #stageTools *, #sideRail *, .ai-preset-tray * { transition: none !important; animation: none !important; } }
+
+/* 轨迹选中后才出现的轻量编辑栏，与人物变换手柄区分。 */
+.path-edit-bar {
+  position: absolute; left: 50%; top: 64px; transform: translateX(-50%); z-index: 6;
+  display: flex; align-items: center; gap: 14px; max-width: calc(100% - 32px);
+  padding: 7px 8px 7px 14px; border: 1px solid rgba(110,166,255,.3); border-radius: 12px;
+  background: rgba(24,28,36,.94); box-shadow: 0 5px 24px rgba(0,0,0,.18);
+  color: var(--txt); font-size: 12px; white-space: nowrap; backdrop-filter: blur(12px);
+}
+.path-edit-bar[hidden] { display: none; }
+.path-edit-title { color: #a9c8ff; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 160px; }
+.path-edit-help { color: var(--dim); font-size: 11px; }
+.path-edit-bar button { flex: none; border: 0; border-radius: 7px; padding: 6px 9px; font-size: 12px; cursor: pointer; }
+.path-edit-delete { background: transparent; color: var(--dim); }
+.path-edit-delete:hover { background: rgba(255,100,100,.12); color: #ff9b9b; }
+.path-edit-done { background: rgba(100,160,255,.15); color: #b7d4ff; }
+.path-edit-done:hover { background: rgba(100,160,255,.25); }
+.path-edit-bar kbd { margin-left: 5px; font: inherit; font-size: 10px; opacity: .6; }
+.path-edit-bar button:focus-visible { outline: 2px solid #a9c8ff; outline-offset: 2px; }
+@media (max-width: 1100px) { .path-edit-help { display: none; } }

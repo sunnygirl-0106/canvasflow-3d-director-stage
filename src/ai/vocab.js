@@ -31,7 +31,7 @@ export const NOTES = {
     toward: '朝 target（实体名）走，停在它前方 stop 米处（水平距离；角色默认 0.8，机位默认 1.5）',
   },
   ease: { linear: '线性插值', smooth: '缓入缓出', step: '阶跃（保持到下一键）' },
-  speed: { linear: '匀速', smooth: '缓入缓出（默认）' },
+  speed: { linear: '匀速（人物 / 群众默认）', smooth: '缓入缓出（机位 / 道具默认，人物始终匀速）' },
   orient: { tangent: '朝向跟随路径切线（角色 / 道具 / 组默认）', keep: '保持原朝向（机位默认）' },
   property: {
     pos: '位置 [x,y,z]（米）',

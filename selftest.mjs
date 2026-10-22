@@ -14,7 +14,7 @@
 //   node selftest.mjs calib [profileId ...]
 //     对校准页 calib.html?profile=<id> 整页截图到 test-output/calib_<id>.png（默认全部档案）。
 //   node selftest.mjs collide [preset,...]
-//     对三个档案逐个预设 + 步态（走 / 跑各 8 相位，可用 gait 指代）做穿模检测（src/dev/poseCollision.js），
+//     对三个档案逐个预设 + 步态（正常 / 加速走各 8 相位，可用 gait 指代）做穿模检测（src/dev/poseCollision.js），
 //     列出穿模部位与最大深度；有穿模则退出码 1。
 //   node selftest.mjs doc
 //     场景文档验收：搭场景 → 截图 A → exportDocument → 清空 → loadDocument → 截图 B → exportDocument，
@@ -42,7 +42,7 @@
 import { execFileSync } from 'node:child_process';
 
 const [CMD = 'default', ...ARGS] = process.argv.slice(2);
-const SUITES = ['tooltips', 'round3', 'round2', 'director', 'default', 'doc', 'anim', 'tl', 'path', 'cam', 'export', 'ai', 'store'];
+const SUITES = ['defaultview', 'pathselect', 'polish', 'zoom', 'round4', 'tooltips', 'round3', 'round2', 'director', 'default', 'doc', 'anim', 'tl', 'path', 'cam', 'export', 'ai', 'store'];
 
 if (CMD === 'posediff') {
   const { poseDiff } = await import('./e2e/posediff.mjs');

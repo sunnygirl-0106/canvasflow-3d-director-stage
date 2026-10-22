@@ -1,7 +1,7 @@
-import { el, toastError } from '../../util/dom.js';
+import { toastError } from '../../util/dom.js';
 import { keyId } from './TrackRows.js';
 import { round6 } from '../../util/math.js';
-import { onKey, KEY_PRIORITY } from '../../util/keys.js';
+export { popupMenu, closePopup } from '../popupMenu.js';
 
 const DRAG_PX = 3; // 移动超过此距离才算拖动（否则是点击）
 
@@ -98,7 +98,7 @@ export function dragKeys(panel, e, anchorEl, { collapseOnClick = false } = {}) {
 
 /**
  * 拖区间条。
- * - 路径：拖中间 / 起点菱形 = 改 start（保持时长）；拖终点菱形 = 改 duration。
+ * - 路径：拖中间平移（保持时长）；拖起止手柄分别调整开始 / 结束，另一端保持不变。
  * - 约束：拖两端菱形 = 设 start / end（null 视为 0 / 时长）。
  * 松手时经 updatePath / updateConstraint 写入（一次撤销）。
  */
@@ -119,11 +119,11 @@ export function dragBar(panel, e, barEl, edge) {
     onMove(dx, ev) {
       const dt = dx / panel.pps;
       if (edge === 'end') {
-        b = Math.max(a + minLen, panel.snapTime(t1 + dt));
-        if (kind === 'constraint') b = Math.min(b, duration);
-      } else if (kind === 'path') { // 中间 / 起点：整体平移
-        a = Math.max(0, panel.snapTime(t0 + dt));
-        b = a + (t1 - t0);
+        b = Math.min(duration, Math.max(a + Math.min(minLen, duration - a), panel.snapTime(t1 + dt)));
+      } else if (kind === 'path' && edge === 'mid') { // 中间：整体平移
+        const length = Math.min(t1 - t0, duration);
+        a = Math.min(duration - length, Math.max(0, panel.snapTime(t0 + dt)));
+        b = a + length;
       } else {
         a = Math.min(Math.max(0, panel.snapTime(t0 + dt)), b - minLen);
       }
@@ -137,6 +137,7 @@ export function dragBar(panel, e, barEl, edge) {
       try {
         if (kind === 'path') {
           if (edge === 'end') tl.updatePath(id, { duration: round6(b - a) });
+          else if (edge === 'start') tl.updatePath(id, { start: round6(a), duration: round6(b - a) });
           else tl.updatePath(id, { start: round6(a) });
         } else if (edge === 'end') tl.updateConstraint(id, { end: round6(b) });
         else tl.updateConstraint(id, { start: round6(a) });
@@ -144,36 +145,4 @@ export function dragBar(panel, e, barEl, edge) {
       panel.rebuild();
     },
   });
-}
-
-/** 小弹出菜单（ease 选择 / 右键菜单共用 .ctxmenu 样式）；点外面或 Esc 关闭。 */
-export function popupMenu(x, y, items) {
-  closePopup();
-  const menu = el('div', { class: 'ctxmenu tl-menu' }, items.map((it) => (it === '-' ? el('div', { class: 'ctx-sep' }) : el('div', {
-    class: 'ctx-item' + (it.disabled ? ' disabled' : ''),
-    onclick: () => { closePopup(); it.onClick(); },
-  }, [
-    el('span', { class: 'ctx-label', text: it.label }),
-    it.checked ? el('span', { class: 'tl-check', text: '✓' }) : null,
-  ]))));
-  document.body.appendChild(menu);
-  const r = menu.getBoundingClientRect();
-  menu.style.left = Math.min(x, window.innerWidth - r.width - 8) + 'px';
-  menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
-  const close = (ev) => { if (!menu.contains(ev.target)) closePopup(); };
-  const offKey = onKey((ev) => { if (ev.key === 'Escape') { ev.stopImmediatePropagation(); closePopup(); } }, { priority: KEY_PRIORITY.popup });
-  // 下一拍再监听点击关闭，避免打开菜单的这次点击立刻把它关掉；关得比这一拍还早时清掉定时器
-  const timer = setTimeout(() => window.addEventListener('pointerdown', close, true), 0);
-  _popup = { menu, close, offKey, timer };
-  return menu;
-}
-
-let _popup = null;
-export function closePopup() {
-  if (!_popup) return;
-  _popup.menu.remove();
-  clearTimeout(_popup.timer);
-  window.removeEventListener('pointerdown', _popup.close, true);
-  _popup.offKey();
-  _popup = null;
 }

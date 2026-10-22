@@ -156,9 +156,13 @@ export async function scr(p) {
 
 /** Dock「路径」→ 选一种方式。 */
 export async function pathMenu(label) {
-  await clickSel('.scene-quick-tools .dockbtn[title^="路径"]');
+  if (label === '环绕') { await page.evaluate(() => window.__app.pathTool.request('arc')); await settle(); return; }
+  const names = {'点击落点':'钢笔路径','手绘':'铅笔路径','直线':'直线路径','走到':'走到目标','推到':'推到目标'};
+  await page.evaluate(() => [...document.querySelectorAll('.ptabs button')].find(b => b.textContent === '运动轨迹')?.click());
   await settle();
-  await page.evaluate((l) => [...document.querySelectorAll('.dockmenu.open .menu-item')].find((n) => n.textContent.includes(l)).click(), label);
+  await clickSel('#inspector [data-sec="path"] .sec-btn');
+  await settle();
+  await page.evaluate(l => [...document.querySelectorAll('.ctx-item')].find(n => n.textContent === l).click(), names[label] || label);
   await settle();
 }
 

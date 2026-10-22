@@ -56,7 +56,7 @@ export class Outliner {
     clear(this.container);
     const tree = el('div', { class: 'tree' });
 
-    for (const ent of app.entities) {
+    for (const ent of [...app.entities].sort((a, b) => Number(b.type === 'camera') - Number(a.type === 'camera'))) {
       if (ent.type === 'group') { this._renderCrowd(tree, ent); continue; }
       if (!this._matches(ent.name)) continue;
 

@@ -14,11 +14,15 @@ export async function run() {
   const defCollapsed = await page.evaluate(() => document.getElementById('timeline').classList.contains('collapsed'));
   await settle(120);
   const expanded = await page.evaluate(() => document.getElementById('timeline').offsetHeight);
-  ok('笔记本高度默认展开，轨道按参考比例占页面约 28%', !defCollapsed && Math.abs(expanded - 810 * (322 / 1152)) < 1, `default=${defCollapsed} h=${expanded}`);
+  ok('无偏好时默认完全收起', defCollapsed && expanded === 0, `default=${defCollapsed} h=${expanded}`);
 
-  await clickSel('.tl-more summary');
-  await clickSel('.tl-settings .tl-addkey');
-  await clickSel('.tl-more summary'); // 显式适配全长，供本套件 0–10s 手势使用
+  await page.evaluate(() => window.__timelinePanel.setCollapsed(false));
+  await settle();
+  ok('默认完整显示时间轴时长，标尺覆盖整个右侧', await page.evaluate(() => {
+    const p = window.__timelinePanel;
+    return p.fit && p.timeToX(p.app.timeline.duration) < p.scroll.clientWidth && p.ruler._w === p.scroll.clientWidth - p.nameWidth;
+  }));
+  await clickSel('.tl-tools .tl-addkey'); // 顶栏直接适配全长
 
   // ---- 场景：1 角色 + 2 道具 + 1 机位，导演相机俯视地面中心 ----
   const ids = await page.evaluate(async () => {
@@ -111,6 +115,7 @@ export async function run() {
   const trackId = await page.evaluate((id) => window.__app.timeline.toJSON().timeline.tracks.find((t) => t.target === id && t.property === 'pos').id, ids.m);
   const fps = await page.evaluate(() => [window.__app.timeline.fps, window.__timelinePanel.snap]);
   await page.evaluate(id=>window.__app.select(id),ids.m);
+  await clickSel(`.tl-head[data-ent="${ids.m}"] .tl-caret`);
   const keySel = `.tl-key[data-track="${trackId}"][data-t="3"]`;
   const [kx, ky] = await centerOf(keySel);
   const pps = await page.evaluate(() => window.__timelinePanel.pps);
@@ -138,7 +143,8 @@ export async function run() {
   await settle();
   const pathOf = () => page.evaluate((pid) => { const p = window.__app.timeline.toJSON().paths.find((x) => x.id === pid); return { start: p.start, duration: p.duration }; }, pathId);
   await page.evaluate(id=>window.__app.select(id),ids.p2);
-  await clickSel('.tl-path-edit');
+  await clickSel(`.tl-head[data-ent="${ids.p2}"] .tl-caret`);
+  await page.click('.tl-path-edit'); // 行超出可见范围时先滚动到按钮
   await page.$eval('.tl-bar-path', n => n.scrollIntoView({block:'nearest', inline:'nearest'}));
   await settle();
   const endXY = await centerOf('.tl-bar-path .tl-bar-end.end');
@@ -272,8 +278,8 @@ export async function run() {
     return { m: m.id, f: f.id, fName: f.name, rows };
   });
   await page.screenshot({ path: `${OUT}/20_bare_rows.png`, clip: await page.$eval('#timeline', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; }) });
-  ok('面板列出所有实体：新建场景两个角色即出现（实体持续条，无空位置子行、无假关键帧）',
-    bare.rows.length === 2 && bare.rows.every((r) => r.presence && r.btn) && bare.rows.some((r) => r.ent === bare.m) && bare.rows.some((r) => r.ent === bare.f), JSON.stringify(bare.rows));
+  ok('面板列出所有实体：无轨迹实体不显示持续色条，无空位置子行、无假关键帧',
+    bare.rows.length === 2 && bare.rows.every((r) => !r.presence && r.btn) && bare.rows.some((r) => r.ent === bare.m) && bare.rows.some((r) => r.ent === bare.f), JSON.stringify(bare.rows));
   await clickSel(`#timeline .tl-head[data-ent="${bare.f}"] .tl-label`);
   await clickSel('.tl-track-action');
   await page.evaluate(() => [...document.querySelectorAll('.tl-menu .ctx-item')].find(n => n.textContent.includes('位置')).click());
@@ -346,7 +352,7 @@ export async function run() {
   await page.reload({ waitUntil: 'networkidle0' });
   await page.waitForFunction(() => window.__app?.history.enabled, { timeout: 30000 });
   const kept = await page.evaluate(() => ({ collapsed: document.getElementById('timeline').classList.contains('collapsed'), h: document.getElementById('timeline').offsetHeight, vh: document.getElementById('viewport').clientHeight }));
-  ok('验收9 折叠后释放时间轴轨道高度', Math.abs(vh1 - vh0 - (expandedHeight - 41)) <= 1, `${vh0} → ${vh1}`);
-  ok('验收9 刷新页面保持折叠', kept.collapsed && kept.h === 41 && kept.vh === vh1, JSON.stringify(kept));
+  ok('验收9 折叠后释放时间轴轨道高度', Math.abs(vh1 - vh0 - expandedHeight) <= 1, `${vh0} → ${vh1}`);
+  ok('验收9 刷新页面保持折叠', kept.collapsed && kept.h === 0 && kept.vh === vh1, JSON.stringify(kept));
   console.log(`📁 产物：${OUT}/`);
 }

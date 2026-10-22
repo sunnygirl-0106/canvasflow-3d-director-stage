@@ -7,6 +7,33 @@ import { DEFAULT_SCENE } from '../doc/schema.js';
 const INVALIDATING_EVENTS = ['pointerdown', 'pointerup', 'keydown', 'input', 'change'];
 const VIEWPORT_EVENTS = ['pointermove', 'wheel'];
 
+// 将长网格线按格距分段：部分 WebGL 后端会丢失跨过观察相机近平面的整条线。
+// 仍合并为一个 LineSegments，不增加网格的 draw call。
+function groundGrid() {
+  const divisions = 60; // 120m 范围，保留 2m 格距。
+  const grid = new THREE.GridHelper(120, divisions, 0x536878, 0x354956);
+  const source = grid.geometry;
+  const p = source.getAttribute('position'), c = source.getAttribute('color');
+  const positions = [], colors = [];
+  for (let i = 0; i < p.count; i += 2) {
+    for (let step = 0; step < divisions; step++) {
+      for (const t of [step / divisions, (step + 1) / divisions]) {
+        positions.push(
+          THREE.MathUtils.lerp(p.getX(i), p.getX(i + 1), t),
+          0,
+          THREE.MathUtils.lerp(p.getZ(i), p.getZ(i + 1), t),
+        );
+        colors.push(c.getX(i), c.getY(i), c.getZ(i));
+      }
+    }
+  }
+  grid.geometry = new THREE.BufferGeometry();
+  grid.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  grid.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  source.dispose();
+  return grid;
+}
+
 // 场景 / 渲染器 / 光照 / 地面 / 网格 / 按需渲染循环 / resize
 export class Stage {
   constructor(viewportEl) {
@@ -14,7 +41,8 @@ export class Stage {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(DEFAULT_SCENE.sky);
-    this.scene.fog = new THREE.Fog(DEFAULT_SCENE.sky, 12, 32);
+    // 雾只用于地面等环境渐隐；可编辑实体材质禁用 fog，避免拉远后融入背景。
+    this.scene.fog = new THREE.Fog(DEFAULT_SCENE.sky, 24, 80);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }) // 截图在渲染后同步读取，无需 preserveDrawingBuffer;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -84,16 +112,16 @@ export class Stage {
     this.groundGroup = new THREE.Group();
     this.scene.add(this.groundGroup);
 
-    const mat = new THREE.MeshStandardMaterial({ color: 0x1c2028, roughness: 1, metalness: 0, transparent: true, opacity: 0.65 });
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), mat);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x3b424c, roughness: 1, metalness: 0, transparent: true, opacity: DEFAULT_SCENE.ground.opacity });
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), mat);
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.receiveShadow = true;
     this.groundGroup.add(this.ground);
 
-    // 蓝灰网格
-    this.grid = new THREE.GridHelper(40, 40, 0x303840, 0x242c34);
+    // 2m 蓝灰网格：平视时保留纵向透视线，远处不挤成密集条纹。
+    this.grid = groundGrid();
     this.grid.material.transparent = true;
-    this.grid.material.opacity = 0.35;
+    this.grid.material.opacity = 0.6;
     this.grid.position.y = 0.002;
     this.groundGroup.add(this.grid);
 

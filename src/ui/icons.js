@@ -13,7 +13,7 @@ const PATHS = {
   video: '<rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3"/>',
   audio: '<path d="M5 10v4M9 6v12M13 8v8M17 5v14M21 10v4"/>',
   frame: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/>',
-  shot: '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.2"/>',
+  shot: '<path d="M8 6.5 9.5 4h5L16 6.5h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2z"/><circle cx="12" cy="13" r="3.3"/>',
   expand: '<path d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6"/>',
   upload: '<path d="M12 16V5M8 9l4-4 4 4M5 19h14"/>',
   cube: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12v9M4 7.5l8 4.5 8-4.5"/>',
@@ -37,6 +37,7 @@ const PATHS = {
   groupFrame: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="9" y="9" width="6" height="6" rx="1.2"/>',
   copy: '<rect x="3.5" y="8.5" width="11" height="12" rx="2"/><path d="M8.5 8.5V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2.5"/><path d="M19.2 13.6l.55 1.45 1.45.55-1.45.55-.55 1.45-.55-1.45-1.45-.55 1.45-.55z"/>',
   // 时间轴
+  timelinePanel: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 9v11M11 13h6M11 16.5h3"/>',
   timeline: '<path d="M13 4a8 8 0 1 0 0 16M15 4l5 4-5 4M19 8h-7a4 4 0 0 0 0 8h2M17 14l3 3-3 3"/>',
   play: '<path d="M7 5l12 7-12 7z" fill="currentColor"/>',
   pause: '<path d="M8 5v14M16 5v14"/>',

@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { genId, hexColor } from '../entities/Entity.js';
 import { BODY_TYPES, CROWD_PALETTE, CHARACTER_COLOR, CHARACTER_PALETTE } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
-import { defaultDuration, fitStops } from '../anim/pathGen.js';
+import { defaultDuration, fitStops, fitPathToDuration } from '../anim/pathGen.js';
 import { rampFor } from '../anim/Path.js';
 import { cameraMove, appendMove, lookAtWindows, pathEnd, MoveError } from '../anim/cameraMoves.js';
 import { round6, clone, round4 } from '../util/math.js';
@@ -19,7 +19,10 @@ import { upsertKeys } from '../anim/keyframes.js';
 export const CROWD_LIMITS = { size: [1, 6], spacing: [0.5, 5] };
 export const CROWD_SPACING = 1.2;
 /** 新路径默认速度曲线；朝向：机位保持手动朝向，其余跟随切线。 */
-export const PATH_DEFAULTS = { speed: 'smooth', orient: (type) => (type === 'camera' ? 'keep' : 'tangent') };
+export const PATH_DEFAULTS = {
+  speed: (type) => (['character', 'group'].includes(type) ? 'linear' : 'smooth'),
+  orient: (type) => (type === 'camera' ? 'keep' : 'tangent'),
+};
 
 // ---- 基础 ----
 /** 文档里已用的 id（实体 / 轨道 / 路径 / 约束同一命名空间）。 */
@@ -232,8 +235,8 @@ export function pathStartPoint(type, pos, groundY) {
 }
 
 /**
- * 写入实体的路径（一条）。已有路径 → 替换 points / closed，时长按新长度重算，保留 start / speed / orient；
- * 否则删掉该实体的 pos 轨道并新建：start = opts.start、speed = smooth、orient = tangent（机位 keep）。
+ * 写入实体的路径（一条）。已有路径 → 替换 points / closed，人物保留时长、其余按新长度重算，保留 start / speed / orient；
+ * 否则删掉该实体的 pos 轨道并新建：角色 / 组默认匀速，其余缓入缓出；orient = tangent（机位 keep）。
  * opts.set 里给出的字段（start / duration / speed / orient）两种情况都覆盖。
  * @returns {{path:object, replaced:boolean}}
  */
@@ -241,19 +244,24 @@ export function setPath(doc, target, points, { closed = false, start = 0, set = 
   const ent = findEntity(doc, target);
   if (!ent) throw new Error(`实体不存在：${target}`);
   const old = doc.paths.find((p) => p.target === target);
-  const duration = set.duration ?? defaultDuration(points, { closed, ramp: (set.speed ?? old?.speed ?? 'smooth') === 'smooth' ? rampFor(ent.type) : 0 });
+  const speed = ['character', 'group'].includes(ent.type) ? 'linear' : set.speed ?? old?.speed ?? PATH_DEFAULTS.speed(ent.type);
+  const duration = set.duration ?? (['character', 'group'].includes(ent.type)
+    ? old?.duration ?? defaultDuration(points, { closed, interpolation: set.interpolation, ramp: 0 })
+    : defaultDuration(points, { closed, interpolation: set.interpolation, ramp: speed === 'smooth' ? rampFor(ent.type) : 0 }));
   let path;
   if (old) { // 重新绘制：旧停顿作废（set.stops 给出时用新的）
-    path = fitStops(null, { ...old, points: clone(points), closed, duration, stops: undefined, stopTimes: undefined, ...clone(set) });
+    path = fitStops(null, { ...old, interpolation: undefined, points: clone(points), closed, duration, stops: undefined, stopTimes: undefined, ...clone(set), speed });
     doc.paths = doc.paths.map((p) => (p === old ? path : p));
   } else {
     doc.timeline.tracks = doc.timeline.tracks.filter((t) => !(t.target === target && t.property === 'pos'));
     path = fitStops(null, {
       id: newId(doc), target, points: clone(points), closed, start, duration,
-      speed: PATH_DEFAULTS.speed, orient: PATH_DEFAULTS.orient(ent.type), ...clone(set),
+      orient: PATH_DEFAULTS.orient(ent.type), ...clone(set), speed,
     });
     doc.paths = [...doc.paths, path];
   }
+  path = fitPathToDuration(path, doc.timeline.duration);
+  doc.paths = doc.paths.map((p) => p.id === path.id ? path : p);
   return { path, replaced: !!old };
 }
 

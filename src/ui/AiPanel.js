@@ -49,11 +49,19 @@ export class AiPanel {
     this.mode = 'modify';
     this.image = null;      // 识图：压缩后的 data URL
     this.showSettings = false;
-    this.presetsOpen = false;
     this.settings = loadSettings();
     this.testState = null;  // 测试连接结果文案
     this.root = el('div', { class: 'ai-capsule' });
-    this.root.addEventListener('keydown', (e) => e.stopPropagation()); // 抽屉内按键不触发全局快捷键（Del / V / R / S…）
+    this.root.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') { this.browsePresets = false; this.open = false; this.render(); this.textarea.focus(); }
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (this.browsePresets && !this.root.contains(e.target)) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        this.browsePresets = false; this.render();
+      }
+    }, true); // 关闭托盘的这次按下不交给舞台绘制。
     viewport.appendChild(this.root);
     this.agent.on('turn', () => this.renderFlow());
     this.agent.on('update', () => { this.renderFlow(); this.renderInput(); });
@@ -66,7 +74,7 @@ export class AiPanel {
 
   toggle(v = !this.open) {
     this.open = v;
-    if (!v) this.browsePresets = false;
+    this.browsePresets = false;
     this.render();
     if (v) this.textarea?.focus();
     this.onToggle?.(v);
@@ -79,12 +87,54 @@ export class AiPanel {
   }
 
   openPresets() {
-    this.presetsOpen = true;
-    this.showSettings = false;
-    this.showHistory = false;
-    this.browsePresets = true;
-    this.toggle(true);
-    this.optionsEl.querySelector('.ai-presets')?.scrollIntoView({ block: 'nearest' });
+    if (this.agent.busy) { toast('请先取消当前生成'); return; }
+    this.browsePresets = !this.browsePresets;
+    this.pendingPreset = null;
+    this.showSettings = this.showHistory = this.open = false;
+    this.render();
+    if (this.browsePresets) this.tray.querySelector('button')?.focus();
+    else this.textarea.focus();
+  }
+
+  openImageImport() {
+    if (this.agent.busy) return;
+    const input = el('input', { type: 'file', accept: 'image/*' });
+    input.addEventListener('change', async () => {
+      if (!input.files?.[0]) return;
+      if (!await this._pickImage(input.files[0])) return;
+      this.mode = 'image'; this.browsePresets = false; this.open = true;
+      this.showSettings = this.showHistory = false;
+      this.render(); this.textarea.focus();
+    });
+    input.click();
+  }
+
+  renderPresets() {
+    this.tray?.remove();
+    if (!this.browsePresets) return;
+    const close = () => { this.browsePresets = false; this.pendingPreset = null; this.render(); this.textarea.focus(); };
+    const apply = preset => {
+      if (this.agent.busy) return;
+      this.mode = 'generate'; this.image = null;
+      this.textarea.value = preset.prompt;
+      close();
+    };
+    const choose = preset => {
+      if (this.agent.busy) return;
+      if (this.textarea.value.trim()) { this.pendingPreset = preset; this.renderPresets(); }
+      else apply(preset);
+    };
+    this.tray = el('div', { id: 'scenePresetTray', class: 'ai-preset-tray', role: 'dialog', 'aria-label': '选个场景开始' }, [
+      el('div', { class: 'ai-preset-heading' }, [el('strong', { text: '选个场景开始' }), el('button', { text: '关闭', onclick: close })]),
+      this.pendingPreset ? el('div', { class: 'ai-preset-confirm' }, [
+        el('span', { text: '替换当前草稿？' }),
+        el('button', { text: '取消', onclick: () => { this.pendingPreset = null; this.renderPresets(); } }),
+        el('button', { text: '替换草稿', disabled: this.agent.busy || undefined, onclick: () => apply(this.pendingPreset) }),
+      ]) : el('div', { class: 'ai-preset-grid' }, SCENE_PRESETS.map(preset => el('button', {
+        class: 'ai-preset', type: 'button', disabled: this.agent.busy || undefined, onclick: () => choose(preset),
+      }, [el('strong', { text: preset.title }), el('span', { text: preset.detail })]))),
+    ]);
+    this.root.append(this.tray);
   }
 
   /** 实际生效的模式：修改模式遇空场景自动切生成。 */
@@ -96,13 +146,13 @@ export class AiPanel {
     this.root.classList.toggle('continuing', !!this.continuing);
     this.root.classList.toggle('browsing-presets', !!this.browsePresets);
     const head = el('div', { class: 'ai-head' }, [
-      el('button', { class: 'ai-icbtn', title: '设置（模型接口）', html: icon('gear', 17), onclick: () => { this.showSettings = !this.showSettings; this.render(); } }),
-      el('button', { class: 'minibtn', text: '会话历史', onclick: () => { this.showHistory = !this.showHistory; this.render(); } }),
+      el('button', { class: 'ai-icbtn', title: '设置（模型接口）', html: icon('gear', 17), onclick: () => { this.showSettings = !this.showSettings; this.showHistory = false; this.render(); } }),
+      el('button', { class: 'minibtn', text: '会话历史', onclick: () => { this.showHistory = !this.showHistory; this.showSettings = false; this.render(); } }),
       el('button', { class: 'ai-icbtn', title: '关闭', html: icon('close', 17), onclick: () => this.toggle(false) }),
     ]);
     this.settingsEl = el('div', { class: 'ai-settings', hidden: !this.showSettings || undefined });
     this.flowEl = el('div', { class: 'ai-flow', hidden: !this.showHistory || undefined });
-    this.optionsEl = el('div', { class: 'ai-options' });
+    this.optionsEl = el('div', { class: 'ai-options', hidden: this.showSettings || this.showHistory || undefined });
     this.detailsEl = el('div', { class: 'ai-details', hidden: !this.open || undefined }, [head, this.settingsEl, this.flowEl, this.optionsEl]);
     this.statusEl = el('div', { class: 'ai-result', role: 'status' });
     this.inputEl = el('div', { class: 'ai-input' });
@@ -265,29 +315,7 @@ export class AiPanel {
     })));
     this.optionsEl.appendChild(seg);
 
-    if (mode !== 'image' || this.browsePresets) {
-      const presets = el('details', { class: 'ai-presets', open: this.presetsOpen ? true : undefined });
-      presets.append(
-        el('summary', { text: '预制场景 · 点选填入', onclick: (event) => {
-          event.preventDefault();
-          this.presetsOpen = !presets.open;
-          presets.open = this.presetsOpen;
-        } }),
-        el('div', { class: 'ai-preset-grid' }, SCENE_PRESETS.map((preset) => el('button', {
-          class: 'ai-preset', type: 'button', title: preset.prompt, disabled: busy || undefined,
-          onclick: () => {
-            if (this.agent.busy) return;
-            this.mode = 'generate';
-            this.image = null;
-            this.textarea.value = preset.prompt;
-            this.renderInput();
-            this.textarea.focus();
-          },
-        }, [el('strong', { text: preset.title }), el('span', { text: preset.detail })]))),
-        el('div', { class: 'ai-preset-hint', text: '选好后可直接发送，也可改字；将使用「生成新场景」。' }),
-      );
-      this.optionsEl.appendChild(presets);
-    }
+    this.optionsEl.prepend(el('button', { class: 'minibtn', text: '预制场景', disabled: busy || undefined, onclick: () => this.openPresets() }));
 
     if (mode === 'image') {
       const file = el('input', { type: 'file', accept: 'image/*', hidden: true });
@@ -304,8 +332,8 @@ export class AiPanel {
     }
 
     this.textarea = el('textarea', {
-      class: 'ai-text', rows: 1, 'aria-label': '描述想搭建的场景', disabled: busy || undefined,
-      placeholder: this.continuing ? '继续描述想调整的内容' : '描述想搭建的场景',
+      class: 'ai-text', rows: 1, wrap: 'off', 'aria-label': '描述想搭建的场景', disabled: busy || undefined,
+      placeholder: this.continuing ? '继续描述调整…' : '描述场景…',
     });
     this.textarea.value = draft;
     this.textarea.addEventListener('keydown', (e) => {
@@ -314,25 +342,36 @@ export class AiPanel {
     const send = el('button', { class: 'ai-send ai-icbtn', title: busy ? '取消生成' : '发送', 'aria-label': busy ? '取消生成' : '发送', html: icon(busy ? 'stop' : 'send', 20), onclick: () => busy ? this.agent.cancel() : this.send() });
     const resize = () => {
       this.textarea.style.height = '24px';
-      this.textarea.style.height = Math.min(72, this.textarea.scrollHeight) + 'px';
+      this.textarea.style.height = (this.textarea.value ? Math.min(72, this.textarea.scrollHeight) : 24) + 'px';
       send.disabled = !busy && !this.textarea.value.trim() && !this.image;
     };
     this.textarea.addEventListener('input', resize);
+    const presets = el('button', {
+      id: 'scenePresets', class: 'ai-presets-trigger', type: 'button', title: `预制场景：从 ${SCENE_PRESETS.length} 个场景中选择，填入描述`,
+      'aria-label': '打开预制场景', 'aria-expanded': String(this.browsePresets), 'aria-controls': 'scenePresetTray',
+      disabled: busy || undefined, onclick: () => this.openPresets(),
+    }, [el('span', { class: 'ai-presets-icon', html: icon('sparkle', 17, 1.5) }), el('span', { class: 'ai-presets-label', text: '预制场景' })]);
     this.inputEl.append(
       el('button', { class: 'ai-plus ai-icbtn', title: '添加参考图、预制、历史和设置', 'aria-label': 'AI 更多选项', html: icon('plus', 22), onclick: () => this.toggle() }),
-      this.textarea, send,
+      this.textarea, presets, send,
     );
     resize();
     this.renderStatus();
+    this.renderPresets();
   }
 
   async _pickImage(f) {
     if (!f) return;
     if (!f.type.startsWith('image/')) { toast('请选择图片文件'); return; }
     if (f.size > MAX_IMAGE_BYTES) { toast(`图片过大（${(f.size / 1048576).toFixed(1)} MB），请小于 2 MB`); return; }
-    try { this.image = await compressImage(f); }
+    try {
+      const image = await compressImage(f);
+      if (this.agent.busy) return false;
+      this.image = image;
+    }
     catch (err) { toast(err.message || String(err)); return; }
     this.renderInput();
+    return true;
   }
 
   /** 发送：生成模式且场景非空先确认清空；识图模式必须有图。 */

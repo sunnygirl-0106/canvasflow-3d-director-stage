@@ -71,7 +71,7 @@ export class Ruler {
     const major = pps >= 64 && pps < 500 ? 1 : MAJOR_STEPS.find((s) => s * pps >= MIN_LABEL_PX) || MAJOR_STEPS.at(-1);
     ctx.strokeStyle = dim;
     ctx.fillStyle = txt;
-    ctx.font = '10.5px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+    ctx.font = '10px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
     ctx.textBaseline = 'top';
     ctx.beginPath();
     const half = major / 2;
@@ -80,8 +80,8 @@ export class Ruler {
       if (t < ts - 1e-9) continue;
       const xx = Math.round(x(t)) + 0.5;
       const isMajor = i % 2 === 0;
-      ctx.moveTo(xx, isMajor ? h - 10 : h - 6); ctx.lineTo(xx, h);
-      if (isMajor) ctx.fillText(label(t), xx + 3, 3);
+      ctx.moveTo(xx, isMajor ? h - 6 : h - 3); ctx.lineTo(xx, h);
+      if (isMajor) ctx.fillText(label(t), xx + 5, 6);
     }
     ctx.stroke();
   }

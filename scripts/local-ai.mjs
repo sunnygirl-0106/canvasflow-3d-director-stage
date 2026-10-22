@@ -4,6 +4,11 @@ export function localAiPlugin(env) {
   const install = (server) => {
     // configureServer 不能返回 middlewares.use() 的结果：Vite 会把返回函数当作后置 hook 调用。
     server.middlewares.use(async (req, res, next) => {
+      if (req.url?.split('?')[0] === '/api/local-ai/settings' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(enabled ? { model: env.AI_MODEL } : {}));
+        return;
+      }
       if (req.url?.split('?')[0] !== '/api/local-ai/chat/completions') return next();
       const reply = (status, message) => {
         if (res.destroyed || res.writableEnded) return;

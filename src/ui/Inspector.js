@@ -1,12 +1,14 @@
+import { openPathMenu } from './pathMenu.js';
 import * as THREE from 'three';
 import { RATIO_OPTIONS } from '../config.js';
+import { FOV_RANGE } from '../doc/schema.js';
 import { el, toast, toastError } from '../util/dom.js';
+import { icon } from './icons.js';
 import { tripleRow, sliderRow, colorRow, dropdownRow, infoTip, shotCard, toHex, numberRow, toggleRow } from './widgets.js';
 import { PoseSliders } from './PoseSliders.js';
 import { POSE_PRESETS } from '../entities/posePresets.js';
 import { downloadURL } from '../app/ShotManager.js';
 import { propState, toggleKey } from './timeline/animState.js';
-import { pathModes } from '../app/PathTool.js';
 import { arcPoints } from '../anim/pathGen.js';
 import { pathLength, defaultDuration, stopsAfterReverse, toggleStop, WALK_PACE } from '../anim/pathGen.js';
 import { rampFor } from '../anim/Path.js';
@@ -16,8 +18,7 @@ import { D2R, R2D } from '../util/math.js';
 
 const FOV_TIP = '控制镜头视野范围。数值越小，画面越近、越聚焦；数值越大，画面越广、能看到更多环境。';
 const PREVIEW_W = 248, PREVIEW_H = 140;
-const RUN_SPEED = 2.6; // m/s：平均速度超过它标「跑」（步态 ≥ 2.6 纯跑）
-const PACES = [[0.8, '慢走'], [WALK_PACE, '走'], [1.8, '快走'], [3.5, '跑']];
+const PACES = [[0.8, '慢走'], [WALK_PACE, '走'], [1.8, '快走'], [3.5, '加速走']];
 const round2 = (x) => Math.round(x * 100) / 100;
 const fmtS = (x) => (Math.round(x * 10) / 10).toFixed(1);
 
@@ -152,12 +153,10 @@ export class Inspector {
 
   /** 「新建路径 ▾」：五种绘制方式（与 Dock「路径」按钮等价）。 */
   _newPathBtn(label, ent) {
-    const tool = this.app.pathTool;
     return el('button', {
       class: 'sec-btn', text: label + ' ▾',
       onclick: (e) => {
-        const r = e.currentTarget.getBoundingClientRect();
-        popupMenu(r.left, r.bottom + 4, pathModes(ent).map(([mode, text]) => ({ label: text, onClick: () => tool.request(mode) })));
+        openPathMenu(this.app, e.currentTarget, ent.id);
       },
     });
   }
@@ -166,7 +165,7 @@ export class Inspector {
   _pathEmpty(ent) {
     const info = ent.type === 'camera'
       ? '未设置路径。新建后机位沿路径移动（画在机位高度的水平面上，朝向保持不变）。'
-      : '未设置路径。新建后角色沿路径移动，播放时自动走 / 跑。';
+      : '未设置路径。新建后角色沿路径移动，播放时始终走路，速度越快步频越高。';
     return el('div', { class: 'anim-sec', 'data-sec': 'path' }, [
       el('div', { class: 'sec-title' }, [el('span', { text: '路径' }), el('span', { class: 'sec-spacer' }), this._newPathBtn('新建路径', ent)]),
       el('div', { class: 'anim-info', text: info }),
@@ -179,13 +178,19 @@ export class Inspector {
    */
   _pathSection(p, ent) {
     const upd = (patch) => this._tl((tl) => tl.updatePath(p.id, patch));
-    const len = pathLength(p.points, p.closed, p.stops);
+    const len = pathLength(p.points, p.closed, p.stops, p.interpolation);
     const v = len / p.duration;
+    const total = this.app.timeline.duration;
+    const uniform = ['character', 'group'].includes(ent.type);
+    const ramp = !uniform && p.speed === 'smooth' ? rampFor(ent.type) : 0;
+    const natural = defaultDuration(p.points, { closed: p.closed, interpolation: p.interpolation, ramp });
+    const suggestedTotal = Math.ceil((p.start + natural) * 10 - 1e-9) / 10;
+    const needsMoreTime = ['character', 'group'].includes(ent.type) && natural > total - p.start + 0.001;
     const tool = this.app.pathTool;
     const pace = (e) => {
       const r = e.currentTarget.getBoundingClientRect();
       popupMenu(r.left, r.bottom + 4, PACES.map(([speed, name]) => ({
-        label: `${name} ${speed} m/s`, onClick: () => upd({ duration: defaultDuration(p.points, { speed, closed: p.closed, ramp: p.speed === 'smooth' ? rampFor(ent.type) : 0 }) }),
+        label: `${name} ${speed} m/s`, onClick: () => upd({ duration: defaultDuration(p.points, { speed, closed: p.closed, interpolation: p.interpolation, ramp }) }),
       })));
     };
     return el('div', { class: 'anim-sec', 'data-sec': 'path' }, [
@@ -196,15 +201,25 @@ export class Inspector {
       ]),
       el('div', { class: 'anim-info path-stats' }, [
         `顶点 ${p.points.length} · 总长 ${len.toFixed(2)} m · `,
-        el('span', { class: 'path-speed', text: `平均 ${v.toFixed(2)} m/s` }),
-        v > RUN_SPEED ? el('span', { class: 'path-run', text: '跑' }) : null,
+        el('span', { class: 'path-speed', text: `${uniform && !p.stops?.length ? '匀速' : '平均'} ${v.toFixed(2)} m/s` }),
       ]),
       el('div', { class: 'anim-pair' }, [
         numberRow({ label: '开始', value: p.start, step: 0.1, min: 0, unit: 's', onChange: (x) => upd({ start: x }) }).el,
         numberRow({ label: '时长', value: p.duration, step: 0.1, min: 0.01, unit: 's', onChange: (x) => upd({ duration: x }) }).el,
       ]),
-      dropdownRow({
-        label: '速度', value: p.speed,
+      el('div', { class: 'path-timing-hint' + (needsMoreTime ? ' fast' : '') }, [
+        el('span', { text: `${fmtS(p.start)}–${fmtS(p.start + p.duration)} 秒 · 场景共 ${fmtS(total)} 秒` }),
+        el('span', { text: needsMoreTime ? '当前时间不足以正常步行，已按所设时长加速。' : '轨迹在场景总时长内完成，提前到达后停留。' }),
+        needsMoreTime ? el('button', {
+          class: 'minibtn', text: `恢复正常步行 · 延长至 ${fmtS(suggestedTotal)} 秒`,
+          onclick: () => this._tl((tl) => this.app.store.batch('按正常步速延长场景', () => {
+            tl.setDuration(suggestedTotal);
+            tl.updatePath(p.id, { duration: natural });
+          })),
+        }) : null,
+      ]),
+      uniform ? el('div', { class: 'anim-info', text: '从起步即匀速：按路径总长 ÷ 时长预先计算，途中保持一致。' }) : dropdownRow({
+        label: '速度变化', value: p.speed,
         options: [{ value: 'linear', label: '匀速' }, { value: 'smooth', label: '缓入缓出' }],
         onChange: (x) => upd({ speed: x }),
       }).el,
@@ -225,7 +240,7 @@ export class Inspector {
           class: 'minibtn', text: '起点对齐当前位置', title: '把第一个顶点移到对象当前（手动）位置',
           onclick: () => upd({ points: [tool.startPoint(ent), ...p.points.slice(1)] }),
         }) : null,
-        el('button', { class: 'minibtn', text: '按步速重算时长 ▾', onclick: pace }),
+        el('button', { class: 'minibtn', text: '按步速调整 ▾', title: '自动计算所需时间；超过场景总时长时适配剩余时间', onclick: pace }),
         el('button', { class: 'minibtn danger', text: '删除路径', onclick: () => this._tl((tl) => tl.removePath(p.id)) }),
       ]),
     ]);
@@ -560,7 +575,7 @@ export class Inspector {
     root.appendChild(lookRow.el);
 
     const fovField = sliderRow({
-      label: '视野角度', min: 20, max: 90, step: 1, value: ent.cam.fov,
+      label: '视野角度', min: FOV_RANGE[0], max: FOV_RANGE[1], step: 1, value: ent.cam.fov,
       format: (v) => Math.round(v) + '°',
       onInput: (v) => { ent.setFov(v); this._previewBadge.textContent = 'FOV ' + Math.round(v) + '°'; changed(); },
       onChange: commit('fov'),
@@ -625,11 +640,16 @@ export class Inspector {
   _buildPreview(ent) {
     const canvas = el('canvas', { width: PREVIEW_W, height: PREVIEW_H });
     const badge = el('div', { class: 'cam-fov-badge', text: 'FOV ' + Math.round(ent.cam.fov) + '°' });
-    const expand = el('button', { class: 'cam-expand', title: '全屏扩大', text: '⤢', onclick: () => this._openPreviewModal(ent) });
+    const expand = el('button', { class: 'cam-expand', title: '放大机位画面', 'aria-label': '放大机位画面', html: icon('expand', 14), onclick: () => this._openPreviewModal(ent) });
     this._previewEnt = ent;
     this._previewCanvas = canvas;
     this._previewBadge = badge;
-    return el('div', { class: 'field' }, [el('div', { class: 'cam-preview' }, [canvas, badge, expand])]);
+    return el('div', { class: 'field' }, [el('div', { class: 'cam-monitor' }, [
+      el('div', { class: 'cam-monitor-head' }, [
+        el('span', { class: 'cam-monitor-title', text: '机位监看' }), badge, expand,
+      ]),
+      el('div', { class: 'cam-preview' }, [canvas]),
+    ])]);
   }
 
   /** 合并同帧多次预览请求。 */

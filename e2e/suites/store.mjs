@@ -13,7 +13,7 @@ export async function run() {
     const previewOnly = a.exportDocument({ view: false }).entities.find((e) => e.id === p.id).transform.pos[0] === pos[0];
     a.edited(p); a.history.capture();
     const committed = a.store.document;
-    const moved = committed.entities.find((e) => e.id === p.id).transform.pos[0] === pos[0] + 2;
+    const moved = committed.entities.find((e) => e.id === p.id).transform.pos[0] === Math.round((pos[0] + 2) * 1e6) / 1e6;
     const unrelated = committed.entities[0] === initial.entities[0];
     const count = a.history.entries.length;
     a.edited(p); a.history.capture();
@@ -21,7 +21,7 @@ export async function run() {
     await a.history.undo();
     const undo = p.root.position.x === pos[0] && a.findEntity(p.id) === p;
     await a.history.redo();
-    const redo = p.root.position.x === pos[0] + 2;
+    const redo = p.root.position.x === Math.round((pos[0] + 2) * 1e6) / 1e6;
     a.setGroundOpacity(0.7, { preview: true });
     const scenePreview = a.store.document.scene.ground.opacity === initial.scene.ground.opacity;
     a.commitScenePreview(); a.history.capture();

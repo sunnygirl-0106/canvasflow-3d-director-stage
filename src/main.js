@@ -43,7 +43,19 @@ new Inspector($('inspector'), app);
 new Outliner($('outliner'), app, $('search'));
 const timelinePanel = new TimelinePanel($('timeline'), app);
 const aiPanel = new AiPanel($('stageTools'), app);
-$('scenePresets').onclick = () => aiPanel.openPresets();
+// 构建预览也从运行中的本地服务发现模型；密钥始终留在服务端。
+if (!aiPanel.settings.local) {
+  const initialSettings = JSON.stringify(aiPanel.settings);
+  fetch('./api/local-ai/settings', { signal: AbortSignal.timeout(3000) })
+    .then((res) => res.ok ? res.json() : null)
+    .then((config) => {
+      if (!config?.model || app.ai.busy || JSON.stringify(aiPanel.settings) !== initialSettings) return;
+      aiPanel.settings = { baseURL: '/api/local-ai', apiKey: '', model: config.model, local: true };
+      app.ai.setProvider(new OpenAICompatProvider(aiPanel.settings));
+      aiPanel.render();
+    })
+    .catch(() => {}); // 纯静态托管仍使用浏览器中保存的设置。
+}
 new Dock($('dock'), app, { timelinePanel, exportModal, aiPanel });
 
 // 右栏：未选中 → 3D场景面板；选中 → 属性面板

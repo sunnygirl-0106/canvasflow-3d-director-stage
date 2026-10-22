@@ -228,10 +228,10 @@ export async function run() {
   await page.evaluate(() => window.__app.playback.stop());
   const camY = (await camPose(ids.c1)).pos[1];
   const camP = (await camPose(ids.c1)).pos;
-  await clickSel('.scene-quick-tools .dockbtn[title^="路径"]');
+  await clickSel('#inspector [data-sec="path"] .sec-btn');
   await settle();
-  const towardLabel = await page.$$eval('.dockmenu.open .menu-item', (ns) => ns.map((n) => n.textContent).join(' '));
-  await page.evaluate(() => [...document.querySelectorAll('.dockmenu.open .menu-item')].find((n) => n.textContent.includes('点击落点')).click());
+  const towardLabel = await page.$$eval('.ctx-item', (ns) => ns.map((n) => n.textContent).join(' '));
+  await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find((n) => n.textContent.includes('钢笔路径')).click());
   await settle();
   const hint8 = await page.$eval('.path-hint', (n) => n.textContent);
   for (const q of [[camP[0] + 1.5, camY, camP[2] + 0.6], [camP[0] + 3, camY, camP[2] - 0.8], [camP[0] + 3.4, camY, camP[2] - 2.8]]) { await page.mouse.click(...await scr(q)); await settle(); }
@@ -258,9 +258,9 @@ export async function run() {
   await page.evaluate(() => [...document.querySelectorAll('#inspector [data-sec="path"] .minibtn')].find((b) => b.textContent === '删除路径').click());
   await settle();
   await pickInOutliner(ids.c1n);
-  await clickSel('.scene-quick-tools .dockbtn[title^="路径"]');
+  await clickSel('#inspector [data-sec="path"] .sec-btn');
   await settle();
-  await page.evaluate(() => [...document.querySelectorAll('.dockmenu.open .menu-item')].find((n) => n.textContent.includes('推到')).click());
+  await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find((n) => n.textContent.includes('推到')).click());
   await settle();
   const footA = (await camPose(ids.c1)).foot[ids.A];
   await page.mouse.click(...await scr([footA[0], 0.9, footA[2]]));

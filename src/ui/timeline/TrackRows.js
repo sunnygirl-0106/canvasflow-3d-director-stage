@@ -1,6 +1,10 @@
+import { popupMenu } from '../popupMenu.js';
+import { openPathMenu } from '../pathMenu.js';
 import { el, toastError } from '../../util/dom.js';
 import { icon } from '../icons.js';
 import { toggleKey, propState } from './animState.js';
+import { Path, pathOptionsFor } from '../../anim/Path.js';
+import { toggleStop } from '../../anim/pathGen.js';
 
 /** 轨道行名（词汇表 → 中文）。 */
 export const PROP_LABEL = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视角（FOV）' };
@@ -67,7 +71,7 @@ export class TrackRows {
     return frag;
   }
 
-  _folded(id) { return this.collapsedEnts.has(id) || (!this.expandedEnts.has(id) && !this.panel.app.selectedIds.has(id)); }
+  _folded(id) { return this.collapsedEnts.has(id) || (!this.expandedEnts.has(id)); }
 
   _headRow({ ent, rows }) {
     const folded = !rows.length || this._folded(ent.id);
@@ -77,25 +81,41 @@ export class TrackRows {
       if (folded) { this.collapsedEnts.delete(ent.id); this.expandedEnts.add(ent.id); } else { this.collapsedEnts.add(ent.id); this.expandedEnts.delete(ent.id); }
       this.panel.rebuild();
     });
-    const delAll = el('button', { class: 'tl-op', title: '删除全部动画', html: icon('trash', 13) });
-    delAll.addEventListener('click', (e) => { e.stopPropagation(); this.panel.removeAllAnimation(ent.id); });
+    const pathRow = rows.find(r => r.kind === 'path');
+    const remove = el('button', {
+      class: 'tl-row-delete', title: pathRow ? '删除轨迹' : '删除动画',
+      'aria-label': `删除${ent.name}的${pathRow ? '轨迹' : '动画'}`, disabled: !rows.length || undefined,
+      html: icon('trash', 13, 1.5), onclick: (e) => {
+        e.stopPropagation();
+        try {
+          if (pathRow) this.panel.app.timeline.removePath(pathRow.data.id);
+          else this.panel.removeAllAnimation(ent.id);
+        } catch (err) { toastError(err); }
+      },
+    });
     const name = el('div', { class: 'tl-name' }, [
       caret,
       el('span', { class: 'tl-type', html: icon(TYPE_ICON[ent.type] || 'cube', 14) }),
-      el('span', { class: 'tl-label', text: (ent.id === this.panel.app.timeline.mainCameraId ? '主机位 · ' : '') + ent.name }),
-      el('button', { class: 'tl-addkey', text: '绘制轨迹', title: '为此对象绘制路径', onclick: (e) => {
+      el('span', { class: 'tl-label', text: ent.name, title: ent.name }),
+      ...(ent.id === this.panel.app.timeline.mainCameraId ? [el('span', { class: 'tl-main-badge', text: '主机位' })] : []),
+      el('button', { class: 'tl-addkey', html: icon('path', 14, 1.5) + '<span>绘制轨迹</span>', title: '为此对象绘制路径', onclick: (e) => {
         e.stopPropagation();
         const app = this.panel.app;
-        app.setCameraView(false); app.select(ent.id); app.pathTool.request('points');
+        openPathMenu(app, e.currentTarget, ent.id);
       } }),
-      delAll,
+      remove,
     ]);
     // 表头的轨道区：所有键时刻的汇总（只读）
     const times = new Set();
     for (const r of rows) if (r.kind === 'track') for (const k of r.data.keys) times.add(k.t);
     const lane = el('div', { class: 'tl-lane' }, [...times].map((t) => vars(el('i', { class: 'tl-sum' }), { '--t': t })));
-    lane.prepend(el('div', { class: 'tl-presence', title: '场景持续存在范围（非动画片段）' }));
-    return el('div', { class: 'tl-row tl-head' + (ent.type === 'camera' ? ' camera' : ''), 'data-ent': ent.id }, [name, lane]);
+    if (pathRow) {
+      const p = pathRow.data;
+      const bar = this._bar('path', p.id, p.start, p.start + p.duration, `轨迹 · ${p.duration.toFixed(1)} s`);
+      bar.classList.add('tl-path-clip');
+      lane.append(bar);
+    } else lane.append(el('span', { class: 'tl-path-status', text: '无轨迹' }));
+    return el('div', { class: 'tl-row tl-head' + (pathRow ? ' has-path' : ' no-path') + (ent.type === 'camera' ? ' camera' : ''), 'data-ent': ent.id, 'data-path': pathRow?.data.id }, [name, lane]);
   }
 
   _row(ent, { kind, data }) {
@@ -109,8 +129,9 @@ export class TrackRows {
         title: `关键帧 ${k.t.toFixed(2)} 秒 · ${{ linear: '匀速', smooth: '缓入缓出', step: '阶跃' }[k.ease] || k.ease}；拖动改时间，双击设置过渡`,
         'data-track': data.id, 'data-t': String(k.t),
       }), { '--t': k.t })));
+      if (data.keys.length > 1) lane.prepend(vars(el('i', { class: 'tl-key-line' }), { '--t0': data.keys[0].t, '--t1': data.keys.at(-1).t }));
     } else if (kind === 'path') {
-      label = '位置（路径驱动）';
+      label = '位置';
       attrs['data-path'] = data.id;
       lane = this._pathLane(ent, data);
     } else {
@@ -137,12 +158,50 @@ export class TrackRows {
         class: 'tl-path-line', title: '打开轨迹编辑与区间设置',
         onclick: () => this.panel.app.emit('inspect', { id: ent.id, section: 'path' }),
       }), { '--t0': path.start, '--t1': end });
-    return el('div', { class: 'tl-lane' }, [content]);
+    const model = new Path(path, pathOptionsFor(ent.type));
+    const count = path.points.length + (path.closed ? 1 : 0);
+    const nodes = Array.from({ length: count }, (_, i) => {
+      const time = model.vertexTime(i);
+      const index = i % path.points.length;
+      const stop = path.stops?.includes(index);
+      const select = () => {
+        const app = this.panel.app;
+        app.playback.pause(); app.select(ent.id); app.playback.seek(time);
+        app.pathOverlay.setSelectedPath(path.id);
+        app.pathOverlay.setSelectedVertex({ pathId: path.id, index });
+      };
+      return vars(el('button', {
+        class: 'tl-path-node' + (stop ? ' is-stop' : ''), 'data-time': time,
+        title: `${i === count - 1 && path.closed ? '回到起点' : `路径节点 ${i + 1}`} · ${time.toFixed(2)} 秒${stop ? ' · 停顿' : ''}；点击定位，右键设置停顿`,
+        'aria-label': `路径节点 ${i + 1}，${time.toFixed(2)} 秒`,
+        onclick: select,
+        ondblclick: () => { select(); this.panel.app.emit('inspect', { id: ent.id, section: 'path' }); },
+        oncontextmenu: (e) => {
+          e.preventDefault(); e.stopPropagation();
+          popupMenu(e.clientX, e.clientY, [
+            { label: '定位到此节点', onClick: select },
+            { label: stop ? '取消停顿' : '在此节点停顿', disabled: index === 0 || (!path.closed && index === path.points.length - 1), onClick: () => {
+              try { this.panel.app.timeline.updatePath(path.id, toggleStop(path, index, !stop)); } catch (err) { toastError(err); }
+            } },
+          ]);
+        },
+      }), { '--t': time });
+    });
+    return el('div', { class: 'tl-lane' }, [content, ...nodes]);
   }
 
   _rowControls(ent, kind, data) {
     if (data.property) return this._propertyControls(ent, data.property);
-    if (kind === 'path') return [el('button', {
+    if (kind === 'path') return [
+      ...[-1, 1].map((direction) => el('button', { class: 'tl-addkey', text: direction < 0 ? '‹' : '›', title: direction < 0 ? '上一个路径节点' : '下一个路径节点', onclick: () => {
+        const model = new Path(data, pathOptionsFor(ent.type));
+        const times = Array.from({ length: data.points.length + (data.closed ? 1 : 0) }, (_, i) => model.vertexTime(i));
+        const now = this.panel.app.playback.time;
+        const time = direction < 0 ? times.filter(t => t < now - 1e-6).at(-1) : times.find(t => t > now + 1e-6);
+        if (time !== undefined) this.panel.seek(time);
+      } })),
+      el('span', { class: 'tl-value', 'data-value-ent': ent.id, 'data-property': 'pos' }),
+      el('button', {
       class: 'tl-addkey tl-path-edit', title: '展开或收起路径区间编辑', html: icon('chevron', 14),
       onclick: () => {
         if (this.pathEditors.has(data.id)) this.pathEditors.delete(data.id);
@@ -181,6 +240,9 @@ export class TrackRows {
 
   reflectValues() {
     const app = this.panel.app, anim = app.timeline.view();
+    for (const node of this.panel.rows.querySelectorAll('.tl-path-node')) {
+      node.classList.toggle('is-current', Math.abs(+node.dataset.time - app.playback.time) < 1 / (2 * app.timeline.fps));
+    }
     for (const node of this.panel.rows.querySelectorAll('[data-value-ent]')) {
       const ent = app.findEntity(node.dataset.valueEnt);
       if (!ent) continue;

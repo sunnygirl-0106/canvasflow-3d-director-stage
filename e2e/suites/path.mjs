@@ -4,6 +4,7 @@ import { pixelDiff, sleep, settle, clickSel, pickInOutliner, scr, pathMenu, toas
 
 export async function run() {
   await twoCharacterFixture();
+  await page.evaluate(() => window.__timelinePanel.setCollapsed(false));
   const OUT = 'test-output/path';
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
@@ -43,7 +44,7 @@ export async function run() {
   await page.keyboard.press('Enter');
   await settle(150);
   const p1 = await pathOf(ids.A);
-  const dd1 = await page.evaluate(async (pts) => (await import('/src/anim/pathGen.js')).defaultDuration(pts), p1?.points || [[0, 0, 0]]);
+  const dd1 = await page.evaluate(async (pts) => (await import('/src/anim/pathGen.js')).defaultDuration(pts, { ramp: 0 }), p1?.points || [[0, 0, 0]]);
   await page.evaluate(() => window.__app.playback.seek(0));
   await settle();
   const shot1 = await cleanShot(`${OUT}/1_t0.png`);
@@ -147,12 +148,16 @@ export async function run() {
     const d1 = a.exportDocument();
     await a.loadDocument(JSON.parse(JSON.stringify(d1)), { applyView: true });
     const d2 = a.exportDocument();
-    return { eq: strip(d1) === strip(d2), paths: d2.paths.length, items: a.pathOverlay.itemCount, visible: a.pathOverlay.visible };
+    const selectedPaths = d2.paths.filter(p => a.selectedIds.has(p.target)).length;
+    return { eq: strip(d1) === strip(d2), paths: d2.paths.length, items: a.pathOverlay.itemCount, selectedPaths, visible: a.pathOverlay.visible };
   });
-  ok('验收11 含手绘路径的文档 导出 → 导入 → 导出 ≡；导入后 overlay 立即显示', rt.eq && rt.paths === 4 && rt.items === 4 && rt.visible, JSON.stringify(rt));
+  ok('验收11 含手绘路径的文档 导出 → 导入 → 导出 ≡；导入后立即显示选中对象的路径', rt.eq && rt.paths === 4 && rt.selectedPaths > 0 && rt.items === rt.selectedPaths && rt.visible, JSON.stringify(rt));
 
-  // ---- 5 拖顶点（角色 A 第 2 个顶点拖 1 m）----
+  // ---- 5 Explicitly enter editing before dragging existing vertices (round 4). ----
   await pickInOutliner(ids.An);
+  await page.evaluate(() => [...document.querySelectorAll('.ptabs button')].find(b => b.textContent === '运动轨迹')?.click());
+  await clickSel('#inspector [data-sec="path"] .sec-btn');
+  await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find(n => n.textContent === '编辑现有轨迹').click());
   const pA = await pathOf(ids.A);
   await page.evaluate(() => {
     const tl = window.__app.timeline;
@@ -205,13 +210,13 @@ export async function run() {
     const q = path.positionAt(lo);
     return [q.x, q.y, q.z];
   }, before6.id);
-  await page.mouse.click(...await scr(mid));
+  await page.mouse.click(...await scr(mid), { count: 2 });
   await settle(150);
   const ins = await pathOf(ids.A);
   await page.screenshot({ path: `${OUT}/13_insert.png` });
   const np = ins.points[2], pa = ins.points[1], pb = ins.points[3];
   const between = ins.points.length === before6.points.length + 1 && hdist(np, pa) < hdist(pa, pb) && hdist(np, pb) < hdist(pa, pb) && hdist(np, mid) < 0.02;
-  ok('验收6 点曲线中点 → 点数 +1，新点在两邻点之间（落在曲线上）', between, `${before6.points.length} → ${ins.points.length} 新点=${JSON.stringify(np)}`);
+  ok('验收6 双击曲线中点 → 点数 +1，新点在两邻点之间（落在曲线上）', between, `${before6.points.length} → ${ins.points.length} 新点=${JSON.stringify(np)}`);
   const selV = await page.evaluate(() => window.__app.pathOverlay.selVertex);
   await page.keyboard.press('Delete');
   await settle(150);
@@ -219,6 +224,9 @@ export async function run() {
   const stillThere = await page.evaluate((id) => !!window.__app.findEntity(id), ids.A);
   ok('验收6 选中顶点 Del → 点数 −1（实体不被删除）', selV?.index === 2 && del.points.length === before6.points.length && stillThere, `${ins.points.length} → ${del.points.length}`);
   await pickInOutliner(ids.box2N);
+  await page.evaluate(() => [...document.querySelectorAll('.ptabs button')].find(b => b.textContent === '运动轨迹')?.click());
+  await clickSel('#inspector [data-sec="path"] .sec-btn');
+  await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find(n => n.textContent === '编辑现有轨迹').click());
   const lnP = await pathOf(ids.box2);
   await page.mouse.click(...await scr(lnP.points[1]));
   await settle();

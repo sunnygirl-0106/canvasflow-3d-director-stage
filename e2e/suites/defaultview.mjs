@@ -1,0 +1,101 @@
+import fs from 'node:fs';
+import { PNG } from 'pngjs';
+import { page, ok } from '../harness.mjs';
+import { settle } from '../helpers.mjs';
+
+const OUT = 'test-output/default-view';
+const decode = url => PNG.sync.read(Buffer.from(url.split(',')[1], 'base64'));
+
+// 对比开/关像素，确认线段实际显示，而非只验证场景里存在几何体。
+function lineContrast(on, off, point) {
+  let delta = 0;
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const x = Math.round(point[0]) + dx, y = Math.round(point[1]) + dy;
+    if (x < 0 || x >= on.width || y < 0 || y >= on.height) continue;
+    const i = (y * on.width + x) * 4;
+    delta = Math.max(delta, (on.data[i] + on.data[i + 1] + on.data[i + 2]
+      - off.data[i] - off.data[i + 1] - off.data[i + 2]) / 3);
+  }
+  return delta;
+}
+
+export async function run() {
+  fs.mkdirSync(OUT, { recursive: true });
+  const calibration = [];
+  for (const [width, height] of [[2048, 1034], [1440, 900], [1440, 810], [1920, 1080]]) {
+    await page.setViewport({ width, height });
+    await page.reload({ waitUntil: 'networkidle0' });
+    await page.waitForFunction(() => window.__app?.ready);
+    await settle();
+    const state = await page.evaluate(async () => {
+      const a = window.__app, camera = a.stage.camera, V = camera.position.constructor;
+      const { worldBox } = await import('/src/util/measure.js');
+      const characters = a.entities.filter(e => e.type === 'character');
+      const direction = camera.position.clone().sub(a.rig.controls.target);
+      return {
+        actors: characters.map(e => {
+          const b = worldBox(e.root, { useBones: true }), center = b.getCenter(new V());
+          const foot = new V(center.x, b.min.y, center.z).project(camera);
+          const head = new V(center.x, b.max.y, center.z).project(camera);
+          return { body: e.body, color: e.toJSON().color, pos: e.toJSON().transform.pos, height: (head.y - foot.y) / 2, feet: (1 - foot.y) / 2 };
+        }),
+        yaw: direction.x, pitch: Math.atan2(direction.y, direction.z) * 180 / Math.PI,
+        director: camera.position.toArray(), target: a.rig.controls.target.toArray(),
+        shot: a.cameras[0].toJSON(), selected: a.selectedId === characters[0].id,
+        collapsed: window.__timelinePanel.collapsed, playing: a.playback.playing,
+      };
+    });
+    calibration.push({ viewport: [width, height], ...state });
+    ok(`${width}×${height} 保留一男一女、颜色和左右站位`, state.actors.length === 2
+      && state.actors[0].body === 'male' && state.actors[1].body === 'female'
+      && state.actors[0].color === '#468de5' && state.actors[1].color === '#e35e61'
+      && state.actors[0].pos.join() === '-0.7,0,0' && state.actors[1].pos.join() === '0.7,0,0');
+    ok(`${width}×${height} 参考构图：人物约21%、脚底约2/3、正面轻俯视`,
+      state.actors.every(e => e.height > .185 && e.height < .22 && e.feet > .64 && e.feet < .68)
+      && Math.abs(state.yaw) < 1e-8 && state.pitch > 4.9 && state.pitch < 5.1
+      && Math.abs(state.shot.transform.pos[2] - state.director[2]) < 1e-5 && state.selected && state.collapsed && !state.playing,
+      JSON.stringify(state.actors.map(e => ({ height: e.height, feet: e.feet }))));
+    await page.screenshot({ path: `${OUT}/after-${width}x${height}.png` });
+  }
+  fs.writeFileSync(`${OUT}/calibration.json`, JSON.stringify(calibration, null, 2));
+
+  const raster = await page.evaluate(() => {
+    const a = window.__app, s = a.stage, c = a.cameras[0], V = s.camera.position.constructor;
+    const project = p => {
+      p.project(s.camera);
+      return [(p.x + 1) / 2 * s.renderer.domElement.width, (1 - p.y) / 2 * s.renderer.domElement.height];
+    };
+    const gridPoint = project(new V(2, .002, 3));
+    const p = c.helper.geometry.getAttribute('position');
+    const side = new V().fromBufferAttribute(p, 16).lerp(new V().fromBufferAttribute(p, 17), .95);
+    const sidePoint = project(side.applyMatrix4(c._viz.matrixWorld));
+    const snapshot = () => { s.render(); return s.renderer.domElement.toDataURL(); };
+    const on = snapshot();
+    s.grid.visible = false; const noGrid = snapshot(); s.grid.visible = true;
+    c._frustumSides.visible = false; const noSides = snapshot(); c._frustumSides.visible = true;
+    s.invalidate();
+    return { on, noGrid, noSides, gridPoint, sidePoint };
+  });
+  const on = decode(raster.on);
+  const grid = lineContrast(on, decode(raster.noGrid), raster.gridPoint);
+  const sides = lineContrast(on, decode(raster.noSides), raster.sidePoint);
+  ok('正面视角的纵向网格线实际可见', grid > 3, `像素亮度差 ${grid.toFixed(1)}`);
+  ok('跨近平面的视锥侧边实际可见', sides > 3, `像素亮度差 ${sides.toFixed(1)}`);
+
+  const reset = await page.evaluate(async () => {
+    const a = window.__app;
+    const original = a.stage.camera.position.clone(), target = a.rig.controls.target.clone();
+    a.rig.controls.enableDamping = false;
+    a.stage.camera.position.addScalar(2); a.rig.controls.update(); a.resetView();
+    const matches = a.stage.camera.position.distanceTo(original) < 1e-6 && a.rig.controls.target.distanceTo(target) < 1e-6;
+    const doc = a.exportDocument(); await a.loadDocument(doc, { applyView: true });
+    const roundtrip = a.stage.camera.position.distanceTo(original) < 1e-5 && a.rig.controls.target.distanceTo(target) < 1e-5;
+    a.setCameraView(true); a.beforeRender();
+    const clean = a.cameras.every(c => !c.body.visible && !c.helper.visible);
+    a.setCameraView(false);
+    a.select(a.cameras[0].id);
+    return { matches, roundtrip, clean, slider: document.querySelector('#inspector input[type=range]')?.value, fov: a.cameras[0].fov };
+  });
+  ok('重置和存档恢复保留构图；机位视角隐藏辅助物；FOV面板与真实机位一致',
+    reset.matches && reset.roundtrip && reset.clean && Number(reset.slider) === reset.fov, JSON.stringify(reset));
+}

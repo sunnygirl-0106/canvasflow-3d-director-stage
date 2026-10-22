@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { Path, rampFor } from '../anim/Path.js';
+import { Path, pathOptionsFor } from '../anim/Path.js';
 
 const ACCENT = 0x3b82f6;
 const LIFT = 0.01;            // 贴地抬高 1 cm，防 z-fighting
@@ -22,7 +22,7 @@ const _w = new THREE.Vector3();
 const _s = new THREE.Vector3();
 
 /**
- * 视口里的路径可视化：每条路径一条等宽曲线（Line2）；选中实体的路径另画顶点球、起止标记、方向箭头。
+ * 视口只显示选中实体的路径（Line2）；进入路径编辑时另画顶点球、起止标记、方向箭头。
  * 播放头所在位置画一个亮点。不持有文档状态：在 timeline 'change' / 选择 / 视角变化时按 toJSON() 重建，'tick' 时只挪亮点。
  *
  * 坐标：overlay 挂在 stage.world 下，路径点（文档口径 = 实体父坐标系）直接作为局部坐标。
@@ -38,6 +38,7 @@ export class PathOverlay {
     this.group.name = 'PathOverlay';
     app.stage.add(this.group);
 
+    this.selectedPathId = null; // 仅当前点中的轨迹显示编辑手柄
     this.hover = null;        // { pathId, index } 悬停顶点
     this.selVertex = null;    // { pathId, index } 选中顶点（Del 删除）
     this._preview = null;     // { pathId, points }
@@ -71,7 +72,9 @@ export class PathOverlay {
 
     app.timeline.on('change', () => this.rebuild());
     app.playback.on('tick', () => this._placeDots());
-    app.on('selection', () => this.rebuild());
+    app.on('selection', () => {
+      if (this.selectedPathId) this.setSelectedPath(null); else this.rebuild();
+    });
     app.on('view', () => this._applyVisible());
     app.stage.onViewportResize(() => this._syncResolution());
     this.rebuild();
@@ -87,13 +90,18 @@ export class PathOverlay {
     this._items = [];
     const { paths } = this.app.timeline.toJSON();
     const selIds = this.app.selectedIds;
+    if (this.selectedPathId && !paths.some(p => p.id === this.selectedPathId && selIds.has(p.target) && this.app.findEntity(p.target)?.visible)) {
+      this.selectedPathId = null;
+      this.setSelectedVertex(null);
+      this.app.emit('pathSelection', null);
+    }
     for (const json0 of paths) {
+      if (!selIds.has(json0.target) || !this.app.findEntity(json0.target)?.visible) continue;
       const pv = this._preview?.pathId === json0.id ? this._preview : null;
       const json = pv ? { ...json0, points: pv.points } : json0;
       if (json.points.length < 2) continue;
-      const selected = selIds.has(json.target);
-      const ramp = rampFor(this.app.findEntity(json.target)?.type);
-      const item = { json, selected, path: new Path(json, { ramp }), vertices: [] };
+      const selected = this.selectedPathId === json.id;
+      const item = { json, selected, path: new Path(json, pathOptionsFor(this.app.findEntity(json.target)?.type)), vertices: [] };
       item.samples = this._sample(item.path);
       this.group.add(this._line(item.samples, selected));
       if (selected) this._handles(item);
@@ -111,10 +119,16 @@ export class PathOverlay {
   _sample(path) {
     const n = Math.min(MAX_SEG, Math.max(SEG_PER_M, Math.ceil(path.length * SEG_PER_M)));
     const out = [];
-    for (let i = 0; i <= n; i++) {
-      path.positionAt((i / n) * path.length, _v);
+    const distances = Array.from({ length: n + 1 }, (_, i) => i / n * path.length);
+    if (path.json.interpolation === 'polyline') {
+      for (let i = 0; i < path.json.points.length; i++) distances.push(path.vertexDistance(i));
+      distances.sort((a, b) => a - b);
+    }
+    for (const distance of distances) {
+      path.positionAt(distance, _v);
       out.push(_v.x, _v.y + LIFT, _v.z);
     }
+    out.distances = distances;
     return out;
   }
 
@@ -199,10 +213,10 @@ export class PathOverlay {
 
   // ---- 绘制草稿 / 吸附高亮（PathTool）----
   /** 草稿：已落的点 + 按同一种曲线画出的预览（points 为 null 清空）。 */
-  setDraft(points, { closed = false, dots = true } = {}) {
+  setDraft(points, { closed = false, dots = true, interpolation } = {}) {
     for (const o of [...this.draftGroup.children]) { this.draftGroup.remove(o); this._disposeLine(o); }
     if (points?.length >= 2) {
-      const path = new Path({ points, closed, start: 0, duration: 1, speed: 'linear' });
+      const path = new Path({ points, closed, interpolation, start: 0, duration: 1, speed: 'linear' });
       if (path.length > 1e-6) this.draftGroup.add(this._line(this._sample(path), true, { color: COLOR.hover, opacity: 0.9 }));
     }
     for (const p of dots ? points || [] : []) {
@@ -245,6 +259,7 @@ export class PathOverlay {
     for (const it of this._items) {
       it.path.positionAt(it.path.distanceAt(t), _v);
       it.dot.position.set(_v.x, _v.y + LIFT, _v.z);
+      it.dot.visible = this.app.timeline.active;
     }
     if (this._items.length) this.app.stage.invalidate();
   }
@@ -262,7 +277,7 @@ export class PathOverlay {
   }
 
   /** 洁净渲染（截图 / 机位预览）期间临时隐藏。 */
-  setHidden(v) { this._hidden = v; this._applyVisible(); }
+  setHidden(v) { this._hidden = v; this._applyVisible(); this.app.emit('pathVisibility'); }
 
   get visible() { return this.group.visible; }
 
@@ -270,6 +285,17 @@ export class PathOverlay {
   get itemCount() { return this._items.length; }
 
   // ---- 交互状态（顶点编辑用，非文档状态）----
+  /** 轨迹选择是会话状态；删路径、换实体时自动清除，不写入文档。 */
+  setSelectedPath(pathId) {
+    if (pathId === this.selectedPathId) return;
+    if (pathId && !this._items.some(it => it.json.id === pathId)) return;
+    this.selectedPathId = pathId;
+    this.hover = null;
+    this.setSelectedVertex(null);
+    this.rebuild();
+    this.app.emit('pathSelection', pathId);
+  }
+
   setHover(h) {
     if (sameVertex(h, this.hover)) return;
     this.hover = h;
@@ -305,7 +331,7 @@ export class PathOverlay {
   /**
    * clientX/Y 处命中的路径元素：顶点优先于曲线。返回
    * { kind:'vertex', pathId, target, index } | { kind:'line', pathId, target, point:[x,y,z], seg } | null。
-   * 只测选中实体的顶点；曲线对所有路径都测（点线 = 选中其实体）。
+   * 只测选中实体的顶点；曲线只对当前显示的已选中实体路径检测。
    */
   hitTest(clientX, clientY) {
     if (!this.group.visible || !this._items.length) return null;
@@ -347,11 +373,10 @@ export class PathOverlay {
     const { it, i, u } = best;
     const S = it.samples;
     const lerp = (k) => S[(i - 1) * 3 + k] + (S[i * 3 + k] - S[(i - 1) * 3 + k]) * u;
-    const n = S.length / 3 - 1;
     return {
       kind: 'line', pathId: it.json.id, target: it.json.target,
       point: [lerp(0), lerp(1) - LIFT, lerp(2)],
-      s: ((i - 1 + u) / n) * it.path.length, // 命中处的弧长
+      s: S.distances[i - 1] + (S.distances[i] - S.distances[i - 1]) * u, // 命中处的弧长
     };
   }
 

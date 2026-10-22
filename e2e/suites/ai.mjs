@@ -54,7 +54,7 @@ export async function run() {
   const preset = await page.evaluate(async () => {
     const { SCENE_PRESETS } = await import('/src/ai/presets.js');
     const p = window.__aiPanel, a = window.__app;
-    return document.querySelectorAll('.ai-preset').length === SCENE_PRESETS.length && SCENE_PRESETS.length === 8
+    return !document.querySelector('.ai-preset-tray') && SCENE_PRESETS.length === 8
       && p.mode === 'generate' && p.textarea.value === SCENE_PRESETS[0].prompt && document.activeElement === p.textarea
       && a.store.document === window.__presetBefore.doc && a.history.index === window.__presetBefore.hist && window.__aiMock.calls.length === 0;
   });
@@ -63,15 +63,16 @@ export async function run() {
   const confirmation = await page.evaluate(() => document.querySelector('#toast').textContent.includes('清空并生成') && window.__aiMock.calls.length === 0);
   await page.click('#toast .toast-action.secondary');
   ok('预制场景发送保留清空确认，取消不改变现有场景', confirmation && await page.evaluate(() => window.__app.store.document === window.__presetBefore.doc && window.__aiMock.calls.length === 0));
-  await page.click('.ai-presets summary');
+  await page.evaluate(() => window.__aiPanel.openPresets());
   const controls = await page.evaluate(() => {
     const p = window.__aiPanel;
-    p.renderInput();
-    const collapsed = !document.querySelector('.ai-presets').open;
+    p.openPresets(); p.renderInput();
+    const collapsed = !document.querySelector('.ai-preset-tray');
+    p.openPresets();
     p.agent.busy = true; p.renderInput();
     const disabled = [...document.querySelectorAll('.ai-preset')].every((button) => button.disabled);
     p.agent.busy = false; p.toggle(false); p.toggle(true); p.mode = 'image'; p.renderInput();
-    const hidden = !document.querySelector('.ai-presets');
+    const hidden = !document.querySelector('.ai-preset-tray');
     p.mode = 'modify'; p.presetsOpen = true; p.textarea.value = ''; p.renderInput();
     return collapsed && disabled && hidden;
   });
@@ -294,6 +295,6 @@ export async function run() {
     const send = document.querySelector('.ai-send').getBoundingClientRect();
     return send.bottom <= drawer.bottom && send.top >= drawer.top;
   });
-  ok('设置与预制场景同时展开：810px 高窗口发送按钮可见，600px 高窗口可滚动触达', laptop && compact);
+  ok('设置与预制互斥展开：810px 高窗口发送按钮可见，600px 高窗口可滚动触达', laptop && compact);
   console.log(`📸 截图在 ${OUT}/（gen_t2.5 / gen_viewport / image_viewport / panel_*）`);
 }

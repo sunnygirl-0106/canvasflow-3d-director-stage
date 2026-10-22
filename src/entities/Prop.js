@@ -6,7 +6,7 @@ import { PROP_PALETTE } from '../config.js';
 let _colorIdx = 0;
 
 function stdMat(c) {
-  return new THREE.MeshStandardMaterial({ color: c, roughness: 0.52, metalness: 0.04 });
+  return new THREE.MeshStandardMaterial({ color: c, fog: false, roughness: 0.52, metalness: 0.04 });
 }
 
 // 人体素模：胶囊/圆柱+球拼一个占位人形（沿用 MVP makeHuman 思路，统一身高约 1.7）。

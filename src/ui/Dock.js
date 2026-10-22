@@ -3,10 +3,9 @@ import { DockMenu } from './dockMenu.js';
 import { HistoryModal } from './HistoryModal.js';
 import { groupedPresets } from '../core/cameraPresets.js';
 import { listCanvasAssets } from '../util/assetLibrary.js';
-import { isPanoRatio, BODY_TYPES, PROP_KINDS } from '../config.js';
+import { isPanoRatio, BODY_TYPES, PROP_KINDS, RATIO_OPTIONS } from '../config.js';
 import { icon } from './icons.js';
 import { exportScene, pickAndImportScene } from '../app/SceneFile.js';
-import { pathModes } from '../app/PathTool.js';
 import { hasWebCodecs, UNSUPPORTED_MSG } from '../app/exportSpec.js';
 import { toast } from '../util/dom.js';
 
@@ -82,14 +81,6 @@ export class Dock {
     const camAdd = this._btn('video', '添加机位（预设）', (e) => { e.stopPropagation(); this.camMenu.toggle(); });
     this.camAddBtn = camAdd;
 
-    // 4.5 路径（选中角色 / 道具 / 组 / 机位时可用）：五种绘制方式
-    const pathBtn = this._btn('path', '路径（为选中对象绘制移动路径）', (e) => { e.stopPropagation(); this.pathMenu.toggle(); });
-    this.pathBtn = pathBtn;
-    if (!this._pathBound) {
-      this._pathBound = true;
-      app.pathTool.on('mode', (m) => this.pathBtn?.classList.toggle('on', !!m));
-    }
-
     // 6 截图
     const shot = this._btn('shot', '截图', () => app.shots.captureShot());
     shot.dataset.tooltip = '截图：拍下当前画面，保存到摄像机截图列表';
@@ -100,7 +91,7 @@ export class Dock {
 
     // 8 时间轴（展开 / 折叠底部面板）
     const tlp = this.timelinePanel;
-    const tlBtn = tlp ? this._btn('timeline', '时间轴（展开 / 折叠）：编辑关键帧、人物轨迹和机位动画', () => tlp.toggleCollapsed()) : null;
+    const tlBtn = tlp ? this._btn('timelinePanel', '时间轴（展开 / 折叠）：编辑关键帧、人物轨迹和机位动画', () => tlp.toggleCollapsed()) : null;
     if (tlBtn) {
       tlBtn.classList.toggle('on', !tlp.collapsed);
       if (!this._tlBound) { this._tlBound = true; tlp.on('collapse', (v) => this.tlBtn?.classList.toggle('on', !v)); }
@@ -109,16 +100,11 @@ export class Dock {
 
     c.append(...[tf, shot, tlBtn].filter(Boolean));
     const rail = document.getElementById('sideRail');
-    const sceneTab = this._btn('layers', '场景列表', () => document.getElementById('app').classList.toggle('left-collapsed'));
-    const propBtn = this._btn('cube', '添加道具', (e) => { e.stopPropagation(); this.propMenu.toggle(); });
-    rail.replaceChildren(sceneTab, addBtn, camAdd, propBtn, pano);
+    const sceneTab = this._btn('layers', '场景列表', () => document.getElementById('app').classList.remove('left-collapsed'));
+    const ratio = this._btn('expand', '选择画幅比例', (e) => { e.stopPropagation(); this.ratioMenu.toggle(); });
+    const image = this._btn('image', '识图导入', () => this.aiPanel.openImageImport());
+    rail.replaceChildren(sceneTab, addBtn, camAdd, pano, ratio, image);
     document.getElementById('sceneActions').replaceChildren(scene);
-    // 路径菜单保留可见锚点；机位属性负责截图/导出画幅，场景菜单负责全屏。
-    const settings = document.createElement('div');
-    settings.className = 'scene-quick-tools';
-    settings.append(pathBtn);
-    document.querySelector('.side.left').append(settings);
-
     // ---- 菜单（统一由 DockMenu 管理）----
     this.menu = new DockMenu(document.body);
 
@@ -128,11 +114,10 @@ export class Dock {
         this._item(icon, label, () => { app.setTransformMode(mode); this.menu.close(); }, app.transformMode === mode)),
     });
 
-    this.propMenu = this.menu.create({ anchor: propBtn, build: () => PROP_KINDS.map(([kind, label]) => this._item('cube', label, () => { app.addProp(kind); this.menu.close(); })) });
+    this.ratioMenu = this.menu.create({ anchor: ratio, build: () => RATIO_OPTIONS.map(([value, label]) => this._item(null, label, () => { app.setRatio(value); this.menu.close(); }, app.ratio === value)) });
     this.addMenu = this.menu.create({ anchor: addBtn, build: () => this._buildAddItems() });
     this.panoMenu = this.menu.create({ anchor: pano, build: () => this._buildPanoItems() });
     this.camMenu = this.menu.create({ anchor: camAdd, className: 'cammenu', build: () => this._buildCamItems() });
-    this.pathMenu = this.menu.create({ anchor: pathBtn, minWidth: '150px', build: () => this._buildPathItems() });
     this.sceneMenu = this.menu.create({ anchor: scene, minWidth: '170px', build: () => this._buildSceneItems() });
 
   }
@@ -244,17 +229,6 @@ export class Dock {
       for (const p of g.items) {
         items.push(this._item('video', p.label, () => { app.addCamera(p.key); this.menu.close(); }, false, 16));
       }
-    }
-    return items;
-  }
-
-  // ---- 路径菜单 ----
-  _buildPathItems() {
-    const tool = this.app.pathTool;
-    const ok = tool.canDraw(this.app.selected);
-    const items = [el('div', { class: 'menu-group', text: ok ? '绘制路径' : '先选中角色 / 道具 / 组 / 机位' })];
-    for (const [mode, label] of pathModes(this.app.selected)) {
-      items.push(this._item(null, label, () => { this.menu.close(); tool.request(mode); }, tool.mode === mode, 17, { disabled: !ok }));
     }
     return items;
   }

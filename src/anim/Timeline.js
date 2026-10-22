@@ -7,8 +7,8 @@ import { Pose } from '../rig/Pose.js';
 import { Track } from './Track.js';
 import { sameKeyTime, upsertKeys } from './keyframes.js';
 import { PathTrack } from './PathTrack.js';
-import { rampFor } from './Path.js';
-import { fitStops } from './pathGen.js';
+import { pathOptionsFor } from './Path.js';
+import { fitStops, fitPathToDuration } from './pathGen.js';
 import { applyLocomotion } from './Locomotion.js';
 import { applyConstraint, constraintActive } from './Constraint.js';
 import { round6, clone } from '../util/math.js';
@@ -202,7 +202,7 @@ export class Timeline extends Emitter {
     // 2 路径轨道
     for (const json of this.paths) {
       const st = states.get(json.target);
-      if (st) this._rt(json, (j) => new PathTrack(j, rampFor(st.ent.type))).apply(t, st);
+      if (st) this._rt(json, (j) => new PathTrack(j, pathOptionsFor(st.ent.type))).apply(t, st);
     }
 
     for (const st of states.values()) this._write(st);
@@ -370,6 +370,9 @@ export class Timeline extends Emitter {
         else if (key === 'tracks') updateDraft(doc.timeline.tracks, value);
         else doc.timeline[key] = value;
       }
+      if ('paths' in next || 'duration' in next) {
+        doc.paths = doc.paths.map((p) => fitPathToDuration(p, doc.timeline.duration));
+      }
     });
   }
 
@@ -418,18 +421,19 @@ export class Timeline extends Emitter {
   }
 
   /** 新建路径。缺省：不闭合、0 秒开始、时长 4 秒、匀速、朝向切线。 */
-  addPath({ target, points, closed = false, start = 0, duration = 4, speed = 'linear', orient = 'tangent' }) {
-    const path = { id: newId(this.app.store.document), target, points: clone(points), closed, start, duration, speed, orient };
+  addPath({ target, points, closed = false, start = 0, duration = 4, speed = 'linear', orient = 'tangent', interpolation }) {
+    const path = { id: newId(this.app.store.document), target, points: clone(points), closed, start, duration, speed, orient, ...(interpolation ? { interpolation } : {}) };
     this._commit({ paths: [...this.paths, path] });
-    return clone(path);
+    return clone(this.paths.find((p) => p.id === path.id));
   }
 
   /** 修改路径字段（id 不可改）。 */
   updatePath(id, patch) {
     const old = this._find(this.paths, id, '路径');
+    if (patch.start >= this.duration) throw new Error(`开始时间需早于场景结束（${this.duration} 秒）`);
     const path = fitStops(old, { ...old, ...clone(patch), id }, patch); // 停顿随顶点数 / 时长调整
     this._commit({ paths: this.paths.map((x) => (x === old ? path : x)) });
-    return clone(path);
+    return clone(this.paths.find((p) => p.id === id));
   }
 
   removePath(id) {

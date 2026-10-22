@@ -9,11 +9,10 @@ export const KEY_PRIORITY = {
   popup: 90,       // 弹出菜单：Esc 关闭
   pathDraw: 80,    // 路径绘制态：回车 / Backspace / Esc
   transformDrag: 75, // gizmo 拖动：Esc 取消预览
-  pathDrag: 70,    // 拖顶点中：Esc 还原
+  pathDrag: 70,    // 轨迹编辑：Esc 退出 / 取消拖动，Backspace 删轨迹
   timeline: 60,    // 时间轴：选中键时 Del 删键、Space 播放…
   // 冒泡阶段
   menu: 30,        // 右键菜单：Esc 关闭
-  pathVertex: 20,  // 选中路径顶点：Del 删顶点（先于删实体）
   global: 0,       // 撤销 / 变换模式 / 删实体
 };
 

@@ -1,0 +1,188 @@
+{
+  "schema": "director-stage/0.1",
+  "meta": {
+    "name": "未命名场景",
+    "createdAt": "2026-10-22T03:50:13.700Z",
+    "updatedAt": "2026-10-22T03:50:15.356Z",
+    "app": "director-stage-demo",
+    "editorView": {
+      "pos": [
+        0.385188,
+        2.822543,
+        12.941136
+      ],
+      "target": [
+        0,
+        1.025,
+        0.101542
+      ]
+    }
+  },
+  "scene": {
+    "scale": 1,
+    "pos": [
+      0,
+      0,
+      0
+    ],
+    "rot": [
+      0,
+      0,
+      0
+    ],
+    "sky": "#060608",
+    "labels": true,
+    "ground": {
+      "visible": true,
+      "opacity": 0.4,
+      "height": 0
+    },
+    "ratio": "auto",
+    "activeCameraId": "x1yfsfuk",
+    "panorama": null
+  },
+  "assets": {},
+  "entities": [
+    {
+      "type": "character",
+      "id": "w1gxxydg",
+      "name": "男角色",
+      "body": "male",
+      "color": "#468de5",
+      "visible": true,
+      "transform": {
+        "pos": [
+          -0.7,
+          0,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "pose": {
+        "preset": null,
+        "values": {}
+      },
+      "parent": null
+    },
+    {
+      "type": "character",
+      "id": "04dco5rg",
+      "name": "女角色",
+      "body": "female",
+      "color": "#e35e61",
+      "visible": true,
+      "transform": {
+        "pos": [
+          0.7,
+          0,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "pose": {
+        "preset": null,
+        "values": {}
+      },
+      "parent": null
+    },
+    {
+      "type": "camera",
+      "id": "x1yfsfuk",
+      "name": "机位1",
+      "visible": true,
+      "transform": {
+        "pos": [
+          0,
+          1.55,
+          3.4344
+        ],
+        "rot": [
+          -11.449185,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "fov": 48,
+      "roll": 0,
+      "lookAt": [
+        0,
+        0.875,
+        0.101542
+      ]
+    }
+  ],
+  "paths": [
+    {
+      "id": "s12rihzm",
+      "target": "w1gxxydg",
+      "points": [
+        [
+          -0.7,
+          0,
+          0
+        ],
+        [
+          -0.7,
+          0,
+          -0.8
+        ]
+      ],
+      "closed": false,
+      "start": 0,
+      "duration": 10,
+      "speed": "smooth",
+      "orient": "tangent"
+    },
+    {
+      "id": "ybf7l7bc",
+      "target": "04dco5rg",
+      "points": [
+        [
+          0.7,
+          0,
+          0
+        ],
+        [
+          0.7,
+          0,
+          -0.8
+        ]
+      ],
+      "closed": false,
+      "start": 0,
+      "duration": 10,
+      "speed": "smooth",
+      "orient": "tangent"
+    }
+  ],
+  "constraints": [],
+  "timeline": {
+    "duration": 10,
+    "fps": 30,
+    "mainCameraId": "x1yfsfuk",
+    "tracks": []
+  }
+}

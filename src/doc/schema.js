@@ -41,6 +41,7 @@
 //   id, target: entityId,    // character / prop / camera / group（群众成员不能单独有路径）；每个实体最多一条
 //   points: [[x,y,z], ...],  // ≥ 2 个；角色 / 组的路径 y 即地面高度（= transform.pos.y）
 //   closed: false,
+//   interpolation: 'centripetal' | 'polyline', // 可选：缺省保持原曲线；折线按真实边长求值
 //   start: 0, duration: 4,   // 秒；start ≥ 0，duration > 0
 //   speed: 'linear' | 'smooth',      // 弧长随时间的曲线：匀速 / 缓入缓出
 //   orient: 'tangent' | 'keep',      // 朝向跟随切线（只改 yaw）/ 保持手动朝向
@@ -126,7 +127,7 @@ const TIMELINE_KEYS = ['duration', 'fps', 'mainCameraId', 'tracks'];
 const TRACK_KEYS = ['id', 'target', 'property', 'keys'];
 const KEY_KEYS = ['t', 'value', 'ease'];
 const PATH_KEYS = ['id', 'target', 'points', 'closed', 'start', 'duration', 'speed', 'orient'];
-const PATH_OPTIONAL = ['stops', 'stopTimes'];
+const PATH_OPTIONAL = ['stops', 'stopTimes', 'interpolation'];
 const CONSTRAINT_KEYS = ['id', 'type', 'target', 'subject', 'offset', 'start', 'end'];
 
 const isStr = (v) => typeof v === 'string';
@@ -422,6 +423,7 @@ export function validate(doc) {
       if (!Array.isArray(pa.points) || pa.points.length < 2) err(`${p}.points`, `应为至少 2 个点的数组，实际为 ${Array.isArray(pa.points) ? `${pa.points.length} 个点` : fmt(pa.points)}`);
       else pa.points.forEach((pt, j) => vec3(pt, `${p}.points[${j}]`));
     }
+    if (pa.interpolation !== undefined) oneOf(pa.interpolation, `${p}.interpolation`, ['centripetal', 'polyline'], '插值');
     bool(pa.closed, `${p}.closed`);
     time(pa.start, `${p}.start`);
     num(pa.duration, `${p}.duration`, { gt: 0 });

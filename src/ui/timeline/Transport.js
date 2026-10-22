@@ -17,7 +17,7 @@ export class Transport {
     const { app } = panel;
     const tl = app.timeline, pb = app.playback;
 
-    const btn = (name, title, onclick, cls = '') => el('button', { class: 'tl-btn ' + cls, title, 'aria-label': title, html: icon(name, 16, 2), onclick });
+    const btn = (name, title, onclick, cls = '') => el('button', { class: 'tl-btn ' + cls, title, 'aria-label': title, html: icon(name, 15, 1.5), onclick });
     this.playBtn = btn('play', '播放 / 暂停（Space）', () => panel.togglePlay(), 'tl-play');
     this.loopBtn = btn('loop', '循环播放：播到结尾后从头继续', () => panel.setPref('loop', !pb.loop));
     this.snapBtn = btn('magnet', '吸附到帧：拖动播放头和关键帧时对齐到完整帧', () => panel.setPref('snap', !panel.snap));
@@ -27,7 +27,7 @@ export class Transport {
     this.fpsSel = el('select', { class: 'tl-sel', title: '帧率（吸附与导出）' }, FPS_OPTIONS.map((n) => el('option', { value: n, text: n + ' 帧/秒' })));
     this.fpsSel.addEventListener('change', () => { try { tl.setFps(+this.fpsSel.value); } catch (e) { toastError(e); this.reflectTimeline(); } });
 
-    this.durInput = el('input', { class: 'tl-num', type: 'number', min: 0.1, step: 0.5, title: '时长（秒）' });
+    this.durInput = el('input', { class: 'tl-num', type: 'number', min: 0.1, step: 0.5, title: '场景总时长（秒）：超出的轨迹会自动加速适配，保留完整路线', 'aria-label': '场景总时长（秒）' });
     this.durInput.addEventListener('change', () => {
       const v = parseFloat(this.durInput.value);
       if (!(v > 0)) { this.reflectTimeline(); return; }
@@ -37,29 +37,29 @@ export class Transport {
     this.camSel = el('select', { class: 'tl-sel tl-cam', title: '主机位：机位视角下播放 / 拖播放头时透过它看（成片预览）' });
     this.camSel.addEventListener('change', () => { try { tl.setMainCamera(this.camSel.value || null); } catch (e) { toastError(e); this.reflectCameras(); } });
 
-    this.foldBtn = btn('chevron', '折叠 / 展开时间轴', () => panel.toggleCollapsed(), 'tl-fold');
+    this.foldBtn = btn('timelinePanel', '折叠 / 展开时间轴', () => panel.toggleCollapsed(), 'tl-fold');
 
     this.removeBtn = el('button', { class: 'tl-track-action', title: '新建轨道', text: '＋ 新建轨道', onclick: (e) => panel.selectedAnimation ? panel.removeSelectedAnimation() : panel.addTrackMenu(e) });
     this.zoom = el('input', { type: 'range', min: 0, max: 100, value: 0, title: '时间轴缩放：向右拖动放大，查看更精细的时间和关键帧', class: 'tl-zoom' });
     this.zoom.addEventListener('input', () => panel.setZoom(panel._fitPps() * Math.pow(1500 / panel._fitPps(), +this.zoom.value / 100)));
-    const fit = el('button', { class: 'tl-addkey', text: '适配', title: '适配完整时长', onclick: () => panel.setZoom(panel._fitPps()) });
+    const fit = el('button', { class: 'tl-addkey', text: '显示全长', title: '适配完整时长', onclick: () => panel.setZoom(panel._fitPps()) });
     const exp = el('button', { class: 'tl-export', text: '导出视频', onclick: () => app.emit('exportVideo') });
-    this.tools = el('div', { class: 'tl-tools' }, [this.zoom, this.foldBtn, this.fpsSel, exp]);
+    this.tools = el('div', { class: 'tl-tools' }, [fit, this.zoom, this.fpsSel, exp, this.foldBtn]);
     const menu = el('details', { class: 'tl-more' }, [
-      el('summary', { text: '•••', title: '帧操作与时间轴设置' }),
+      el('summary', { text: '···', title: '帧操作与时间轴设置' }),
       el('div', { class: 'tl-settings' }, [
         btn('toStart', '回到开头（Home）', () => panel.seek(0)),
         btn('prevFrame', '上一帧（←）', () => panel.stepFrames(-1)),
         btn('stop', '停止并回到手动值（Esc）', () => app.stopPreview()),
         btn('nextFrame', '下一帧（→）', () => panel.stepFrames(1)),
         btn('toEnd', '跳到结尾（End）', () => panel.seek(tl.duration)),
-        this.snapBtn, this.autoKeyBtn, fit,
+        this.snapBtn, this.autoKeyBtn,
         el('label', { class: 'tl-field' }, [el('span', { text: '主机位' }), this.camSel]),
       ]),
     ]);
     this.el = el('div', { class: 'tl-transport' }, [
       this.playBtn, btn('stopwatch', '回到开头（Home）', () => panel.seek(0)), this.loopBtn,
-      el('span', { class: 'tl-clock' }, [this.timeEl, this.durInput, el('span', { class: 'tl-unit', text: 's' })]),
+      el('span', { class: 'tl-clock' }, [this.timeEl, el('span', { class: 'tl-time-separator', text: '/' }), this.durInput, el('span', { class: 'tl-unit', text: 's' })]),
       this.removeBtn, menu,
     ]);
     this.reflectAll();
@@ -75,7 +75,7 @@ export class Transport {
 
   reflectState() {
     const playing = this.panel.app.playback.playing;
-    this.playBtn.innerHTML = icon(playing ? 'pause' : 'play', 16, 2);
+    this.playBtn.innerHTML = icon(playing ? 'pause' : 'play', 15, 1.5);
     this.playBtn.classList.toggle('on', playing);
   }
 

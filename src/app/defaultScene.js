@@ -1,32 +1,32 @@
-import * as THREE from 'three';
 import { createEmptyDocument } from '../doc/schema.js';
 import { addCharacter } from '../doc/edit.js';
 import { Character } from '../entities/Character.js';
 import { CameraEntity } from '../entities/Camera.js';
-import { fitBounds, FRAMING } from '../core/framing.js';
+import { startupFraming } from '../core/framing.js';
 import { worldBox } from '../util/measure.js';
 
-/** 只用于新鲜启动；先离场测量，再通过文档加载原子发布。参数是建议基线，不是竞品数据。 */
+/** 只用于新鲜启动；保留一男一女，按参考图校准观察距离、轻俯视角和机位朝向。 */
 export async function defaultScene(directorCamera) {
   const doc = createEmptyDocument();
-  const json = addCharacter(doc, { name: '角色A', body: 'male', pos: [0, 0, 0] });
-  const subject = await Character.fromJSON(json);
+  const json = addCharacter(doc, { name: '男角色', body: 'male', pos: [-0.7, 0, 0] });
+  const female = addCharacter(doc, { name: '女角色', body: 'female', pos: [0.7, 0, 0] });
+  const subjects = [];
   let camera;
   try {
-    const box = worldBox(subject.root, { useBones: true });
-    const fov = 48;
-    const shot = fitBounds(box.clone().expandByScalar(FRAMING.subjectPadding), { fov, aspect: directorCamera.aspect, direction: new THREE.Vector3(0, 0.16, 1), occupancy: 0.72 });
-    shot.position.y = 1.55;
-    camera = new CameraEntity('机位1', { fov });
+    // 分别量两个人物，避免用男性的包围盒代替女性的实际体型。
+    for (const character of [json, female]) subjects.push(await Character.fromJSON(character));
+    const box = worldBox(subjects[0].root, { useBones: true });
+    box.union(worldBox(subjects[1].root, { useBones: true }));
+    const { director, shot } = startupFraming(box, directorCamera);
+    camera = new CameraEntity('机位1', { fov: shot.fov, aspect: directorCamera.aspect });
     camera.root.position.copy(shot.position);
     camera.aimAt(shot.target);
     doc.entities.push(camera.toJSON());
     doc.scene.activeCameraId = doc.timeline.mainCameraId = camera.id;
-    const overview = fitBounds(box.clone().expandByScalar(FRAMING.subjectPadding), { fov: directorCamera.fov, aspect: directorCamera.aspect, occupancy: FRAMING.singleOverviewOccupancy });
-    doc.meta.editorView = { pos: overview.position.toArray(), target: overview.target.toArray() };
+    doc.meta.editorView = { pos: director.position.toArray(), target: director.target.toArray() };
     return doc;
   } finally {
-    subject.dispose();
+    subjects.forEach(subject => subject.dispose());
     camera?.dispose();
   }
 }

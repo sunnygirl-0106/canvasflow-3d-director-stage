@@ -97,7 +97,7 @@ export class App extends Emitter {
     this.pathMeta = {};                       // 会话态：pathId → 生成器参数（环绕三参数），不进文档
     this.moveMeta = {};                       // 会话态：cameraId → 运镜段列表，不进文档
     this.cameraMoves = new CameraMoveTool(this); // 机位运镜
-    this.selection.setSkipPredicate(() => this.gizmo.dragging || this.gizmo.overAxis || this.pathTool.busy || this.pathEditor.busy);
+    this.selection.setSkipPredicate(() => this.gizmo.dragging || (this.gizmo.visible && this.gizmo.overAxis) || this.pathTool.busy || this.pathEditor.busy);
 
     this.labels = new Labels(labelLayer);
     this.labelSprites = new LabelSprites(this); // 3D 精灵名牌：截图 / 导出 / 「预览名牌」
@@ -192,7 +192,7 @@ export class App extends Emitter {
   /** gizmo 是否应显示：有可见的主选实体，且不是「POV 下正在透过它看的出画机位」。 */
   gizmoShouldShow() {
     const ent = this.selected;
-    if (!ent || !ent.visible || this.mainPreview || this._cleanDepth) return false; // 透过主机位 = 成片预览，不显示 gizmo
+    if (!ent || !ent.visible || this.mainPreview || this._cleanDepth || this.pathOverlay?.selectedPathId) return false; // 透过主机位 = 成片预览，不显示 gizmo
     return !(this.cameraView && ent.id === this.povCameraId);
   }
 
@@ -328,7 +328,7 @@ export class App extends Emitter {
     this.select(id);
   }
 
-  /** 用户播放入口：先切画面，再让时间推进；不写文档、不改选择。 */
+  /** 播放入口：先切机位画面，再让时间推进，避免播放导演编辑视角。 */
   startPreview({ play = true, returnView = this.cameraView } = {}) {
     if (!exportCamera(this)) { toast('请先添加或选择机位'); return false; }
     if (!this.preview) {
@@ -528,7 +528,18 @@ export class App extends Emitter {
 
   /** 渲染前同步：视锥、选中环、名牌。 */
   beforeRender() {
-    for (const ent of this.entities) ent.update();
+    const [ratioWidth, ratioHeight] = this.ratio.split(':').map(Number);
+    const aspect = this.cameraView || this.ratio === 'auto' ? this.viewportAspect() : ratioWidth / ratioHeight;
+    for (const ent of this.entities) {
+      if (ent.type === 'camera' && !this._cleanDepth) {
+        if (Number.isFinite(aspect) && ent.cam.aspect !== aspect) { ent.cam.aspect = aspect; ent.cam.updateProjectionMatrix(); }
+      }
+      ent.update();
+      if (ent.type === 'camera') {
+        ent.syncBodyVisibility(this.getRenderCamera());
+        ent.helper.visible = ent.visible && ent._helpersOn && (ent.id === this.timeline.mainCameraId || this.selectedIds.has(ent.id));
+      }
+    }
     this.selection.update();
     this.labels.update(this.entities, this.getRenderCamera(), {
       worldScale: this.stage.world.scale.y,

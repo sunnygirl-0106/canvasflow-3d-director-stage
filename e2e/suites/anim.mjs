@@ -98,14 +98,14 @@ export async function run() {
   // ---- 路径：道具 / 机位 / 角色沿 Catmull-Rom 移动，tangent 朝向，smooth 首尾速度为 0 ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
   const pt = await page.evaluate(async (ids) => {
-    const { Path, rampFor } = await import('/src/anim/Path.js');
+    const { Path, rampFor, pathOptionsFor } = await import('/src/anim/Path.js');
     const a = window.__app, tl = a.timeline, pb = a.playback;
     const p = a.findEntity(ids.p), c2 = a.findEntity(ids.c2), m = a.findEntity(ids.m);
     const R2D = 180 / Math.PI;
     const pp = tl.addPath({ target: ids.p, points: [[0.2, 0, -1.4], [2, 0, -1.4], [2.5, 0, 1]], start: 1, duration: 3, speed: 'linear', orient: 'tangent' });
     const cp = tl.addPath({ target: ids.c2, points: [[3, 1.6, 3], [0, 1.8, 4], [-3, 1.6, 3]], start: 0, duration: 4, speed: 'smooth', orient: 'tangent' });
     const mp = tl.addPath({ target: ids.m, points: [[-1.2, 0, 0], [-1.2, 0, 3]], start: 0, duration: 4, speed: 'smooth', orient: 'tangent' });
-    const P = new Path(pp, { ramp: rampFor('prop') }), C = new Path(cp), M = new Path(mp, { ramp: rampFor('character') });
+    const P = new Path(pp, { ramp: rampFor('prop') }), C = new Path(cp), M = new Path(mp, pathOptionsFor('character'));
     const out = {};
     const near = (v, arr, eps = 1e-6) => arr.every((x, i) => Math.abs(v[i] - x) < eps);
     pb.seek(0);
@@ -129,9 +129,17 @@ export async function run() {
     out.charDocY = a.exportDocument().entities.find((e) => e.id === ids.m).transform.pos[1];
     out.charRootY = m.root.position.y - m.rootY0;
     out.charZ = m.root.position.z;
-    // smooth：首尾速度为 0
+    // 旧 smooth 人物路径也从起步匀速，机位仍保留缓入缓出。
     out.speeds = [M.speedAt(0), M.speedAt(2), M.speedAt(4), C.speedAt(0), C.speedAt(4)];
-    out.startCreep = M.distanceAt(1 / 240); // 起步 1/240 s 内几乎不动（匀速会走 3/4/240 = 0.003125 m）
+    pb.seek(1 / 240);
+    out.startDistance = m.root.position.z;
+    out.maxSpeedError = 0;
+    let prevZ = null;
+    for (let i = 0; i <= 240; i++) {
+      pb.seek(i / 60);
+      if (prevZ !== null) out.maxSpeedError = Math.max(out.maxSpeedError, Math.abs((m.root.position.z - prevZ) * 60 - 0.75));
+      prevZ = m.root.position.z;
+    }
     pb.stop();
     out.stopped = near(p.root.position.toArray(), [0.2, 0, -1.4]) && Math.abs(m.root.position.z) < 1e-9;
     return out;
@@ -142,9 +150,9 @@ export async function run() {
   ok('路径：机位镜头方向沿切线、高度取路径 y', pt.camDirErr < 1e-3 && pt.camHeight > 1.6 && pt.camHeight < 1.81, `误差 ${pt.camDirErr.toExponential(2)}°，y=${pt.camHeight.toFixed(3)}`);
   ok('路径：角色沿 +Z 朝向切线、贴路径高度（root.y − 站立基准 = 0）', Math.abs(pt.charYaw) < 1e-6 && Math.abs(pt.charRootY) < 1e-9 && Math.abs(pt.charZ - 1.5) < 1e-4, JSON.stringify({ yaw: pt.charYaw, z: pt.charZ }));
   ok('路径：active 时导出的仍是手动位置', pt.charDocY === 0);
-  ok('路径：smooth 首尾速度为 0、中段匀速（角色 0.4 s 起步：3 m / (4 − 0.4) s）', pt.speeds[0] === 0 && pt.speeds[2] === 0 && pt.speeds[3] === 0 && pt.speeds[4] === 0 && Math.abs(pt.speeds[1] - 3 / (4 - 0.4)) < 1e-6 && pt.startCreep < 1e-4, JSON.stringify(pt.speeds.map((v) => +v.toFixed(4))) + ` 起步=${pt.startCreep.toExponential(2)}m`);
+  ok('路径：人物旧 smooth 路径首帧即匀速，全程 0.75 m/s；机位保留缓入缓出', pt.speeds.slice(0, 3).every(v => Math.abs(v - 0.75) < 1e-9) && pt.speeds[3] === 0 && pt.speeds[4] === 0 && Math.abs(pt.startDistance - 0.003125) < 1e-5 && pt.maxSpeedError < 0.002, `逐帧速度最大误差 ${pt.maxSpeedError.toFixed(6)} m/s，起步 ${pt.startDistance.toFixed(6)} m`);
   ok('路径：stop() 回到手动位置', pt.stopped);
-  // ---- 步态：6 m 直线 smooth 4 s；压到 1.5 s 为跑步；组沿路径成员一起走 ----
+  // ---- 步态：6 m 直线 smooth 4 s；压到 1.5 s 仍走路；组沿路径成员一起走 ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
   const gait = await page.evaluate(async (ids) => {
     const a = window.__app, tl = a.timeline, pb = a.playback;
@@ -161,7 +169,11 @@ export async function run() {
     pb.seek(0); out.t0 = same(m.values) && m.autoGround;
     pb.seek(4); out.t4 = same(m.values) && m.autoGround;
     pb.seek(2);
-    out.walking = !same(m.values) && !m.autoGround && Math.abs(m.values.lLegFwd - m.values.rLegFwd) > 5;
+    out.walking = !same(m.values) && !m.autoGround;
+    const midPose = { ...m.values };
+    pb.seek(2.2);
+    out.walking &&= Math.abs(m.values.lLegFwd - midPose.lLegFwd) > 5;
+    pb.seek(2);
     const want = Math.atan2(dir[0], dir[2]);
     out.yawErr = Math.abs(((m.root.rotation.y - want) * R2D + 540) % 360 - 180);
     // 逐帧：骨盆世界高度相邻帧差；w=1 时脚底贴地（脚底最低点 vs 站立时）
@@ -172,17 +184,18 @@ export async function run() {
       const y = m.root.position.y + m.model.position.y * m.root.scale.y;
       if (prev !== null) out.maxDy = Math.max(out.maxDy, Math.abs(y - prev));
       prev = y;
-      // 纯走（w=1、速度 ≤ 1.8 m/s）时任意时刻都有一只脚着地；走跑混合区有腾空期，不查
+      // 完整走路步态时任意时刻都有一只脚着地
       const v = P.speedAt(i / 30);
-      if (v >= 0.5 && v <= 1.8) {
+      if (v >= 0.5 && v <= 1.8 && i / 30 >= 0.5 && i / 30 <= 3.5) {
         const e = (m.lowestSoleY() - m.legGeom.ground / m.baseScale) * m.root.scale.y;
         if (Math.abs(e) > Math.abs(out.soleErr)) out.soleErr = e;
       }
     }
-    // 跑：同一路径压到 1.5 s（平均 4 m/s）
+    // 加速走：同一路径压到 1.5 s（平均 4 m/s），仍保持走路摆臂和直立躯干
     tl.updatePath(path.id, { duration: 1.5 });
     pb.seek(0.75);
-    out.runKnee = Math.max(m.values.lKnee, m.values.rKnee);
+    out.fastWalk = m.values.lFore === 12 && m.values.rFore === 12 && m.values.spineX === 0;
+    out.fastSoleErr = (m.lowestSoleY() - m.legGeom.ground / m.baseScale) * m.root.scale.y;
     pb.stop();
     out.restored = same(m.values);
     // 组沿路径：成员切步态、彼此相位错开；停下恢复各自原姿势
@@ -200,7 +213,7 @@ export async function run() {
   ok('步态：t=2 为步行姿势且朝向路径方向', gait.walking && gait.yawErr < 1, `yaw 误差 ${gait.yawErr.toFixed(4)}°`);
   ok('步态：逐帧骨盆高度相邻帧差 < 2cm（不跳）', gait.maxDy < 0.02, `max ${(gait.maxDy * 100).toFixed(2)}cm`);
   ok('步态：行走中脚底贴地（±1cm）', Math.abs(gait.soleErr) < 0.01, `最大偏差 ${(gait.soleErr * 100).toFixed(2)}cm（正 = 悬空）`);
-  ok('步态：压到 1.5 s（4 m/s）t=0.75 为跑步（膝屈 > 45°）', gait.runKnee > 45, `膝 ${gait.runKnee.toFixed(1)}°`);
+  ok('步态：压到 1.5 s（4 m/s）仍走路且脚底贴地', gait.fastWalk && Math.abs(gait.fastSoleErr) < 0.01, `脚底偏差 ${(gait.fastSoleErr * 100).toFixed(2)}cm`);
   ok('步态：stop() 后恢复原姿势', gait.restored);
   ok('步态：组沿路径时成员一起走、步伐错开，停下恢复', gait.crowdWalk && gait.crowdRestored);
   // ---- 收尾 1 · 路径停顿 stops：角色走到中间顶点停下（速度 0、原姿势）再走；含 stops 的文档往返 ≡ ----
@@ -223,7 +236,10 @@ export async function run() {
       still: Object.keys(base).every((k) => Math.abs((m.values[k] || 0) - (base[k] || 0)) < 1e-9),
       v: P.speedAt(T1),
     };
-    pb.seek(T1 / 2); out.walkMid = Math.abs(m.values.lLegFwd - m.values.rLegFwd) > 5;
+    pb.seek(T1 / 2);
+    const midLeg = m.values.lLegFwd;
+    pb.seek(T1 / 2 + 0.3);
+    out.walkMid = !m.autoGround && Math.abs(m.values.lLegFwd - midLeg) > 5;
     pb.stop();
     const d1 = a.exportDocument();
     await a.loadDocument(JSON.parse(JSON.stringify(d1)));
@@ -232,6 +248,7 @@ export async function run() {
     out.roundTrip = JSON.stringify(d1) === JSON.stringify(d2) && JSON.stringify(d2.paths[0].stops) === '[1]';
     // 插入 / 删除顶点后停顿索引跟着走；顶点数被整体替换时停顿去掉
     const id = d2.paths[0].id;
+    a.select(ids.m);
     a.pathEditor.insertAt(id, 0.5);
     out.afterInsert = tl.toJSON().paths[0].stops;
     a.pathEditor.deleteVertex(id, 1);
@@ -244,11 +261,10 @@ export async function run() {
     `stops=${JSON.stringify(stopRes.stops)} T1=${stopRes.T1.toFixed(3)}s 离顶点 ${(stopRes.atVertex * 100).toFixed(4)} cm`);
   ok('停顿：含 stops 的文档往返 ≡；插入 / 删除顶点后索引跟着走，顶点数整体改变时去掉', stopRes.roundTrip && JSON.stringify(stopRes.afterInsert) === '[2]' && JSON.stringify(stopRes.afterDelete) === '[1]' && !stopRes.afterReplace,
     JSON.stringify({ rt: stopRes.roundTrip, ins: stopRes.afterInsert, del: stopRes.afterDelete, replaced: stopRes.afterReplace }));
-  // ---- 收尾 1 · 起步平滑转身：手动朝向 −100°、路径朝 +X（90°），差 170° ----
+  // ---- 收尾 1 · 起步立即转向：手动朝向 −100°、路径朝 +X（90°），差 170° ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
   const turn = await page.evaluate(async (ids) => {
-    const { Path, rampFor, WALK_RAMP } = await import('/src/anim/Path.js');
-    const { TURN_IN_DIST } = await import('/src/anim/PathTrack.js');
+    const { Path, pathOptionsFor } = await import('/src/anim/Path.js');
     const a = window.__app, tl = a.timeline, pb = a.playback;
     const m = a.findEntity(ids.m);
     const R2D = 180 / Math.PI;
@@ -256,33 +272,48 @@ export async function run() {
     a.history.reset();
     const x = m.root.position.x, z = m.root.position.z;
     const json = tl.addPath({ target: ids.m, points: [[x, 0, z], [x + 4, 0, z]], start: 1, duration: 3, speed: 'smooth', orient: 'tangent' });
-    const P = new Path(json, { ramp: rampFor('character') });
+    const P = new Path(json, pathOptionsFor('character'));
     const yaw = () => { const e = m.root.rotation.clone().reorder('YXZ'); return e.y * R2D; };
     const d = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
-    const out = { maxStep: 0, beforeErr: 0, afterErr: 0, turnFrames: 0 };
+    const out = { maxStep: 0, beforeErr: 0, afterErr: 0 };
     let prev = null;
     for (let i = 0; i <= 120; i++) {
       const t = i / 30;
       pb.seek(t);
-      const y = yaw(), s = P.distanceAt(t);
+      const y = yaw();
       if (prev !== null) out.maxStep = Math.max(out.maxStep, d(y, prev));
       prev = y;
-      if (t <= 1) out.beforeErr = Math.max(out.beforeErr, d(y, -100));
-      else if (s >= TURN_IN_DIST) out.afterErr = Math.max(out.afterErr, d(y, 90));
-      else out.turnFrames++;
+      if (t <= 1) out.beforeErr = Math.max(out.beforeErr, d(y, 90));
+      else out.afterErr = Math.max(out.afterErr, d(y, 90));
     }
-    pb.seek(1); out.startErr = d(yaw(), -100);
-    // 起步加速：运行时角色按 ramp 走（不是整段 smoothstep），start + WALK_RAMP 时已是匀速
-    pb.seek(1.6); out.rampErr = Math.abs((m.root.position.x - x) - P.distanceAt(1.6));
-    out.vRamp = P.speedAt(1 + WALK_RAMP) / (4 / (3 - WALK_RAMP));
+    pb.seek(1); out.startErr = d(yaw(), 90);
+    pb.seek(1.6); out.uniformErr = Math.abs((m.root.position.x - x) - 4 / 3 * 0.6);
+    out.vStart = P.speedAt(1) / (4 / 3);
     pb.stop();
     out.restored = d(yaw(), -100) < 1e-9;
     return out;
   }, ids);
-  ok('起步转身：t ≤ start 朝向 ≡ 手动朝向（< 0.5°）', turn.startErr < 0.5 && turn.beforeErr < 0.5, `t=start 误差 ${turn.startErr.toFixed(4)}°，之前最大 ${turn.beforeErr.toFixed(4)}°`);
-  ok('起步转身：走过 TURN_IN_DIST（0.8 m）后朝向 ≡ 切线（< 0.5°）', turn.afterErr < 0.5, `最大误差 ${turn.afterErr.toFixed(4)}°`);
-  ok('起步加速：角色 smooth 路径按 WALK_RAMP 起步（运行时位移 ≡ Path ramp 曲线，ramp 末已到匀速）', turn.rampErr < 1e-4 && Math.abs(turn.vRamp - 1) < 1e-9, `误差 ${turn.rampErr.toExponential(2)} m，ramp 末速度 / 匀速 = ${turn.vRamp.toFixed(4)}`);
-  ok('起步转身：170° 转身每帧 yaw 变化 < 15°（30 fps）', turn.maxStep < 15 && turn.turnFrames >= 10, `最大 ${turn.maxStep.toFixed(2)}°/帧，转身用 ${turn.turnFrames} 帧；停止后回手动朝向 ${turn.restored}`);
+  ok('起步转身：t ≤ start 朝向 ≡ 出发方向（< 0.5°）', turn.startErr < 0.5 && turn.beforeErr < 0.5, `t=start 误差 ${turn.startErr.toFixed(4)}°，之前最大 ${turn.beforeErr.toFixed(4)}°`);
+  ok('起步转身：行走中朝向 ≡ 切线（< 0.5°）', turn.afterErr < 0.5, `最大误差 ${turn.afterErr.toFixed(4)}°`);
+  ok('起步匀速：人物从开始即按总长度 / 时长移动', turn.uniformErr < 1e-4 && Math.abs(turn.vStart - 1) < 1e-9, `位移误差 ${turn.uniformErr.toExponential(2)} m，起步速度 / 匀速 = ${turn.vStart.toFixed(4)}`);
+  ok('起步转身：第一帧已对齐，无渐转等待，停止恢复手动朝向', turn.maxStep < 1e-6 && turn.restored, `最大 ${turn.maxStep.toFixed(2)}°/帧；停止后回手动朝向 ${turn.restored}`);
+  const drawnFacing = await page.evaluate(async (id) => {
+    const a = window.__app, m = a.findEntity(id);
+    const before = m.root.quaternion.clone();
+    a.history.reset();
+    a.pathTool.ent = m;
+    const x = m.root.position.x, z = m.root.position.z;
+    a.pathTool._commit([[x, 0, z], [x + 4, 0, z]]);
+    const facesDeparture = () => Math.abs(m.root.rotation.clone().reorder('YXZ').y - Math.PI / 2) < 1e-6;
+    const immediate = !a.timeline.active && facesDeparture();
+    await a.history.undo();
+    const undone = m.root.quaternion.angleTo(before) < 1e-6;
+    await a.history.redo();
+    const redone = facesDeparture();
+    await a.history.undo();
+    return { immediate, undone, redone };
+  }, ids.m);
+  ok('绘制完成：未播放即面朝出发方向，撤销 / 重做同步恢复朝向', Object.values(drawnFacing).every(Boolean), JSON.stringify(drawnFacing));
   // ---- 约束：lookAt 保留 roll；follow 刚性跟随且覆盖 pos 轨道 / 路径 ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
   const cons = await page.evaluate(async (ids) => {

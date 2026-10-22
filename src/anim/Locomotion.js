@@ -1,34 +1,30 @@
 // 程序化步态（贴地方式："脚踩点 + 腿部 IK"）。纯函数，无状态。
 //
-// - 相位 φ 按路程推进（不是时间）：一个完整周期 = 左右各一步，周期长度 = GAIT.*.cycle × 身高（走 0.8 / 跑 1.9；起步短步再按 strideScale 缩短）。
-//   走跑混合时周期长度随速度变，φ 取 ∫ v / 周期长度 dt（PathTrack 预积分），保证单调；纯走 / 纯跑时就是 路程 ÷ 周期长度。
-// - 步态选择：speed ≤ 1.8 m/s 纯走，≥ 2.6 m/s 纯跑，中间线性混合两套参数。
+// - 相位只按路径内经过的时间推进：每秒固定 1.1 个完整周期（左右各一步）。
+// - 移动速度只影响步幅和站姿混合，不影响迈腿频率。
 // - 与原姿势混合：w = clamp(speed / 0.5, 0, 1)，整身替换——所有关节从原姿势混合到步态姿势，
 //   步态没用到的关节目标为 0（自然站立）。速度为 0 时 w = 0，就是原姿势。
-// - 腿：支撑脚钉在地上（脚跟着地 → 放平 → 脚尖蹬离，接触点不动，直线上不打滑），摆动脚走抬脚弧线到下一个落脚点；
+// - 腿：正常步速下支撑脚钉在地上（脚跟着地 → 放平 → 脚尖蹬离）；超过步频上限时保留路径时序与慢步态，摆动脚走抬脚弧线到下一个落脚点；
 //   骨盆高度 = 两条腿都够得着的最高处（软最小值，连续无跳变），髋 / 膝角由两段腿 IK 反解，踝角让脚底符合当前俯仰。
-// - 手臂与同侧腿反相前后摆（走 ±22°、跑 ±45°，跑时肘屈 70°），躯干前倾（跑 8°）。
+// - 手臂与同侧腿反相前后摆（±18°，肘屈 12°），躯干保持直立。
 // - 关节一律写语义关节 values（jointSchema 键），不直接转骨头；骨盆起伏由调用方写到 model.position.y。
 import { JOINT_KEYS, JOINT_SCHEMA } from '../rig/jointSchema.js';
 import { clamp01, EASE } from './ease.js';
 import { D2R, R2D } from '../util/math.js';
 
-export const WALK_MAX = 1.8;    // m/s，≤ 纯走
-export const RUN_MIN = 2.6;     // m/s，≥ 纯跑
 export const BLEND_SPEED = 0.5; // m/s，w 达到 1 的速度
 // 起步短步：速度低于 STRIDE_FULL 时步幅（周期长度 / 支撑行程 / 抬脚）按 v / STRIDE_FULL 缩短（下限 STRIDE_MIN），
-// 步频保持正常步速的水平。周期长度固定的话步频 ∝ 速度，起步加速段腿会像慢动作；人起步是小步快迈。
-export const STRIDE_FULL = 1.6; // m/s，≥ 全步幅（取高些让步幅在起步段里慢慢长开，太低时骨盆会单帧明显下坠）
-export const STRIDE_MIN = 0.4;
+// 步频保持正常步速的水平。周期长度固定的话步频 ∝ 速度，起步加速段腿会像慢动作；适当保留步幅，避免小步快迈。
+export const STRIDE_FULL = 0.7; // m/s，≥ 全步幅，普通步速即可迈开完整步幅
+export const STRIDE_MIN = 0.3;
+export const GAIT_CYCLES_PER_SECOND = 1.1; // 每分钟 132 步，角色身高、路径长短均不改变节奏。
 
-// 两套步态参数。cycle：周期长度 / 身高；reach：支撑期内支撑脚相对髋的前后行程 / 身高
-// （决定支撑期占比 = reach / cycle，走 > 0.5 有双支撑，跑 < 0.5 有腾空；直接混合行程而不是占比，
-// 避免走跑混合时 占比×步幅 二次放大成深蹲）；
+// 走路参数。cycle：周期长度 / 身高；reach：支撑期内支撑脚相对髋的前后行程 / 身高
+// （支撑期占比 = reach / cycle > 0.5，始终有脚着地）；
 // lift：摆动脚抬起高度 / 腿长；heel / toe：脚跟着地时脚尖上翘角 / 蹬离时脚跟抬起角（度）；
 // arm / abd / elbow / lean：手臂摆幅、外展（手不擦过大腿 / 胯）、肘屈、躯干前倾（度）。
 export const GAIT = {
-  walk: { cycle: 0.8, reach: 0.44, lift: 0.14, heel: 15, toe: 35, arm: 22, abd: 8, elbow: 12, lean: 0 },
-  run:  { cycle: 1.9, reach: 0.55, lift: 0.45, heel: 8, toe: 40, arm: 45, abd: 12, elbow: 70, lean: 8 },
+  walk: { cycle: 0.7, reach: 0.385, lift: 0.08, heel: 12, toe: 25, arm: 18, abd: 8, elbow: 12, lean: 0 },
 };
 const REACH = 0.99;    // 腿最多伸到全长的比例（留一点膝弯，IK 不在奇点附近抖）
 const SOFTMIN_K = 0.03; // 骨盆软最小值的平滑尺度（米）
@@ -42,22 +38,15 @@ const lerp = (a, b, k) => a + (b - a) * k;
 const frac = (x) => x - Math.floor(x);
 const clampJoint = (key, v) => Math.min(Math.max(v, JOINT_RANGE[key][0]), JOINT_RANGE[key][1]);
 
-/** 跑步占比 k ∈ [0,1]（0 = 纯走）。 */
-export const runMix = (speed) => clamp01((speed - WALK_MAX) / (RUN_MIN - WALK_MAX));
-
 /** 与原姿势的混合权重。 */
 export const gaitWeight = (speed) => clamp01(speed / BLEND_SPEED);
 
 /** 起步短步的步幅缩放（≤ 1）。 */
 export const strideScale = (speed) => Math.min(1, Math.max(STRIDE_MIN, speed / STRIDE_FULL));
 
-/** 周期长度 / 身高（随走跑混合、起步短步变化）。 */
-export const cycleFactor = (speed) => lerp(GAIT.walk.cycle, GAIT.run.cycle, runMix(speed)) * strideScale(speed);
-
-/** 两套参数按 k 混合；σ = 起步短步缩放（周期、支撑行程、抬脚同比缩，支撑期占比不变）。 */
-function params(k, sigma = 1) {
-  const P = {};
-  for (const key of Object.keys(GAIT.walk)) P[key] = lerp(GAIT.walk[key], GAIT.run[key], k);
+/** σ = 起步短步缩放（周期、支撑行程、抬脚同比缩，支撑期占比不变）。 */
+function params(sigma = 1) {
+  const P = { ...GAIT.walk };
   P.cycle *= sigma;
   P.reach *= sigma;
   P.lift *= sigma;
@@ -188,12 +177,11 @@ function pelvisDrop(S, feetAt, phase) {
  * 步态姿势（w=1 时的完整步态）。
  * @param {object} geom Character.legGeom
  * @param {number} phase 周期数（可大于 1）
- * @param {number} k 跑步占比
  * @param {number} [speed] 速度（m/s；决定起步短步缩放，省略 = 全步幅）
  * @returns {{values:Object<string,number>, drop:number}} drop：骨盆相对站立的高度变化（米，≤ 0，相对素体尺寸）
  */
-export function gaitPose(geom, phase, k, speed = Infinity) {
-  const P = params(k, strideScale(speed));
+export function gaitPose(geom, phase, speed = Infinity) {
+  const P = params(strideScale(speed));
   const S = legStatics(geom);
   const stride = P.cycle * geom.height;
   const feetAt = (ph) => S.map((L, i) => footAt(frac(ph + i * 0.5), L, P, stride, L.lt + L.ls));
@@ -226,16 +214,15 @@ export function gaitPose(geom, phase, k, speed = Infinity) {
  * 整身混合：out[key] = lerp(base[key], gait[key] ?? 0, w)；骨盆起伏同样乘 w。
  * @param {Object<string,number>} base 原姿势 values
  * @param {object} geom Character.legGeom（null 时只混合手臂 / 躯干，不做腿）
- * @param {{speed:number, phase:number}} m
- * @returns {{values:Object<string,number>, drop:number, w:number, k:number}}
+ * @param {{speed:number, phase:number, blend?:number}} m blend 只控制与站姿的衔接，不改变步频。
+ * @returns {{values:Object<string,number>, drop:number, w:number}}
  */
-export function locomotionPose(base, geom, { speed, phase }) {
-  const w = gaitWeight(speed);
-  const k = runMix(speed);
-  const g = geom ? gaitPose(geom, phase, k, speed) : { values: {}, drop: 0 };
+export function locomotionPose(base, geom, { speed, phase, blend = 1 }) {
+  const w = gaitWeight(speed) * clamp01(blend);
+  const g = geom ? gaitPose(geom, phase, speed) : { values: {}, drop: 0 };
   const values = {};
   for (const key of JOINT_KEYS) values[key] = lerp(base[key] || 0, g.values[key] || 0, w);
-  return { values, drop: g.drop * w, w, k };
+  return { values, drop: g.drop * w, w };
 }
 
 /**
@@ -244,14 +231,14 @@ export function locomotionPose(base, geom, { speed, phase }) {
  * 介入期间 autoGround=false，w=0 时恢复 autoGround=true 并重新贴地（就是原姿势）。
  * @param {import('../entities/Character.js').Character} ch
  * @param {Object<string,number>} base 原姿势 values
- * @param {{speed:number, gaitDistance:number}} motion 来自 PathTrack
+ * @param {{speed:number, gaitTime:number, blend?:number}} motion 来自 PathTrack
  * @param {number} scale 角色相对素体自然尺寸的缩放（含所在组的缩放）
  * @param {number} [phaseOffset] 相位偏移（周期数；群众成员错开步伐）
- * @returns {{w:number, k:number, phase:number}}
+ * @returns {{w:number, phase:number}}
  */
-export function applyLocomotion(ch, base, motion, scale, phaseOffset = 0) {
-  const phase = START_PHASE + motion.gaitDistance / (ch.height * scale) + phaseOffset;
-  const g = locomotionPose(base, ch.legGeom, { speed: motion.speed, phase });
+export function applyLocomotion(ch, base, motion, _scale, phaseOffset = 0) {
+  const phase = START_PHASE + motion.gaitTime * GAIT_CYCLES_PER_SECOND + phaseOffset;
+  const g = locomotionPose(base, ch.legGeom, { speed: motion.speed, phase, blend: motion.blend });
   Object.assign(ch.values, g.values);
   ch.autoGround = true;
   ch.applyPose();
@@ -260,5 +247,5 @@ export function applyLocomotion(ch, base, motion, scale, phaseOffset = 0) {
     ch.autoGround = false;
     ch.model.position.y = lerp(yAuto, ch.standModelY + g.drop / ch.baseScale, g.w);
   }
-  return { w: g.w, k: g.k, phase };
+  return { w: g.w, phase };
 }

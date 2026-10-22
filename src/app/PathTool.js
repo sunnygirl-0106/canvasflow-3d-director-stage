@@ -1,19 +1,24 @@
 import * as THREE from 'three';
 import { el, toast, toastError, confirmToast, isTyping, CLICK_PX } from '../util/dom.js';
 import { Emitter } from '../util/Emitter.js';
+import { safePathPlanePoint } from '../core/pathPicking.js';
 import { worldBox } from '../util/measure.js';
-import { line, polar, toward, simplify, PATH_MODES, TOWARD_STOP, ARC_SWEEP, arcPoints } from '../anim/pathGen.js';
+import { line, polar, toward, simplify, PATH_MODES, rectangle, TOWARD_STOP, ARC_SWEEP, arcPoints, pathLength, defaultDuration } from '../anim/pathGen.js';
+import { rampFor } from '../anim/Path.js';
+import { PathTrack } from '../anim/PathTrack.js';
 import { pathStartPoint, setPath } from '../doc/edit.js';
 import { round4, clone } from '../util/math.js';
 import { onKey, KEY_PRIORITY } from '../util/keys.js';
 
 /** 某实体的绘制方式文案：机位的「走到」叫「推到」（同一个 toward）。 */
 export function pathModes(ent) {
-  return ent?.type === 'camera' ? PATH_MODES.map(([k, l]) => [k, k === 'toward' ? '推到' : l]) : PATH_MODES;
+  return [['circle', '圆环路径'], ['line', '直线路径'], ['rectangle', '矩形路径'], ['freehand', '铅笔路径'], ['points', '钢笔路径'], ['toward', ent?.type === 'camera' ? '推到目标' : '走到目标']];
 }
 
 const ORBIT_HINT = '⌥拖动环绕视角';
 const HINTS = {
+  rectangle: '点击地面设置矩形对角点 · Esc 取消',
+  circle: '点击地面或对象设置圆心 · Esc 取消',
   points: '点击地面落点 · 回车 / 双击结束 · Backspace 退一点 · Esc 取消',
   freehand: '按住左键在地面上拖动绘制，松手结束 · Esc 取消',
   line: '点击地面放置终点 · Esc 取消',
@@ -72,11 +77,14 @@ export class PathTool extends Emitter {
    * 从 Dock / Inspector 发起：先处理冲突（已有路径 → 替换？已有 pos 轨道 → 删除？），确认后进入绘制态。
    * 冲突的删除 / 替换在绘制完成时才执行，中途 Esc 文档不变。
    */
-  request(mode) {
+  request(mode, targetId = this.app.selected?.id) {
+    if (![...PATH_MODES.map(([k]) => k), 'circle', 'rectangle'].includes(mode)) return;
     const { app } = this;
-    const ent = app.selected;
+    const ent = app.findEntity(targetId);
     if (!this.canDraw(ent)) { toast('请先选中角色、道具、组或机位'); return; }
-    if (app.cameraView) { toast('请切到导演视角绘制路径'); return; }
+    app.playback.pause();
+    app.setCameraView(false);
+    app.select(ent.id);
     const anim = app.timeline.toJSON();
     const go = () => this.begin(mode, ent);
     if (anim.paths.some((p) => p.target === ent.id)) {
@@ -100,7 +108,8 @@ export class PathTool extends Emitter {
     app.gizmo.setVisible(false);
     app.rig.controls.mouseButtons.LEFT = -1; // 左键归绘制；⌥ 左键在 _onDown 里临时恢复环绕
     const hint = ent.type === 'camera' ? HINTS[mode].replaceAll('地面', '机位高度平面') : HINTS[mode];
-    this.hintEl.textContent = `${hint} · ${ORBIT_HINT}`;
+    this._drawHint = `${hint} · ${ORBIT_HINT}`;
+    this.hintEl.textContent = this._drawHint;
     this.hintEl.hidden = false;
     app.stage.viewport.classList.add('path-drawing');
     this._preview();
@@ -142,7 +151,11 @@ export class PathTool extends Emitter {
   }
 
   /** 光标处的绘制平面点（文档口径：角色 / 道具 / 组 = 地面，机位 = 机位高度）；看不到平面时 null。 */
-  groundPoint(e) { return this.planePoint(e, this.mode ? this.planeY : this.groundY); }
+  groundPoint(e) {
+    const point = this.planePoint(e, this.mode ? this.planeY : this.groundY);
+    if (this.mode) this.hintEl.textContent = point ? this._drawHint : `此处太远或接近地平线，请向下调整视角或平移到目标区域 · ${ORBIT_HINT}`;
+    return point;
+  }
 
   /** 光标射线与 world 局部坐标里水平面 y 的交点（[x, y, z]，相机背后 / 平行时 null）。 */
   planePoint(e, y) {
@@ -152,10 +165,8 @@ export class PathTool extends Emitter {
     const inv = world.matrixWorld.clone().invert();
     const o = this._ray.ray.origin.clone().applyMatrix4(inv);
     const d = this._ray.ray.direction.clone().transformDirection(inv);
-    if (Math.abs(d.y) < 1e-9) return null;
-    const t = (y - o.y) / d.y;
-    if (!(t > 0)) return null;
-    return [round4(o.x + d.x * t), y, round4(o.z + d.z * t)];
+    const focus = this.app.rig.controls.target.clone().applyMatrix4(inv);
+    return safePathPlanePoint(o, d, y, focus, o.distanceTo(focus));
   }
 
   /** 光标处的实体（不含绘制对象本身；群众成员归到组）。 */
@@ -242,6 +253,7 @@ export class PathTool extends Emitter {
   }
 
   _onKey(e) {
+    if (e.target.closest?.('.ai-capsule, .ctxmenu')) return;
     if (!this.mode || e.metaKey || e.ctrlKey || isTyping(e.target)) return;
     let handled = true;
     if (e.key === 'Escape') this.cancel();
@@ -258,6 +270,12 @@ export class PathTool extends Emitter {
       case 'points':
         if (g) { this.draft.push(g); this._preview(); }
         break;
+      case 'rectangle': {
+        const points = g && rectangle(this.start, g);
+        if (points) this._commit(points, { closed: true, interpolation: 'polyline' });
+        else if (g) toast('矩形的两条边均需至少 0.1 米');
+        break;
+      }
       case 'line':
         if (g) this._commit(line(this.start, g));
         break;
@@ -271,13 +289,14 @@ export class PathTool extends Emitter {
         this._commit(pts);
         break;
       }
+      case 'circle':
       case 'arc': {
         const target = this.pickEntity(e);
         const center = target ? this.anchorOf(target).point : g;
         if (!center) return;
         const meta = this._arcMeta(center);
         if (!meta) { toast('当前位置离中心太近，无法环绕（换个中心点）'); return; }
-        this._commit(arcPoints(meta, this.planeY).points, { meta });
+        this._commit(arcPoints(meta, this.planeY).points, { meta, closed: this.mode === 'circle' });
         break;
       }
     }
@@ -287,7 +306,7 @@ export class PathTool extends Emitter {
   _arcMeta(center) {
     const { radius, deg } = polar(center, this.start);
     if (radius < MIN_RADIUS) return null;
-    return { kind: 'arc', center: [center[0], this.planeY, center[2]], radius: round4(radius), startDeg: round4(deg), sweepDeg: ARC_SWEEP };
+    return { kind: 'arc', center: [center[0], this.planeY, center[2]], radius: round4(radius), startDeg: round4(deg), sweepDeg: this.mode === 'circle' ? 360 : ARC_SWEEP };
   }
 
   _towardStop() { return this.ent?.type === 'camera' ? TOWARD_STOP.camera : TOWARD_STOP.default; }
@@ -313,14 +332,14 @@ export class PathTool extends Emitter {
   _hover(e) {
     const ov = this.app.pathOverlay;
     const g = this.groundPoint(e);
-    if (this.mode === 'toward' || this.mode === 'arc') {
+    if (this.mode === 'toward' || this.mode === 'arc' || this.mode === 'circle') {
       const target = this.pickEntity(e);
       const a = target ? this.anchorOf(target) : null;
       ov.setSnap(a?.point, a?.radius);
-      if (this.mode === 'arc') {
+      if (this.mode === 'arc' || this.mode === 'circle') {
         const meta = this._arcMeta(a ? a.point : g || this.start);
         const r = meta && arcPoints(meta, this.planeY);
-        ov.setDraft(r ? r.points : [this.start], { dots: false });
+        ov.setDraft(r ? r.points : [this.start], { dots: false, closed: r?.closed || false });
         return;
       }
       const at = a ? a.point : e.shiftKey ? g : null;
@@ -335,7 +354,10 @@ export class PathTool extends Emitter {
     const pts = this.mode === 'points' || this.mode === 'line'
       ? [...(this.mode === 'line' ? [this.start] : this.draft), ...(this.cursor ? [this.cursor] : [])]
       : this.draft;
-    this.app.pathOverlay.setDraft(pts);
+    if (this.mode === 'rectangle' && this.cursor) {
+      const corners = rectangle(this.start, this.cursor);
+      this.app.pathOverlay.setDraft(corners ? [...corners, corners[0]] : [this.start], { interpolation: 'polyline' });
+    } else this.app.pathOverlay.setDraft(pts);
   }
 
   _undoPoint() {
@@ -353,24 +375,35 @@ export class PathTool extends Emitter {
 
   /**
    * 写入文档（一次撤销），数据由 edit.setPath 生成（与 AI 同一份）：已有路径 → 替换 points / closed，按新长度重算时长，
-   * 保留 start / speed / orient；否则删掉该实体的 pos 轨道（若有，request 时已确认）并新建路径：
-   * start = 当前时刻（idle 为 0）、duration = defaultDuration、speed = smooth、orient = tangent（机位 keep）。
+   * 保留 speed / orient；否则删掉该实体的 pos 轨道（若有，request 时已确认）并新建路径：
+   * 新建人物路径按正常步速估算时长，重画保留时长；新人物路径默认匀速、orient = tangent（机位 keep）。
    * @returns {string|null} 路径 id
    */
-  _commit(points, { closed = false, meta = null } = {}) {
+  _commit(points, { closed = false, meta = null, interpolation } = {}) {
+    if (!points || points.length < 2 || !points.some(p => dist2(p, points[0]) > 0.01)) { toast('路径太短'); return null; }
     const { app } = this;
     const ent = this.ent;
-    const tl = app.timeline;
     this._end();
     let path, old;
     try {
       app.store.transact('绘制路径', (doc) => {
-        ({ path, replaced: old } = clone(setPath(doc, ent.id, points, { closed, start: tl.active ? app.playback.time : 0 })));
+        ({ path, replaced: old } = clone(setPath(doc, ent.id, points, { closed, set: { start: 0, ...(interpolation ? { interpolation } : {}) } })));
+        // 同一事务保存出发朝向：idle 立即可见，撤销路径时也恢复原朝向。
+        if (['character', 'group'].includes(ent.type) && path.orient === 'tangent') {
+          const transform = doc.entities.find((e) => e.id === ent.id).transform;
+          const quaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...transform.rot.map((v) => v * Math.PI / 180)));
+          new PathTrack(path).apply(path.start, { ent, quaternion, position: new THREE.Vector3(), opts: { posOffset: [0, 0, 0] } });
+          const rotation = new THREE.Euler().setFromQuaternion(quaternion);
+          transform.rot = [rotation.x, rotation.y, rotation.z].map((v) => round4(v * 180 / Math.PI));
+        }
       });
     } catch (err) { toastError(err); return null; }
     if (meta) app.pathMeta[path.id] = meta; else delete app.pathMeta[path.id];
-    const over = path.start + path.duration > tl.duration ? `（结束于 ${fmt(path.start + path.duration)} s，超出时间轴时长）` : '';
-    toast(`${old ? '已替换' : '已创建'}路径：${points.length} 个点，${fmt(path.duration)} s${over}`);
+    const length = pathLength(path.points, path.closed, path.stops, path.interpolation);
+    const natural = defaultDuration(path.points, { closed: path.closed, interpolation: path.interpolation, ramp: path.speed === 'smooth' ? rampFor(ent.type) : 0 });
+    const fitted = !['character', 'group'].includes(ent.type) && path.duration < natural - 0.001 ? ' · 已自动加速适配总时长，可在运动轨迹中调整' : '';
+    toast(`${old ? '已替换' : '已创建'}轨迹：${fmt(path.start)}–${fmt(path.start + path.duration)} s · 平均 ${(length / path.duration).toFixed(2)} m/s${fitted}`);
+    app.pathOverlay.setSelectedPath(path.id);
     this.emit('commit', path);
     return path.id;
   }
