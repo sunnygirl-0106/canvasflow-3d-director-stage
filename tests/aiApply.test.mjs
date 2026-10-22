@@ -178,8 +178,8 @@ test('parseReply：围栏 / 前后杂字 / 顶层数组 / 坏 JSON', () => {
   assert.ok(parseReply('{"x":1}').error.includes('缺少 ops'));
 });
 
-test('README「AI 生成」的词汇表块与代码生成结果一致（不一致请 npm run docs:ai）', () => {
-  const text = fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+test('开发参考「AI 生成」的词汇表块与代码生成结果一致（不一致请 npm run docs:ai）', () => {
+  const text = fs.readFileSync(new URL('../docs/开发参考.md', import.meta.url), 'utf8');
   const [a, b] = README_MARKERS;
   assert.equal(text.slice(text.indexOf(a) + a.length, text.indexOf(b)).trim(), aiVocabMarkdown().trim());
 });

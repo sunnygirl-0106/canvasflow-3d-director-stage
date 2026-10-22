@@ -129,10 +129,10 @@ export function retryMessage(errors) {
   };
 }
 
-/** README「AI 生成」里词汇表块的起止标记（scripts/gen-ai-vocab.mjs 写入）。 */
+/** 开发参考「AI 生成」里词汇表块的起止标记（scripts/gen-ai-vocab.mjs 写入）。 */
 export const README_MARKERS = ['<!-- ai-vocab:start（npm run docs:ai 生成，勿手改）-->', '<!-- ai-vocab:end -->'];
 
-/** README 用的词汇表块：ops + 词汇（与提示词同一来源）。 */
+/** 开发参考用的词汇表块：ops + 词汇（与提示词同一来源）。 */
 export function aiVocabMarkdown() {
   return ['**操作（ops）**', '', '```', opsText(), '```', '', '**词汇表**', '', '```', vocabText(), '```'].join('\n');
 }
