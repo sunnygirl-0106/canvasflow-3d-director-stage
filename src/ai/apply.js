@@ -10,6 +10,7 @@ import { propLocalCenter } from '../entities/Prop.js';
 import { aimRotation, MoveError, MOVE_LABEL } from '../anim/cameraMoves.js';
 import { line, polar, toward, pathLength, arcPoints, ARC_SWEEP, TOWARD_STOP } from '../anim/pathGen.js';
 import { aimPointWith, anchorWith } from '../anim/subject.js';
+import { upsertKeys } from '../anim/keyframes.js';
 import { hexColor } from '../entities/Entity.js';
 import { round6, clone, D2R } from '../util/math.js';
 
@@ -238,9 +239,7 @@ export function compileOps(base, ops, { mode = 'modify', charSeq = 0 } = {}) {
       const tracks = doc.timeline.tracks;
       let tr = tracks.find((t) => t.target === e.id && t.property === o.property);
       if (!tr) { tr = { id: edit.newId(doc), target: e.id, property: o.property, keys: [] }; tracks.push(tr); }
-      tr.keys = tr.keys.filter((k) => Math.abs(k.t - o.t) > 1e-9);
-      tr.keys.push({ t: o.t, value: clone(o.value), ease: o.ease ?? 'linear' });
-      tr.keys.sort((a, b) => a.t - b.t);
+      tr.keys = upsertKeys(tr.keys, { t: o.t, value: o.value, ease: o.ease ?? 'linear' });
     },
     timeline(o) {
       if (o.duration !== undefined) doc.timeline.duration = o.duration;

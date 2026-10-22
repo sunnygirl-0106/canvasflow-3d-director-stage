@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { Emitter } from '../util/Emitter.js';
 import { updateDraft } from '../doc/Store.js';
 import { genId } from '../entities/Entity.js';
-import { dropTransformAnim, pruneAnim } from '../doc/edit.js';
+import { dropTransformAnim, pruneAnim, usedIds, newId } from '../doc/edit.js';
 import { Pose } from '../rig/Pose.js';
 import { Track } from './Track.js';
+import { sameKeyTime, upsertKeys } from './keyframes.js';
 import { PathTrack } from './PathTrack.js';
 import { rampFor } from './Path.js';
 import { fitStops } from './pathGen.js';
@@ -13,8 +14,6 @@ import { applyConstraint, constraintActive } from './Constraint.js';
 import { round6, clone } from '../util/math.js';
 
 const GOLDEN = 0.6180339887; // 群众成员步伐错开：第 i 个成员相位偏移 frac(i·φ)
-
-const T_EPS = 1e-9; // 同一时刻判定（setKey 覆盖 / removeKey）
 
 /**
  * 时间轴：通过 getter 读取 Store 里的 timeline / paths / constraints，
@@ -267,12 +266,17 @@ export class Timeline extends Emitter {
     if (!base) return;
     const props = this._drivenProps().get(ent.id) || new Set();
     const cur = this._capture(ent);
-    if (!props.has('pos')) base.position.copy(cur.position);
-    if (!props.has('rot')) base.rotation.copy(cur.rotation);
-    if (!props.has('scale')) base.scale.copy(cur.scale);
-    if (base.fov !== undefined && !props.has('fov')) base.fov = cur.fov;
-    if (base.values && !props.has('pose')) base.values = cur.values;
+    this._updateManualBase(base, cur, props);
     this.evaluate(this.time);
+  }
+
+  /** 仅同步未被动画驱动的手动属性；打键中的属性也由调用方排除。 */
+  _updateManualBase(base, cur, driven) {
+    if (!driven.has('pos')) base.position.copy(cur.position);
+    if (!driven.has('rot')) base.rotation.copy(cur.rotation);
+    if (!driven.has('scale')) base.scale.copy(cur.scale);
+    if (base.fov !== undefined && !driven.has('fov')) base.fov = cur.fov;
+    if (base.values && !driven.has('pose')) base.values = cur.values;
   }
 
   /**
@@ -319,7 +323,7 @@ export class Timeline extends Emitter {
     const cur = this._capture(ent);
     const forced = this.forcedProps(ent.id, t);
     let tracks = this.tracks;
-    const used = this._allIds();
+    const used = usedIds(this.app.store.document);
     for (const p of props) {
       const value = ['pos', 'rot', 'scale', 'fov'].includes(p) ? this.valueOf(ent, p) : undefined;
       if (value === undefined) { out.manual.push(p); continue; }
@@ -333,10 +337,8 @@ export class Timeline extends Emitter {
         tr = { id, target: ent.id, property: p, keys: [] };
         tracks = [...tracks, tr];
       }
-      const old = tr.keys.find((k) => Math.abs(k.t - t) <= T_EPS);
-      const keys = tr.keys.filter((k) => k !== old);
-      keys.push({ t, value: clone(value), ease: old?.ease ?? 'linear' });
-      keys.sort((a, b) => a.t - b.t);
+      const old = tr.keys.find((k) => sameKeyTime(k.t, t));
+      const keys = upsertKeys(tr.keys, { t, value, ease: old?.ease ?? 'linear' });
       const next = { ...tr, keys };
       tracks = tracks.map((x) => (x === tr ? next : x));
       out.keyed.push(p);
@@ -348,12 +350,7 @@ export class Timeline extends Emitter {
     const base = this._base.get(ent);
     if (base) {
       const driven = this._drivenProps().get(ent.id) || new Set();
-      const keep = (p) => driven.has(p) || out.keyed.includes(p);
-      if (!keep('pos')) base.position.copy(cur.position);
-      if (!keep('rot')) base.rotation.copy(cur.rotation);
-      if (!keep('scale')) base.scale.copy(cur.scale);
-      if (base.fov !== undefined && !keep('fov')) base.fov = cur.fov;
-      if (base.values && !keep('pose')) base.values = cur.values;
+      this._updateManualBase(base, cur, new Set([...driven, ...out.keyed]));
     }
 
     if (out.keyed.length) this._commit({ tracks }); // 校验 + 'change' + 撤销 + 重新求值
@@ -362,20 +359,6 @@ export class Timeline extends Emitter {
   }
 
   // ---- 编辑 API（时间轴面板 / AI 调用）：全部返回文档形状的拷贝；每次变更记一步撤销 ----
-  _allIds() {
-    const ids = new Set();
-    for (const e of this.app.entities) { ids.add(e.id); for (const c of e.children) ids.add(c.id); }
-    for (const x of [...this.tracks, ...this.paths, ...this.constraints]) ids.add(x.id);
-    return ids;
-  }
-
-  _newId() {
-    const used = this._allIds();
-    let id;
-    do id = genId(); while (used.has(id));
-    return id;
-  }
-
   /**
    * 以 next 覆盖部分字段，先拼成整份文档校验（规则与导入完全一致），不合法抛 DocumentError、数据不变。
    * 合法则提交：emit 'change'、记撤销、active 时按当前时刻重新求值。
@@ -408,7 +391,7 @@ export class Timeline extends Emitter {
 
   /** 新建一条空轨道（keys = []）。 */
   addTrack({ target, property }) {
-    const track = { id: this._newId(), target, property, keys: [] };
+    const track = { id: newId(this.app.store.document), target, property, keys: [] };
     this._commit({ tracks: [...this.tracks, track] });
     return clone(track);
   }
@@ -416,10 +399,7 @@ export class Timeline extends Emitter {
   /** 打键：同一时刻覆盖，否则按时间插入。value 口径同文档（rot 为欧拉角度数）。 */
   setKey(trackId, t, value, ease = 'linear') {
     const old = this._find(this.tracks, trackId, '轨道');
-    const key = { t, value: clone(value), ease };
-    const keys = old.keys.filter((k) => Math.abs(k.t - t) > T_EPS);
-    keys.push(key);
-    keys.sort((a, b) => a.t - b.t);
+    const keys = upsertKeys(old.keys, { t, value, ease });
     const track = { ...old, keys };
     this._commit({ tracks: this.tracks.map((x) => (x === old ? track : x)) });
     return clone(track);
@@ -427,7 +407,7 @@ export class Timeline extends Emitter {
 
   removeKey(trackId, t) {
     const old = this._find(this.tracks, trackId, '轨道');
-    const track = { ...old, keys: old.keys.filter((k) => Math.abs(k.t - t) > T_EPS) };
+    const track = { ...old, keys: old.keys.filter((k) => !sameKeyTime(k.t, t)) };
     this._commit({ tracks: this.tracks.map((x) => (x === old ? track : x)) });
     return clone(track);
   }
@@ -439,7 +419,7 @@ export class Timeline extends Emitter {
 
   /** 新建路径。缺省：不闭合、0 秒开始、时长 4 秒、匀速、朝向切线。 */
   addPath({ target, points, closed = false, start = 0, duration = 4, speed = 'linear', orient = 'tangent' }) {
-    const path = { id: this._newId(), target, points: clone(points), closed, start, duration, speed, orient };
+    const path = { id: newId(this.app.store.document), target, points: clone(points), closed, start, duration, speed, orient };
     this._commit({ paths: [...this.paths, path] });
     return clone(path);
   }
@@ -459,7 +439,7 @@ export class Timeline extends Emitter {
 
   /** 新建约束。缺省：offset [0,0,0]、全程生效。 */
   addConstraint({ type, target, subject, offset = [0, 0, 0], start = null, end = null }) {
-    const c = { id: this._newId(), type, target, subject: clone(subject), offset: clone(offset), start, end };
+    const c = { id: newId(this.app.store.document), type, target, subject: clone(subject), offset: clone(offset), start, end };
     this._commit({ constraints: [...this.constraints, c] });
     return clone(c);
   }

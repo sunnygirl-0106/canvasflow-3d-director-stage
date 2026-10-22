@@ -13,8 +13,7 @@ import { defaultDuration, fitStops } from '../anim/pathGen.js';
 import { rampFor } from '../anim/Path.js';
 import { cameraMove, appendMove, lookAtWindows, pathEnd, MoveError } from '../anim/cameraMoves.js';
 import { round6, clone, round4 } from '../util/math.js';
-
-const T_EPS = 1e-9; // 同一时刻判定（与 Timeline.setKey 一致）
+import { upsertKeys } from '../anim/keyframes.js';
 
 /** 群众阵列行列数 / 间距的范围与默认间距（界面与 AI 校验共用）。 */
 export const CROWD_LIMITS = { size: [1, 6], spacing: [0.5, 5] };
@@ -172,7 +171,8 @@ function canonicalRot(rot) {
  * @returns {{group:object, members:object[]}|null}
  */
 export function groupCharacters(doc, ids, { name, pivot }) {
-  const members = (ids || []).map((id) => findEntity(doc, id)).filter((e) => e && e.type === 'character' && !e.parent);
+  const byId = new Map(doc.entities.map((e) => [e.id, e]));
+  const members = [...new Set(ids || [])].map((id) => byId.get(id)).filter((e) => e && e.type === 'character' && !e.parent);
   if (members.length < 2) return null;
   const center = pivot || [0, 1, 2].map((k) => members.reduce((s, m) => s + m.transform.pos[k], 0) / members.length);
   const gid = newId(doc);
@@ -265,7 +265,9 @@ export function removePath(doc, target) {
 }
 
 // ---- 运镜 ----
-const camAnim = (doc, camId) => ({
+/** 机位的动画条目（只读引用），供文档编辑与运镜界面共用。 */
+export const cameraAnimation = (doc, camId) => ({
+  constraints: doc.constraints.filter((c) => c.target === camId),
   path: doc.paths.find((p) => p.target === camId) || null,
   lookAts: doc.constraints.filter((c) => c.target === camId && c.type === 'lookAt'),
   rotTrack: doc.timeline.tracks.find((t) => t.target === camId && t.property === 'rot') || null,
@@ -281,7 +283,7 @@ export function moveContext(doc, camId, { time = 0, lastPan = null } = {}) {
   const cam = findEntity(doc, camId);
   const { pos, rot } = cam.transform;
   const roll = cam.roll;
-  const { path } = camAnim(doc, camId);
+  const { path } = cameraAnimation(doc, camId);
   if (path) return { position: pathEnd(path), rot, roll, time: round4(path.start + path.duration), append: true, path };
   if (lastPan) return { position: pos, rot: lastPan.rotEnd, roll, time: round4(lastPan.start + lastPan.duration), append: true, path: null };
   return { position: pos, rot, roll, time, append: false, path: null };
@@ -321,7 +323,7 @@ export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, t
   const ctx = moveContext(doc, camId, { time, lastPan });
   if (name === 'pan' && ctx.path) throw new MoveError('摇镜头请单独使用或放在最前');
   const move = cameraMove(name, { position: ctx.position, rot: ctx.rot, roll: ctx.roll, aim, params });
-  const before = camAnim(doc, camId);
+  const before = cameraAnimation(doc, camId);
   const start = ctx.time;
   const undo = {};
   const tl = doc.timeline;
@@ -347,9 +349,9 @@ export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, t
       undo.track = track.id;
     }
     const end = round4(start + move.duration);
-    const keys = track.keys.filter((k) => Math.abs(k.t - start) > T_EPS && Math.abs(k.t - end) > T_EPS);
-    keys.push({ t: start, value: clone(move.rotKeys[0]), ease: 'smooth' }, { t: end, value: clone(move.rotKeys[1]), ease: 'smooth' });
-    keys.sort((a, b) => a.t - b.t);
+    const keys = upsertKeys(track.keys,
+      { t: start, value: move.rotKeys[0], ease: 'smooth' },
+      { t: end, value: move.rotKeys[1], ease: 'smooth' });
     const next = { ...track, keys };
     tl.tracks = tl.tracks.map((t) => (t === track ? next : t));
     undo.keys = { track: track.id, times: [start, end] };
@@ -373,7 +375,7 @@ export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, t
 
 /** 清除机位的运镜：路径 + 该机位全部约束 + rot 轨道。返回是否有改动。 */
 export function clearCameraMoves(doc, camId) {
-  const { path, rotTrack } = camAnim(doc, camId);
+  const { path, rotTrack } = cameraAnimation(doc, camId);
   const n = doc.constraints.length;
   if (path) doc.paths = doc.paths.filter((p) => p !== path);
   doc.constraints = doc.constraints.filter((c) => c.target !== camId);

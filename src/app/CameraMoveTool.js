@@ -1,7 +1,7 @@
 import { toast, toastError, confirmToast } from '../util/dom.js';
 import { aimPoint } from '../anim/Constraint.js';
 import { cameraMove, defaultParams, MoveError, MOVE_LABEL } from '../anim/cameraMoves.js';
-import { moveContext, aheadPoint, nearestSubject, applyCameraMove, clearCameraMoves } from '../doc/edit.js';
+import { cameraAnimation, moveContext, aheadPoint, nearestSubject, applyCameraMove, clearCameraMoves } from '../doc/edit.js';
 import { round4, clone } from '../util/math.js';
 
 const fmt = (s) => (Math.round(s * 10) / 10).toString();
@@ -55,11 +55,6 @@ export class CameraMoveTool {
 
   _aheadPoint(cam) { return aheadPoint(cam.transformJSON(this.app.timeline.baseOf(cam) || cam.root)); }
 
-  /** 只含本机位条目 + 动画字段的文档视图（edit.moveContext 用；不必整份 exportDocument）。 */
-  _camDoc(cam) {
-    return this.app.store.document;
-  }
-
   /** 表单里的主体 → 约束 subject（实体 id 或 [x,y,z]）。 */
   resolveSubject(cam) {
     const f = this.formOf(cam);
@@ -69,16 +64,7 @@ export class CameraMoveTool {
   }
 
   // ---- 现状 ----
-  _anim(cam) {
-    const anim = this.app.timeline.toJSON();
-    return {
-      path: anim.paths.find((p) => p.target === cam.id) || null,
-      lookAts: anim.constraints.filter((c) => c.target === cam.id && c.type === 'lookAt'),
-      rotTrack: anim.timeline.tracks.find((t) => t.target === cam.id && t.property === 'rot') || null,
-      posTrack: anim.timeline.tracks.find((t) => t.target === cam.id && t.property === 'pos') || null,
-      constraints: anim.constraints.filter((c) => c.target === cam.id),
-    };
-  }
+  _anim(cam) { return cameraAnimation(this.app.store.document, cam.id); }
 
   /** 签名：机位路径 + rot 轨道键（判断会话态的段是否仍与文档一致）。 */
   _sig({ path, rotTrack }) {
@@ -105,7 +91,7 @@ export class CameraMoveTool {
   context(cam) {
     const { app } = this;
     const segs = this.segments(cam);
-    return moveContext(this._camDoc(cam), cam.id, { time: app.timeline.active ? round4(app.playback.time) : 0, lastPan: segs[segs.length - 1] || null });
+    return moveContext(app.store.document, cam.id, { time: app.timeline.active ? round4(app.playback.time) : 0, lastPan: segs[segs.length - 1] || null });
   }
 
   /** 表单参数（缺省项 = 默认值，按当前起点与主体计算）。 */

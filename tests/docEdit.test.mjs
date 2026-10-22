@@ -77,6 +77,21 @@ test('groupCharacters：轴心 = 平均位置（或给定 pivot）、成员改�
   assert.deepEqual(d.transform.rot, [-180, 30, -180]); // 与 Object3D.attach 一致：经四元数规整欧拉表示
 });
 
+test('groupCharacters：重复 ID 不重复变换，保持首次出现顺序', () => {
+  const doc = createEmptyDocument();
+  const a = edit.addCharacter(doc, { name: 'A', body: 'male', pos: [2, 0, 0] });
+  const b = edit.addCharacter(doc, { name: 'B', body: 'male', pos: [4, 0, 0] });
+  const before = structuredClone(doc);
+  assert.equal(edit.groupCharacters(doc, [a.id, a.id], { name: '组1' }), null);
+  assert.deepEqual(doc, before);
+  const { group } = edit.groupCharacters(doc, [b.id, a.id, b.id, a.id], { name: '组1' });
+  assert.deepEqual(group.members, [b.id, a.id]);
+  assert.deepEqual(group.transform.pos, [3, 0, 0]);
+  assert.deepEqual(a.transform.pos, [-1, 0, 0]);
+  assert.deepEqual(b.transform.pos, [1, 0, 0]);
+  ok(doc);
+});
+
 test('setPath：新建删 pos 轨道并取默认值；替换保留 start / speed / orient、重算时长；set 覆盖', () => {
   const doc = camDoc();
   const a = edit.addCharacter(doc, { name: 'A', body: 'male', pos: [0, 0, 0] });

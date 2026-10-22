@@ -60,17 +60,18 @@ export class OpenAICompatProvider {
       throw new ProviderError(`网络错误：${err.message || err}（检查 baseURL、网络或跨域设置）`);
     }
     if (res.status === 400 && this.jsonMode) {
-      const text = await res.clone().text();
-      if (/response_format|json_object/i.test(text)) { // 不支持 JSON 模式：去掉重试一次
+      if (/response_format|json_object/i.test(res.text)) { // 不支持 JSON 模式：去掉重试一次
         this.jsonMode = false;
         return this.chat(messages, { signal });
       }
     }
     if (!res.ok) {
-      const text = (await res.text().catch(() => '')).slice(0, 300);
+      const text = res.text.slice(0, 300);
       throw new ProviderError(`接口返回 ${res.status}：${text || res.statusText}`, res.status);
     }
-    const data = await res.json();
+    let data;
+    try { data = JSON.parse(res.text); }
+    catch { throw new ProviderError('接口返回格式不对：响应不是合法 JSON', res.status); }
     const content = data?.choices?.[0]?.message?.content;
     if (typeof content !== 'string') throw new ProviderError('接口返回格式不对：没有 choices[0].message.content');
     return content;
@@ -83,12 +84,15 @@ export class OpenAICompatProvider {
     if (signal?.aborted) onAbort();
     else signal?.addEventListener('abort', onAbort, { once: true });
     try {
-      return await fetch(`${this.baseURL}/chat/completions`, {
+      const res = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(!this.local ? { Authorization: `Bearer ${this.apiKey}` } : {}) },
         body: JSON.stringify(body),
         signal: ctl.signal,
       });
+      // fetch 在收到响应头时就返回；正文读取也必须在超时 / 取消的保护范围内。
+      const text = await res.text();
+      return { ok: res.ok, status: res.status, statusText: res.statusText, text };
     } catch (err) {
       if (signal?.aborted) { const e = new Error('已取消'); e.name = 'AbortError'; throw e; }
       if (ctl.signal.aborted) throw new Error('请求超时');
