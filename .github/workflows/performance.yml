@@ -1,0 +1,48 @@
+name: Performance report
+
+on:
+  schedule:
+    - cron: '30 19 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  report:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+        timeout-minutes: 5
+      - name: Install Chinese fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-wqy-microhei=0.2.0-beta-3.1
+      - uses: actions/cache@v4
+        with:
+          path: .cache/test-browser
+          key: chrome-${{ runner.os }}-${{ hashFiles('scripts/install-test-browser.mjs') }}
+      - run: npm run test:browser:install
+        timeout-minutes: 10
+      - run: npm run measure:context
+      - name: Measure speed; assert cleanup only
+        run: npm run measure:performance
+        timeout-minutes: 45
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: performance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-output
+          retention-days: 30

@@ -1,0 +1,4 @@
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📸 test-output/calib_xbot.png
+📸 test-output/calib_bodykun_male.png
+📸 test-output/calib_bodychan_female.png

@@ -1,0 +1,363 @@
+Preparing worktree (detached HEAD 7717264)
+HEAD is now at 7717264 feat: 完成第一批保存可靠性与发布回归优化
+npm warn deprecated mp4-muxer@5.2.2: This library is superseded by Mediabunny. Please migrate to it.
+npm warn deprecated eslint@9.39.5: This version is no longer supported. Please see https://eslint.org/version-support for other options.
+
+added 129 packages in 1s
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=xbot → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/base/xbot
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=xbot → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/current/xbot
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+✅ akimbo.png — 差异像素 0（0.0000%）
+✅ bow.png — 差异像素 0（0.0000%）
+✅ cross.png — 差异像素 0（0.0000%）
+✅ fight.png — 差异像素 0（0.0000%）
+✅ kick.png — 差异像素 0（0.0000%）
+✅ push.png — 差异像素 0（0.0000%）
+✅ reach.png — 差异像素 0（0.0000%）
+✅ run.png — 差异像素 0（0.0000%）
+✅ sit.png — 差异像素 0（0.0000%）
+✅ stand.png — 差异像素 0（0.0000%）
+✅ think.png — 差异像素 0（0.0000%）
+✅ throw.png — 差异像素 0（0.0000%）
+✅ tpose.png — 差异像素 0（0.0000%）
+✅ walk.png — 差异像素 0（0.0000%）
+✅ wave.png — 差异像素 0（0.0000%）
+
+=== 15/15 一致（阈值 0.10%）===
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=male → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/base/male
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=male → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/current/male
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+✅ akimbo.png — 差异像素 0（0.0000%）
+✅ bow.png — 差异像素 1（0.0003%）
+✅ cross.png — 差异像素 0（0.0000%）
+✅ fight.png — 差异像素 1（0.0003%）
+✅ kick.png — 差异像素 1（0.0003%）
+✅ push.png — 差异像素 0（0.0000%）
+✅ reach.png — 差异像素 0（0.0000%）
+✅ run.png — 差异像素 3（0.0009%）
+✅ sit.png — 差异像素 0（0.0000%）
+✅ stand.png — 差异像素 0（0.0000%）
+✅ think.png — 差异像素 1（0.0003%）
+✅ throw.png — 差异像素 0（0.0000%）
+✅ tpose.png — 差异像素 0（0.0000%）
+✅ walk.png — 差异像素 0（0.0000%）
+✅ wave.png — 差异像素 0（0.0000%）
+
+=== 15/15 一致（阈值 0.10%）===
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=female → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/base/female
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=female → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/current/female
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+✅ akimbo.png — 差异像素 1（0.0003%）
+✅ bow.png — 差异像素 2（0.0006%）
+✅ cross.png — 差异像素 0（0.0000%）
+✅ fight.png — 差异像素 3（0.0009%）
+✅ kick.png — 差异像素 1（0.0003%）
+✅ push.png — 差异像素 1（0.0003%）
+✅ reach.png — 差异像素 0（0.0000%）
+✅ run.png — 差异像素 2（0.0006%）
+✅ sit.png — 差异像素 2（0.0006%）
+✅ stand.png — 差异像素 0（0.0000%）
+✅ think.png — 差异像素 0（0.0000%）
+✅ throw.png — 差异像素 3（0.0009%）
+✅ tpose.png — 差异像素 1（0.0003%）
+✅ walk.png — 差异像素 0（0.0000%）
+✅ wave.png — 差异像素 1（0.0003%）
+
+=== 15/15 一致（阈值 0.10%）===
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=tall → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/base/tall
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=tall → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/current/tall
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+✅ akimbo.png — 差异像素 0（0.0000%）
+✅ bow.png — 差异像素 1（0.0003%）
+✅ cross.png — 差异像素 0（0.0000%）
+✅ fight.png — 差异像素 1（0.0003%）
+✅ kick.png — 差异像素 1（0.0003%）
+✅ push.png — 差异像素 2（0.0006%）
+✅ reach.png — 差异像素 1（0.0003%）
+✅ run.png — 差异像素 0（0.0000%）
+✅ sit.png — 差异像素 2（0.0006%）
+✅ stand.png — 差异像素 0（0.0000%）
+✅ think.png — 差异像素 1（0.0003%）
+✅ throw.png — 差异像素 1（0.0003%）
+✅ tpose.png — 差异像素 0（0.0000%）
+✅ walk.png — 差异像素 0（0.0000%）
+✅ wave.png — 差异像素 0（0.0000%）
+
+=== 15/15 一致（阈值 0.10%）===
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=small → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/base/small
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=small → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/current/small
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+✅ akimbo.png — 差异像素 0（0.0000%）
+✅ bow.png — 差异像素 0（0.0000%）
+✅ cross.png — 差异像素 0（0.0000%）
+✅ fight.png — 差异像素 1（0.0003%）
+✅ kick.png — 差异像素 0（0.0000%）
+✅ push.png — 差异像素 0（0.0000%）
+✅ reach.png — 差异像素 0（0.0000%）
+✅ run.png — 差异像素 0（0.0000%）
+✅ sit.png — 差异像素 1（0.0003%）
+✅ stand.png — 差异像素 0（0.0000%）
+✅ think.png — 差异像素 0（0.0000%）
+✅ throw.png — 差异像素 2（0.0006%）
+✅ tpose.png — 差异像素 0（0.0000%）
+✅ walk.png — 差异像素 0（0.0000%）
+✅ wave.png — 差异像素 0（0.0000%）
+
+=== 15/15 一致（阈值 0.10%）===
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=broad → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/base/broad
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=broad → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/current/broad
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+✅ akimbo.png — 差异像素 0（0.0000%）
+✅ bow.png — 差异像素 1（0.0003%）
+✅ cross.png — 差异像素 0（0.0000%）
+✅ fight.png — 差异像素 0（0.0000%）
+✅ kick.png — 差异像素 2（0.0006%）
+✅ push.png — 差异像素 1（0.0003%）
+✅ reach.png — 差异像素 1（0.0003%）
+✅ run.png — 差异像素 0（0.0000%）
+✅ sit.png — 差异像素 3（0.0009%）
+✅ stand.png — 差异像素 0（0.0000%）
+✅ think.png — 差异像素 0（0.0000%）
+✅ throw.png — 差异像素 4（0.0012%）
+✅ tpose.png — 差异像素 0（0.0000%）
+✅ walk.png — 差异像素 0（0.0000%）
+✅ wave.png — 差异像素 1（0.0003%）
+
+=== 15/15 一致（阈值 0.10%）===
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=slim → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/base/slim
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+📐 姿势截图：body=slim → /Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/test-output/pose-regression/current/slim
+  📸 stand
+  📸 tpose
+  📸 walk
+  📸 run
+  📸 akimbo
+  📸 bow
+  📸 think
+  📸 fight
+  📸 kick
+  📸 throw
+  📸 push
+  📸 wave
+  📸 reach
+  📸 sit
+  📸 cross
+✅ akimbo.png — 差异像素 0（0.0000%）
+✅ bow.png — 差异像素 0（0.0000%）
+✅ cross.png — 差异像素 0（0.0000%）
+✅ fight.png — 差异像素 0（0.0000%）
+✅ kick.png — 差异像素 1（0.0003%）
+✅ push.png — 差异像素 0（0.0000%）
+✅ reach.png — 差异像素 0（0.0000%）
+✅ run.png — 差异像素 1（0.0003%）
+✅ sit.png — 差异像素 0（0.0000%）
+✅ stand.png — 差异像素 0（0.0000%）
+✅ think.png — 差异像素 0（0.0000%）
+✅ throw.png — 差异像素 1（0.0003%）
+✅ tpose.png — 差异像素 0（0.0000%）
+✅ walk.png — 差异像素 0（0.0000%）
+✅ wave.png — 差异像素 0（0.0000%）
+
+=== 15/15 一致（阈值 0.10%）===

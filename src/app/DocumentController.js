@@ -1,3 +1,4 @@
+import { checkRequestState } from '../util/requestGuard.js';
 import { DocumentStore, updateDraft } from '../doc/Store.js';
 import { createEmptyDocument, APP_ID } from '../doc/schema.js';
 import { clone, xyz } from '../util/math.js';
@@ -183,6 +184,7 @@ export class DocumentController {
   }
 
   load(input, opts = {}) {
+    checkRequestState(this.store, opts);
     if (opts.history !== false) this.app.history?.capture();
     // 调用时取得请求副本，调用方随后修改自己的对象不会改变排队任务。
     const snapshot = clone(input);

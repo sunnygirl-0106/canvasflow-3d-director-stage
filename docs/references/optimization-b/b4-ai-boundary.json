@@ -1,0 +1,40 @@
+{
+  "results": [
+    {
+      "name": "等待模型时用户编辑：保留新文档与历史，旧响应不重试",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "资源准备期间取消：文档/撤销不变，新资源各清理一次",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "排队文档开始执行前也检查请求 revision",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "Provider 忽略取消时，响应返回后仍拒绝提交",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "运行期无 console 错误",
+      "pass": true,
+      "detail": ""
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "[]Automatic fallback to software WebGL has been deprecated. Please use the --enable-unsafe-swiftshader flag to opt in to lower security guarantees for trusted content.",
+    "[.WebGL-0x11c000f0800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x11c000f0800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x11c000f0800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x11c000f0800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
+  ],
+  "browser": "Chrome/150.0.7871.24",
+  "node": "v22.22.1",
+  "code": 0
+}

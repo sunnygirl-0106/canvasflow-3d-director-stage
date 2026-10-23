@@ -20,7 +20,9 @@
     "test:e2e:required": "node scripts/run-e2e.mjs required",
     "test:browser:install": "node scripts/install-test-browser.mjs",
     "test:build": "node scripts/check-build.mjs && node scripts/test-build.mjs",
-    "test:types": "node scripts/type-vocab.mjs --check && tsc --noEmit"
+    "test:types": "node scripts/type-vocab.mjs --check && tsc --noEmit",
+    "measure:performance": "node scripts/measure-performance.mjs",
+    "measure:context": "node scripts/measure-context.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

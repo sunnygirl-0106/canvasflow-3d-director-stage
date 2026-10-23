@@ -1,5 +1,6 @@
 // 重试回路：调用模型 → 解析 JSON → applyOps；失败把错误原文作为下一轮用户消息，最多重试 2 次；
 // 全部失败 → toast 前 3 条错误，场景不变。每轮对话（输入、模型 note、应用结果）只存会话态，不进文档。
+import { checkRequestState } from '../util/requestGuard.js';
 import { Emitter } from '../util/Emitter.js';
 import { toast } from '../util/dom.js';
 import { applyOps, summarize } from './apply.js';
@@ -63,27 +64,30 @@ export class AiAgent extends Emitter {
     if (this.busy) throw new Error('上一轮还没结束');
     if (!MODES.includes(mode)) throw new Error(`未知模式：${mode}`);
     if (mode === 'modify' && this.sceneEmpty) mode = 'generate';
+    const expectedRevision = this.app.store.revision;
+    const ctl = new AbortController();
+    this._abort = ctl;
     const turn = { id: this.turns.length + 1, mode, input, image, attempts: [], status: 'running', result: null, note: '', error: null };
     this.turns.push(turn);
     this._setBusy(true);
     this.emit('turn', turn);
-    const ctl = new AbortController();
-    this._abort = ctl;
     const messages = [
       { role: 'system', content: systemPrompt() },
-      userMessage({ mode, summary: summarize(this.app), input, image }),
+      userMessage({ mode, summary: summarize(this.app, { input }), input, image }),
     ];
     try {
       for (let k = 0; k <= this.maxRetries; k++) {
         const attempt = { raw: null, note: '', errors: [] };
         turn.attempts.push(attempt);
         this.emit('update', turn);
+        checkRequestState(this.app.store, { expectedRevision, signal: ctl.signal });
         attempt.raw = await this.provider.chat(messages, { signal: ctl.signal });
+        checkRequestState(this.app.store, { expectedRevision, signal: ctl.signal });
         const parsed = parseReply(attempt.raw);
         if (parsed.error) attempt.errors = [parsed.error];
         else {
           attempt.note = parsed.note;
-          const res = await applyOps(this.app, parsed.ops, { mode });
+          const res = await applyOps(this.app, parsed.ops, { mode, expectedRevision, signal: ctl.signal });
           if (res.ok) {
             Object.assign(turn, { status: 'ok', result: res, note: parsed.note });
             return turn;

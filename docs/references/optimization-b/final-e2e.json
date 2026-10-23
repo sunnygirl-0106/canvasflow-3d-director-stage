@@ -1,0 +1,236 @@
+{
+  "suites": 23,
+  "assertions": 535,
+  "results": [
+    {
+      "suite": "motion",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:46:02.376Z",
+      "code": 0,
+      "durationMs": 25992,
+      "passed": 33,
+      "assertions": 33,
+      "errors": []
+    },
+    {
+      "suite": "revision5",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:46:28.368Z",
+      "code": 0,
+      "durationMs": 23855,
+      "passed": 35,
+      "assertions": 35,
+      "errors": []
+    },
+    {
+      "suite": "round5",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:46:52.223Z",
+      "code": 0,
+      "durationMs": 15709,
+      "passed": 29,
+      "assertions": 29,
+      "errors": []
+    },
+    {
+      "suite": "defaultview",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:47:07.932Z",
+      "code": 0,
+      "durationMs": 9659,
+      "passed": 12,
+      "assertions": 12,
+      "errors": []
+    },
+    {
+      "suite": "pathselect",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:47:17.591Z",
+      "code": 0,
+      "durationMs": 8749,
+      "passed": 16,
+      "assertions": 16,
+      "errors": []
+    },
+    {
+      "suite": "polish",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:47:26.340Z",
+      "code": 0,
+      "durationMs": 11497,
+      "passed": 22,
+      "assertions": 22,
+      "errors": []
+    },
+    {
+      "suite": "zoom",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:47:37.837Z",
+      "code": 0,
+      "durationMs": 4311,
+      "passed": 5,
+      "assertions": 5,
+      "errors": []
+    },
+    {
+      "suite": "round4",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:47:42.148Z",
+      "code": 0,
+      "durationMs": 12729,
+      "passed": 30,
+      "assertions": 30,
+      "errors": []
+    },
+    {
+      "suite": "tooltips",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:47:54.878Z",
+      "code": 0,
+      "durationMs": 5564,
+      "passed": 8,
+      "assertions": 8,
+      "errors": []
+    },
+    {
+      "suite": "round3",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:48:00.441Z",
+      "code": 0,
+      "durationMs": 17874,
+      "passed": 27,
+      "assertions": 27,
+      "errors": []
+    },
+    {
+      "suite": "round2",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:48:18.315Z",
+      "code": 0,
+      "durationMs": 18188,
+      "passed": 25,
+      "assertions": 25,
+      "errors": []
+    },
+    {
+      "suite": "director",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:48:36.503Z",
+      "code": 0,
+      "durationMs": 23554,
+      "passed": 21,
+      "assertions": 21,
+      "errors": []
+    },
+    {
+      "suite": "default",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:49:00.057Z",
+      "code": 0,
+      "durationMs": 11250,
+      "passed": 35,
+      "assertions": 35,
+      "errors": []
+    },
+    {
+      "suite": "doc",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:49:11.307Z",
+      "code": 0,
+      "durationMs": 11911,
+      "passed": 20,
+      "assertions": 20,
+      "errors": []
+    },
+    {
+      "suite": "anim",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:49:23.218Z",
+      "code": 0,
+      "durationMs": 15403,
+      "passed": 50,
+      "assertions": 50,
+      "errors": []
+    },
+    {
+      "suite": "tl",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:49:38.621Z",
+      "code": 0,
+      "durationMs": 28051,
+      "passed": 27,
+      "assertions": 27,
+      "errors": []
+    },
+    {
+      "suite": "path",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:50:06.672Z",
+      "code": 0,
+      "durationMs": 50750,
+      "passed": 25,
+      "assertions": 25,
+      "errors": []
+    },
+    {
+      "suite": "cam",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:50:57.422Z",
+      "code": 0,
+      "durationMs": 25327,
+      "passed": 34,
+      "assertions": 34,
+      "errors": []
+    },
+    {
+      "suite": "export",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:51:22.749Z",
+      "code": 0,
+      "durationMs": 43504,
+      "passed": 27,
+      "assertions": 27,
+      "errors": []
+    },
+    {
+      "suite": "ai",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:52:06.254Z",
+      "code": 0,
+      "durationMs": 11359,
+      "passed": 19,
+      "assertions": 19,
+      "errors": []
+    },
+    {
+      "suite": "ai-boundary",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:52:17.614Z",
+      "code": 0,
+      "durationMs": 4285,
+      "passed": 5,
+      "assertions": 5,
+      "errors": []
+    },
+    {
+      "suite": "store",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:52:21.898Z",
+      "code": 0,
+      "durationMs": 8983,
+      "passed": 15,
+      "assertions": 15,
+      "errors": []
+    },
+    {
+      "suite": "autosave",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:52:30.881Z",
+      "code": 0,
+      "durationMs": 14943,
+      "passed": 15,
+      "assertions": 15,
+      "errors": []
+    }
+  ]
+}

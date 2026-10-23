@@ -1,5 +1,6 @@
 // 加载已校验文档：预建资源后原子发布到 Store 和运行时。
 // 实体各自实现 toJSON / static fromJSON(json, ctx)；这里只编排场景级字段与实体顺序。
+import { checkRequestState } from '../util/requestGuard.js';
 import { validate, DocumentError } from './schema.js';
 import { migrate } from './migrate.js';
 import { Character } from '../entities/Character.js';
@@ -50,11 +51,12 @@ async function buildEntities(app, doc) {
  * 校验并加载文档：migrate → validate → 预建实体 / 预载全景 → 一次性替换当前场景。
  * 不合法或任何资源加载失败都抛错，当前场景保持原样。
  * @param {object} input 文档（不会被修改）
- * @param {{applyView?:boolean, pruneShots?:boolean}} opts
+ * @param {{applyView?:boolean, pruneShots?:boolean, expectedRevision?:number, signal?:AbortSignal}} opts
  *   applyView：应用 meta.editorView（导入 / 恢复存档时为 true，撤销为 false）
  *   pruneShots：清掉找不到机位的截图（导入别的场景时为 true）
  */
 export async function loadDocument(app, input, opts = {}) {
+  checkRequestState(app.store, opts);
   const doc = migrate(input);
   const { ok, errors } = validate(doc);
   if (!ok) throw new DocumentError(errors);
@@ -70,13 +72,16 @@ export async function loadDocument(app, input, opts = {}) {
   if (ents.status === 'rejected' || pano.status === 'rejected') {
     if (ents.status === 'fulfilled') ents.value.fresh.forEach((e) => e.dispose());
     if (pano.status === 'fulfilled') pano.value?.discard();
+    checkRequestState(app.store, { expectedRevision: opts.expectedRevision ?? revision, signal: opts.signal });
     throw ents.reason || pano.reason;
   }
   const { entities, apply } = ents.value;
-  if (revision !== app.store.revision) {
+  try {
+    checkRequestState(app.store, { expectedRevision: opts.expectedRevision ?? revision, signal: opts.signal });
+  } catch (err) {
     ents.value.fresh.forEach((e) => e.dispose());
     pano.value?.discard();
-    throw new Error('准备期间场景已被修改，请重试');
+    throw err;
   }
   const commit = () => app.documents.commitRuntime({ ...doc, meta: { ...doc.meta, editorView: view } }, entities, pano.value, { ...opts, apply });
   if (change) app.store.commit(change, { apply: commit, history: opts.history !== false });
