@@ -20,7 +20,6 @@ import * as edit from '../doc/edit.js';
 import { round6, clone } from '../util/math.js';
 import { History } from './History.js';
 import { Timeline } from '../anim/Timeline.js';
-import { exportCamera } from './exportSpec.js';
 import { Playback } from '../anim/Playback.js';
 
 const GIZMO_PROP = { translate: 'pos', rotate: 'rot', scale: 'scale' };
@@ -34,7 +33,7 @@ const PROP_NAME = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视野'
  *   'transform' gizmo 拖动导致选中对象变换
  *   'mode'      变换模式（移动/旋转/缩放）
  *   'view'      导演视角 / 机位视角切换
- *   'pov'       机位视角下出画机位变化（{ camera, main, unset }：时间轴 active 时透过主机位，见 _syncPov）
+ *   'pov'       机位视角下出画机位变化（{ camera, main, unset }，见 _syncPov）
  *   'scene'     场景级参数（全景等）变化
  *   'shots'     截图增删、勾选
  *   'document'  整份场景文档被加载（导入 / 撤销 / 恢复）
@@ -71,11 +70,15 @@ export class App extends Emitter {
     this.timeline = new Timeline(this);
     this.playback = new Playback(this.timeline, { invalidate: () => stage.invalidate() });
     this.autoKey = false;               // 自动打键（会话偏好，由时间轴面板写入）
-    this.loadingDocument = false;       // 加载期间为 true：history / 自动保存据此屏蔽
+    this.loadingDocument = false;       // 加载期间为 true：history 据此屏蔽
     this.history = new History(this);
-    // 主机位播放：机位视角下时间轴 active ↔ idle、主机位变化时切换出画机位
-    this.timeline.on('active', () => this._syncPov());
-    this.playback.on('state', (state) => { if (state === 'idle') this.endPreview(); this.gizmo?.setVisible(this.gizmoShouldShow()); });
+    // 时间轴只驱动实体；导演相机从此保持用户的观察位置。
+    this.timeline.on('active', () => { if (this.timeline.active) this.directorDetached = true; this._syncPov(); });
+    this.playback.on('state', (state) => {
+      if (state === 'idle') this.endPreview();
+      if (state === 'playing') this.pathTool?.cancel();
+      this.gizmo?.setVisible(this.gizmoShouldShow());
+    });
     this.timeline.on('change', () => this._syncPov());
 
     const dom = stage.renderer.domElement;
@@ -318,23 +321,19 @@ export class App extends Emitter {
   }
 
   /**
-   * 机位视角下实际出画的机位（主机位播放）：时间轴 active（播放或拖播放头）→ 主机位，
-   * 未设主机位则用当前机位并提示；idle → 当前机位（activeCameraId）。导演视角不切换。
-   * 透过主机位时 gizmo 隐藏（画面是成片预览），仍可选中其他实体。
+   * 机位视角始终使用用户指定的当前机位。主机位只决定导出，不接管播放视角。
    */
   _syncPov() {
     const tl = this.timeline;
-    const main = this.cameraView && tl.active ? this.findCamera(tl.mainCameraId) : null;
-    const ent = this.cameraView ? (this.preview ? exportCamera(this)?.ent : main || this.findCamera(this.activeCameraId)) : null;
-    if (this.preview && this.povCameraId && this.povCameraId !== ent?.id) this.playback.pause();
-    if (this.preview && !ent) { this.endPreview(false); return; }
+    const ent = this.cameraView ? this.findCamera(this.activeCameraId) : null;
+    const main = ent && tl.active && ent.id === tl.mainCameraId;
     if (ent && this.stage.activeCamera !== ent.cam) {
       ent.cam.aspect = this.viewportAspect();
       ent.cam.updateProjectionMatrix();
       this.stage.activeCamera = ent.cam;
       this._syncEditCamera();
     }
-    const unset = this.cameraView && tl.active && !main;
+    const unset = this.cameraView && tl.active && !this.findCamera(tl.mainCameraId);
     const id = ent?.id ?? null;
     if (this.povCameraId === id && this.mainPreview === !!main && this.povUnset === unset) return;
     this.povCameraId = id;
@@ -353,42 +352,37 @@ export class App extends Emitter {
     this.select(id);
   }
 
-  /** 播放入口：先切机位画面，再让时间推进，避免播放导演编辑视角。 */
-  startPreview({ play = true, returnView = this.cameraView } = {}) {
-    if (!exportCamera(this)) { toast('请先添加或选择机位'); return false; }
-    if (!this.preview) {
-      this.preview = { cameraView: returnView };
+  /** 播放保留当前视角；用户已进入机位视角时才隐藏拍摄辅助物。 */
+  startPreview({ play = true } = {}) {
+    this.pathTool.cancel();
+    this.directorDetached = true;
+    if (this.cameraView && !this.preview) {
+      this.preview = true;
       this.labelSprites.enable();
       this.beginCleanRender();
     }
-    this.cameraView = true;
-    this.rig.controls.enabled = false;
     this._applyFrame();
     this._syncPov();
-    this.emit('view', true);
     if (play) this.playback.play();
     return true;
   }
 
-  endPreview(restore = this.preview?.cameraView) {
+  endPreview() {
     if (!this.preview) return;
     this.playback.pause();
     this.preview = null;
-    this.cameraView = !!restore && !!exportCamera(this);
-    this.stage.activeCamera = null;
-    this.rig.controls.enabled = !this.cameraView;
     this.endCleanRender();
     this.labelSprites.disable();
     this._applyFrame();
     this._syncPov();
     this._syncEditCamera();
-    this.emit('view', this.cameraView);
   }
 
   stopPreview() { this.playback.stop(); this.endPreview(); }
 
   setCameraView(on) {
-    if (this.preview) this.endPreview(on);
+    const playing = this.playback.playing;
+    this.endPreview();
     if (on) {
       // 选定出画机位：当前选中相机 > 上次 active > 第一个相机
       const sel = this.selected?.type === 'camera' ? this.selected : null;
@@ -414,6 +408,7 @@ export class App extends Emitter {
       this._syncPov();
     }
     this.emit('view', this.cameraView);
+    if (playing) this.startPreview();
   }
 
   // ---- 场景级参数（ScenePanel）----

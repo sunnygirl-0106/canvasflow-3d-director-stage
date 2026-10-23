@@ -166,7 +166,7 @@ export class Inspector {
   _pathEmpty(ent) {
     if (ent.type !== 'camera') return el('div', { class: 'anim-sec', 'data-sec': 'path' }, [this._newPathBtn('绘制轨迹', ent)]);
     const info = ent.type === 'camera'
-      ? '未设置路径。新建后机位沿路径移动（画在机位高度的水平面上，朝向保持不变）。'
+      ? '未设置路径。绘制时保持机位高度与朝向；观察位置与机位同高时，在地面上定位轨迹。'
       : '未设置路径。新建后角色沿路径移动，播放时始终走路，按固定步频行走。';
     return el('div', { class: 'anim-sec', 'data-sec': 'path' }, [
       el('div', { class: 'sec-title' }, [el('span', { text: '路径' }), el('span', { class: 'sec-spacer' }), this._newPathBtn('新建路径', ent)]),

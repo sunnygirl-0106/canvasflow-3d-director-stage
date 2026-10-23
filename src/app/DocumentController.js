@@ -4,7 +4,6 @@ import { createEmptyDocument, APP_ID } from '../doc/schema.js';
 import { clone, xyz } from '../util/math.js';
 import { PROP_LABEL } from '../config.js';
 import { parseCharName } from '../doc/edit.js';
-import { exportCamera } from './exportSpec.js';
 import { loadDocument, APP_VERSION } from '../doc/serialize.js';
 
 /** 文档与 Three 场景之间的边界。普通事务只同步改动的实体；资源加载走 prepare/commit。 */
@@ -149,7 +148,7 @@ export class DocumentController {
     this.app.emit('entities');
     this.app.emit('scene');
     this.app.select(this.app.findEntity(prevSel) ? prevSel : null, { activateTransform: transformEditing }); // id 稳定：撤销后仍选中同一对象
-    if (preview && exportCamera(this.app)) this.app.startPreview({ play: false, returnView: preview.cameraView });
+    if (preview && this.app.cameraView) this.app.startPreview({ play: false });
     this.app.emit('document', doc);
   }
 

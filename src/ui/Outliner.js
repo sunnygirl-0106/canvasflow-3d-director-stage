@@ -71,14 +71,7 @@ export class Outliner {
       node.addEventListener('click', (e) => {
         // Shift 点击角色/道具 → 多选切换
         if (e.shiftKey && (ent.type === 'character' || ent.type === 'prop')) { app.toggleSelect(ent.id); return; }
-        if (ent.type === 'camera') {
-          // 导演视角下点机位 → 仅选中（出属性面板 + 三色 gizmo），不切换 POV；
-          // 已在机位视角时点机位 → 切换当前 POV 相机
-          if (app.cameraView) app.setActiveCamera(ent.id);
-          else app.select(ent.id);
-        } else {
-          app.select(ent.id);
-        }
+        app.select(ent.id);
       });
       // 右键菜单（角色/道具）：打组 / 显示隐藏 / 创建副本 / 删除
       if (ent.type === 'character' || ent.type === 'prop') {

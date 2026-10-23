@@ -39,7 +39,7 @@ const MIN_RADIUS = 0.1;   // 环绕：当前位置离中心太近时无法定半
  * 右键平移、滚轮缩放不变。gizmo 隐藏、视口点选暂停。
  *
  * 起点规则：首点 = 实体当前手动值（Timeline base，active 时也不取动画瞬时值）投到绘制平面，所以创建后 t=0 不跳。
- * 绘制平面：角色 / 道具 / 组 = 地面（y = scene.ground.height）；机位 = 过机位当前位置的水平面（路径点 y = 机位高度）。
+ * 绘制平面：角色 / 道具 / 组 = 地面（y = scene.ground.height）；机位 = 过机位当前位置的水平面；视角接近平面时用地面投影（路径点 y 仍为机位高度）。
  * 机位路径默认 orient = keep（镜头不随切线转），「走到」对机位叫「推到」，停在目标前 1.5 m。
  * 坐标：一律文档口径（stage.world 局部坐标）。
  * 事件：'mode'(key | null) —— 进入 / 退出绘制态。
@@ -63,9 +63,11 @@ export class PathTool extends Emitter {
     dom.addEventListener('pointermove', (e) => this._onMove(e));
     window.addEventListener('pointerup', (e) => this._onUp(e));
     dom.addEventListener('dblclick', (e) => this._onDblClick(e));
+    dom.addEventListener('pointercancel', () => this.cancel());
+    window.addEventListener('blur', () => this.cancel());
     onKey((e) => this._onKey(e), { priority: KEY_PRIORITY.pathDraw }); // 先于时间轴 / 全局快捷键
     app.on('selection', (ent) => { if (this.mode && ent !== this.ent) this.cancel(); });
-    app.on('view', (pov) => { if (this.mode && pov) this.cancel(); });
+    app.on('view', () => this.cancel());
   }
 
   /** 实体能否画路径：角色 / 道具 / 组 / 机位。 */
@@ -82,7 +84,7 @@ export class PathTool extends Emitter {
     const ent = app.findEntity(targetId);
     if (!this.canDraw(ent)) { toast('请先选中角色、道具、组或机位'); return; }
     app.playback.pause();
-    app.setCameraView(false);
+    app.endPreview();
     app.select(ent.id);
     const anim = app.timeline.toJSON();
     const go = () => this.begin(mode, ent);
@@ -101,13 +103,25 @@ export class PathTool extends Emitter {
     this.ent = ent;
     this.start = this.startPoint(ent);
     this.planeY = this.start[1];
+    // 默认导演相机和机位同高，此时与机位高度平面的交点 t=0。
+    // 在整次绘制中固定使用地面投影定位 XZ，提交仍保留机位高度，避免逐点切换平面导致跳变。
+    const world = app.stage.world;
+    world.updateMatrixWorld(true);
+    const eye = world.worldToLocal(app.getRenderCamera().getWorldPosition(new THREE.Vector3()));
+    const focus = world.worldToLocal(app.rig.controls.target.clone());
+    this.pickPlaneY = ent.type === 'camera' && Math.abs(eye.y - this.planeY) < Math.max(0.1, eye.distanceTo(focus) * 0.15)
+      ? this.groundY : this.planeY;
     this.draft = [this.start];
     this.cursor = null;
     app.playback.pause();
     app.gizmo.setVisible(false);
+    app.pathOverlay.setMovePreview(null);
     app.rig.controls.mouseButtons.LEFT = -1; // 左键归绘制；⌥ 左键在 _onDown 里临时恢复环绕
-    const hint = ent.type === 'camera' ? HINTS[mode].replaceAll('地面', '机位高度平面') : HINTS[mode];
-    this._drawHint = `${hint} · ${ORBIT_HINT}`;
+    const hint = ent.type === 'camera'
+      ? this.pickPlaneY !== this.planeY ? `${HINTS[mode]} · 地面投影定位，轨迹保持机位高度` : HINTS[mode].replaceAll('地面', '机位高度平面')
+      : HINTS[mode];
+    this._viewHint = app.cameraView ? '切回导演视角可调整观察位置' : ORBIT_HINT;
+    this._drawHint = `${hint} · ${this._viewHint}`;
     this.hintEl.textContent = this._drawHint;
     this.hintEl.hidden = false;
     app.stage.viewport.classList.add('path-drawing');
@@ -123,6 +137,8 @@ export class PathTool extends Emitter {
     this.ent = null;
     this.draft = [];
     this._down = null;
+    this._stroke = null;
+    this._orbiting = false;
     app.rig.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
     app.gizmo.setVisible(app.gizmoShouldShow());
     this.hintEl.hidden = true;
@@ -151,9 +167,15 @@ export class PathTool extends Emitter {
 
   /** 光标处的绘制平面点（文档口径：角色 / 道具 / 组 = 地面，机位 = 机位高度）；看不到平面时 null。 */
   groundPoint(e) {
-    const point = this.planePoint(e, this.mode ? this.planeY : this.groundY);
-    if (this.mode) this.hintEl.textContent = point ? this._drawHint : `此处太远或接近地平线，请向下调整视角或平移到目标区域 · ${ORBIT_HINT}`;
+    const point = this.planePoint(e, this.mode ? this.pickPlaneY : this.groundY);
+    if (this.mode) this.hintEl.textContent = point ? this._drawHint : `此处太远或接近地平线，请向下调整视角或平移到目标区域 · ${this._viewHint}`;
+    if (point && this.mode) point[1] = this.planeY;
     return point;
+  }
+
+  /** 退化视角下草稿画在拾取平面上，让光标与反馈重合；实际路径高度不变。 */
+  _setDraft(points, options) {
+    this.app.pathOverlay.setDraft(this.pickPlaneY === this.planeY ? points : points.map(p => [p[0], this.pickPlaneY, p[2]]), options);
   }
 
   /** 光标射线与 world 局部坐标里水平面 y 的交点（[x, y, z]，相机背后 / 平行时 null）。 */
@@ -222,7 +244,7 @@ export class PathTool extends Emitter {
       const last = this._stroke[this._stroke.length - 1];
       if (g && (!last || dist2(g, last) >= STROKE_STEP)) {
         this._stroke.push(g);
-        this.app.pathOverlay.setDraft(this._stroke, { dots: false });
+        this._setDraft([this.start, ...this._stroke.slice(1)], { dots: false });
       }
       return;
     }
@@ -319,7 +341,7 @@ export class PathTool extends Emitter {
     for (let i = 1; i < raw.length; i++) len += dist2(raw[i], raw[i - 1]);
     if (pts.length < 2 || len < 0.1) {
       toast('路径太短，请按住左键在地面上拖动');
-      this.app.pathOverlay.setDraft([this.start]);
+      this._setDraft([this.start]);
       return;
     }
     pts[0] = this.start.slice();
@@ -338,11 +360,11 @@ export class PathTool extends Emitter {
       if (this.mode === 'arc' || this.mode === 'circle') {
         const meta = this._arcMeta(a ? a.point : g || this.start);
         const r = meta && arcPoints(meta, this.planeY);
-        ov.setDraft(r ? r.points : [this.start], { dots: false, closed: r?.closed || false });
+        this._setDraft(r ? r.points : [this.start], { dots: false, closed: r?.closed || false });
         return;
       }
       const at = a ? a.point : e.shiftKey ? g : null;
-      ov.setDraft((at && toward(this.start, at, { stopDistance: this._towardStop() })) || [this.start]);
+      this._setDraft((at && toward(this.start, at, { stopDistance: this._towardStop() })) || [this.start]);
       return;
     }
     this.cursor = g;
@@ -355,8 +377,8 @@ export class PathTool extends Emitter {
       : this.draft;
     if (this.mode === 'rectangle' && this.cursor) {
       const corners = rectangle(this.start, this.cursor);
-      this.app.pathOverlay.setDraft(corners ? [...corners, corners[0]] : [this.start], { interpolation: 'polyline' });
-    } else this.app.pathOverlay.setDraft(pts);
+      this._setDraft(corners ? [...corners, corners[0]] : [this.start], { interpolation: 'polyline' });
+    } else this._setDraft(pts);
   }
 
   _undoPoint() {

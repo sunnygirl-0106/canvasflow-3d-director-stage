@@ -35,14 +35,16 @@ export async function run() {
     && x.director.target.every((v, i) => Math.abs(v - x.camera.lookAt[i]) < 1e-6)), JSON.stringify(calibration.map(x => x.director)));
   await page.setViewport({width:1440,height:900}); await settle();
   const preview = await page.evaluate(() => {
-    const a = window.__app, before = JSON.stringify(a.store.document), sel = a.selectedId, hist = a.history.entries.length;
+    const a = window.__app;
+    a.setCameraView(true); a.select(a.entities.find(e => e.type === 'character').id);
+    const before = JSON.stringify(a.store.document), sel = a.selectedId, hist = a.history.entries.length;
     a.startPreview();
     const immediate = a.getRenderCamera() === a.findCamera(a.timeline.mainCameraId).cam;
     a.playback.pause(); a.playback.seek(2);
     a.beforeRender();
     return { immediate, pause: !!a.preview && a.cameraView && !a.playback.playing && a.playback.time === 2, clean: a._cleanDepth === 1 && !a.pathOverlay.group.visible && !a.selection.ring.visible, stable: before === JSON.stringify(a.store.document) && sel === a.selectedId && hist === a.history.entries.length };
   });
-  ok('播放首帧即机位，暂停保持画面，辅助物隐藏，文档/选择/撤销不变', Object.values(preview).every(Boolean), JSON.stringify(preview));
+  ok('手动进入机位视角后播放/暂停保持画面，辅助物隐藏，文档/选择/撤销不变', Object.values(preview).every(Boolean), JSON.stringify(preview));
   await page.screenshot({path:`${OUT}/camera-paused.png`});
   const labels = await page.evaluate(async () => {
     const a = window.__app, c = a.selected;
@@ -80,13 +82,16 @@ export async function run() {
   ok('横竖导出设置均不改变普通播放的全视口 aspect，框和遮罩隐藏', ratios.every(r=>r.full&&r.height>=.15&&r.height<=.25&&Math.abs(r.aspect-r.viewport)<.001&&r.frame===null&&r.hidden),JSON.stringify(ratios));
   await page.screenshot({path:`${OUT}/camera-portrait.png`});
   await page.evaluate(()=>{const a=window.__app;a.setRatio('16:9');a.stopPreview();});
-  ok('停止回0和导演编辑视角，洁净计数归零',await page.evaluate(()=>{const a=window.__app;return !a.preview&&!a.cameraView&&!a.timeline.active&&a.playback.time===0&&a._cleanDepth===0;}));
+  ok('停止回0并保留机位视角，洁净计数归零',await page.evaluate(()=>{const a=window.__app;return !a.preview&&a.cameraView&&!a.timeline.active&&a.playback.time===0&&a._cleanDepth===0;}));
   await page.keyboard.press('Space'); await settle(100);
   ok('Space复用预览入口',await page.evaluate(()=>!!window.__app.preview&&window.__app.playback.playing));
   await page.click('#viewtabs [data-v="director"]');
-  ok('导演标签暂停退出预览，拖播放头不强制切机位',await page.evaluate(()=>{const a=window.__app;a.playback.seek(3);return !a.preview&&!a.cameraView&&!a.playback.playing&&a._cleanDepth===0;}));
+  ok('导演标签退出机位预览但继续播放，拖播放头不强制切机位',await page.evaluate(()=>{const a=window.__app;a.playback.seek(3);return !a.preview&&!a.cameraView&&a.playback.playing&&a._cleanDepth===0;}));
   const lifecycle=await page.evaluate(async()=>{
     const a=window.__app;
+    a.setCameraView(true);
+    // 手动切机位会创建截图缩略图，先完成加载，再验证本轮删除机位释放资源。
+    await Promise.all([...document.querySelectorAll('.shot-card img')].map(img => img.decode()));
     a.startPreview();a.playback.pause();a.playback.loop=false;a.playback.seek(a.timeline.duration);a.playback.play();
     const restart=a.playback.time===0&&!!a.preview;
     a.playback.loop=true;a.playback._last-=11000;a.playback.update();
@@ -96,14 +101,14 @@ export async function run() {
     const end=a.playback.time===10&&!a.playback.playing&&!!a.preview;
     const c2=a.addCamera('front_mid'); const main=a.timeline.mainCameraId;
     a.remove(main);const fallback=!a.playback.playing&&a.getRenderCamera()===c2.cam;
-    a.remove(c2.id);const empty=!a.preview&&!a.cameraView&&!a.startPreview()&&!a.playback.playing&&a._cleanDepth===0;
+    a.remove(c2.id);const empty=!a.preview&&!a.cameraView&&a.startPreview()&&a.playback.playing&&a._cleanDepth===0;
     return {restart,loop,end,fallback,empty};
   });
-  ok('末端重播/循环/自然结束/主机位删除回退/无机位拒绝',Object.values(lifecycle).every(Boolean),JSON.stringify(lifecycle));
+  ok('末端重播/循环/自然结束/当前机位删除回退/无机位仍可在导演视角播放',Object.values(lifecycle).every(Boolean),JSON.stringify(lifecycle));
   await page.evaluate(async doc=>{const a=window.__app;await a.loadDocument(doc,{applyView:true});a.select(doc.entities[0].id);a.history.reset();},d);
   const replaced = await page.evaluate(async doc => {
     const a = window.__app;
-    a.startPreview();
+    a.setCameraView(true); a.startPreview();
     await a.loadDocument(doc);
     const camera = !!a.preview && !a.playback.playing && a.getRenderCamera() === a.cameras[0].cam && a._cleanDepth === 1;
     const { createEmptyDocument } = await import('/src/doc/schema.js');
@@ -141,7 +146,7 @@ export async function run() {
   const deleted=await page.evaluate(id=>!window.__app.timeline.tracks.some(t=>t.id===id),track);
   await page.evaluate(()=>window.__app.history.undo());
   ok('移除轨道保留实体，一步撤销恢复',deleted&&await page.evaluate(id=>window.__app.entities.length===3&&window.__app.timeline.tracks.some(t=>t.id===id),track));
-  await page.evaluate(async doc=>{const a=window.__app;await a.loadDocument(doc);const c=a.cameras[0],pos=c.toJSON().transform.pos;a.timeline.addPath({target:c.id,points:[pos,[pos[0]+1,pos[1],pos[2]]],duration:10,orient:'keep'});a.history.capture();a.startPreview();},d);await settle(150);
+  await page.evaluate(async doc=>{const a=window.__app;await a.loadDocument(doc);const c=a.cameras[0],pos=c.toJSON().transform.pos;a.timeline.addPath({target:c.id,points:[pos,[pos[0]+1,pos[1],pos[2]]],duration:10,orient:'keep'});a.history.capture();a.setCameraView(true);a.startPreview();},d);await settle(150);
   await page.screenshot({path:`${OUT}/moving.png`});
   const video=await page.evaluate(async()=>{
     const a=window.__app; a.playback.pause();a.playback.seek(2);

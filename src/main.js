@@ -13,8 +13,6 @@ import { TimelinePanel } from './ui/timeline/TimelinePanel.js';
 import { ExportModal } from './ui/ExportModal.js';
 import { AiPanel } from './ui/AiPanel.js';
 import { toast, isTyping } from './util/dom.js';
-import { SaveStatus } from './ui/SaveStatus.js';
-import { AutoSave } from './app/SceneFile.js';
 import { AiAgent } from './ai/agent.js';
 import { OpenAICompatProvider, loadSettings } from './ai/provider.js';
 import { onKey, KEY_PRIORITY } from './util/keys.js';
@@ -74,7 +72,7 @@ app.on('view', (on) => {
   $('navg').title = on ? '返回导演视角并重置（不修改机位）' : '重置视角';
   for (const b of $('viewtabs').querySelectorAll('button')) b.classList.toggle('on', (b.dataset.v === 'camera') === on);
 });
-// 机位视角旁的机位名：idle 灰字 = 当前机位；时间轴 active 透过主机位 = 强调色「▶ 主机位 · 名字」
+// 机位视角旁显示用户指定的机位；播放时该机位恰为主机位则强调标识。
 const renderPov = () => {
   const camera = app.findCamera(app.povCameraId);
   const main = app.mainPreview;
@@ -96,8 +94,6 @@ $('closeBtn').onclick = () => toast('（演示）关闭');
 
 // 撤销只订阅已提交的文档事务；交互预览由各编辑入口管理。
 const history = app.history;
-app.autosave = new AutoSave(app);
-new SaveStatus($('saveStatus'), app, app.autosave);
 
 // 键盘：输入控件内不拦截（文本框里的 ⌘Z 留给浏览器做文字撤销）
 onKey((e) => {

@@ -29,7 +29,7 @@ const _s = new THREE.Vector3();
  *
  * 坐标：overlay 挂在 stage.world 下，路径点（文档口径 = 实体父坐标系）直接作为局部坐标。
  * 顶点球 / 标记 / 亮点用 onBeforeRender 按相机距离缩放，保持固定屏幕尺寸（不论场景缩放）。
- * 机位视角下整体隐藏（从镜头里看不出现编辑标记）；洁净渲染（截图 / 机位预览）也隐藏。
+ * 机位视角下仅绘制期间显示草稿反馈；洁净渲染（截图 / 机位预览）始终隐藏。
  *
  * 拖动预览：setPreview 仅更新当前来源几何；角色由 PathEditor 通过 Playback 同步求值。
  */
@@ -256,7 +256,7 @@ export class PathOverlay {
       m.renderOrder = 13;
       this.draftGroup.add(m);
     }
-    this.app.stage.invalidate();
+    this._applyVisible();
   }
 
   /** 运镜预览：虚线画出将要生成的路径（points 为 null 清空）。 */
@@ -306,7 +306,7 @@ export class PathOverlay {
 
   // ---- 显隐 ----
   _applyVisible() {
-    this.group.visible = !this._hidden && !this.app.cameraView;
+    this.group.visible = !this._hidden && (!this.app.cameraView || this.draftGroup.children.length > 0);
     this.app.stage.invalidate();
   }
 
