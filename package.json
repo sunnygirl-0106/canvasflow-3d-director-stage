@@ -16,10 +16,13 @@
     "test:unit": "node --test tests/*.test.mjs",
     "docs:ai": "node scripts/gen-ai-vocab.mjs",
     "test:e2e:all": "node selftest.mjs all",
-    "check": "npm run lint && npm run test:unit"
+    "check": "npm run lint && npm run test:unit",
+    "test:e2e:required": "node scripts/run-e2e.mjs required",
+    "test:browser:install": "node scripts/install-test-browser.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@puppeteer/browsers": "3.0.5",
     "eslint": "^9.39.5",
     "globals": "^17.13.0",
     "pixelmatch": "^8.0.0",

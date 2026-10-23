@@ -1,0 +1,30 @@
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+✅ 导出场景：走路角色 + 半环绕主机位 + 全景 — {"m":"i1tes8d5","f":"d1aomare","c":"jh9ppqy0","mName":"角色C","cName":"机位2","seg":true,"pano":true}
+✅ 验收3 renderFrame(2.0) ≡ evaluate(2.0) 后 snapshot(主机位, 1920×1080) — 差异 0.0000%
+✅ 验收4 同一文档导出两次 30 帧 PNG 序列逐帧 md5 相同 — 帧数 30/30，不同帧 30/30
+✅ 验收4 导出后播放头回到导出前（时间 + active）、exportDocument 不变、History 不变 — active true→true t 1.25→1.25 doc true hist 1/0→1/0
+✅ 验收4 导出前 idle → 导出后仍 idle、文档不变 — active=false t=0
+✅ 验收1 精灵名牌：快照里采到白字，透明底不出现白色气泡；DOM 名牌层隐藏 — 白字像素 46，字形差分 {"coverage":0.060851926977687626,"spanX":0.803921568627451,"spanY":0.4827586206896552}，DOM=none，精灵 3
+✅ 验收1 关闭后 DOM 恢复、精灵移除；scene.labels=false 时两者都不显示 — 关闭：DOM=block 精灵 0；labels=false：白字 0 DOM=none
+✅ 验收2 精灵名牌框底边中点 与 DOM 名牌偏移后锚点 差 < 4 px（1080p） — 锚点 (960.0, 328.5) 名牌底 (960.0, 318.6641196778516) 差 0.00 px，框宽 50.4
+✅ 验收5 9:16 + 1080p → 1080×1920；auto → 1920×1080；全部比例 × 分辨率宽高均为偶数 — 9:16=1080×1920 auto=1920×1080 奇数 0/21
+✅ 验收5 弹层分辨率显示随取景比例（9:16 1080p） — 1080p · 1080×1920
+✅ 弹层：机位行显示主机位、估算 90 帧 3 s；导出中界面锁住 — 主机位机位2 | 1920×1080 · 90 帧 · 时长 3 s | {"body":true,"tl":"none","dock":"0.4"}
+✅ 验收6 MP4 文件存在且 ≥ 100 KB（自动下载，文件名 名称_宽x高_fps） — 未命名场景_1920x1080_30fps.mp4 4479 KB
+✅ 验收6 mp4 盒子解析（mvhd / tkhd / stsz / avc1）：3.00 s、90 帧、avc1、1920×1080 — {"duration":3,"width":1920,"height":1080,"codec":"avc1","frames":90}
+✅ 验收6 ffprobe：3.00 ± 0.05 s、90 帧、h264、1920×1080 — {"duration":3,"frames":90,"codec":"h264","width":1920,"height":1080}
+✅ 导出不记撤销 — 4→4
+✅ 验收7 导出到 30% 取消：无文件、播放头恢复、UI 解锁、无 console 错误 — 取消于「帧 54/180 · 已用 0:03 · 预计剩余 0:07」，文件 1→1，t 0.75→0.75，UI {"body":false,"start":true,"tl":"auto"}
+✅ 编码边界 queue：及时退出、只清理一次、文档/播放头/渲染状态恢复 — {"phase":"queue","error":{"name":"AbortError","message":"导出已取消"},"wasLocked":true,"closes":1,"frames":1,"restored":true}
+✅ 编码边界 flush：及时退出、只清理一次、文档/播放头/渲染状态恢复 — {"phase":"flush","error":{"name":"AbortError","message":"导出已取消"},"wasLocked":true,"closes":1,"frames":2,"restored":true}
+✅ 编码边界 error：及时退出、只清理一次、文档/播放头/渲染状态恢复 — {"phase":"error","error":{"name":"Error","message":"injected codec failure"},"wasLocked":true,"closes":1,"frames":1,"restored":true}
+✅ 验收8 window.VideoEncoder = undefined → 菜单项置灰 + 提示、弹层「开始导出」禁用 — {"greyed":true,"toast":"导出视频需要 Chrome 或 Edge 浏览器","noModal":true,"btnDisabled":true,"hint":"导出视频需要 Chrome 或 Edge 浏览器"}
+✅ 验收9 导出帧里没有 gizmo / 选中环 / 视锥 / 路径线（采样无 accent 蓝 / 红；与未选中时的帧逐像素相同） — {"shown":{"gizmo":true,"ring":true,"path":true},"sampled":15,"bad":0,"same":true}
+✅ 导出结束后 gizmo / 选中环 / 路径 overlay 恢复显示 — {"gizmo":true,"ring":true,"path":true}
+✅ 验收11 示例 sample.mp4：5 s · 1080p · 150 帧 — 6.53 MB，用时 10.3 s（headless swiftshader），{"duration":5,"frames":150,"codec":"h264","width":1920,"height":1080}
+✅ 名牌避让：无重叠时 快照（避让开 / 关）逐像素相同、DOM 名牌位置相同 — {"same":true,"domSame":true,"n":4}
+✅ 名牌避让：前后站位 —— 关避让时精灵 / DOM 名牌相交（构造有效） — 精灵 角色E@(935,502 49×28) 角色F@(961,525 48×28)；DOM 角色E@(523,422 40×24) 角色F@(542,432 40×24)
+✅ 名牌避让：前后站位 —— 截图（精灵）与视口（DOM）名牌矩形都不相交，远的在上 — 精灵 角色E@(935,502 49×28) 角色F@(961,469 48×28)；DOM 角色E@(523,422 40×24) 角色F@(542,394 40×24)；截图 test-output/export/20_labels_overlap.png
+✅ 运行期无 console 错误
+
+=== 27/27 passed ===

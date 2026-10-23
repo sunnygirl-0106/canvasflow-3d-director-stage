@@ -22,9 +22,10 @@ if (!URL_) {
 }
 
 export const results = [];
-export const ok = (name, pass, detail = '') => { results.push({ pass }); console.log(`${pass ? '✅' : '❌'} ${name}${detail ? ' — ' + detail : ''}`); };
+export const ok = (name, pass, detail = '') => { results.push({ name, pass, detail }); console.log(`${pass ? '✅' : '❌'} ${name}${detail ? ' — ' + detail : ''}`); };
 
 export const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
+console.log(`浏览器：${await browser.version()}；Node：${process.version}；路径：${CHROME}`);
 export const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 810, deviceScaleFactor: 1 });
 export const errs = [];
@@ -36,10 +37,20 @@ page.on('pageerror', (e) => errs.push('PAGEERROR: ' + e.message));
 export async function openApp() {
   await page.goto(URL_, { waitUntil: 'networkidle0', timeout: 30000 });
   await page.waitForFunction(() => window.__app?.ready, { timeout: 30000 });
+  await page.evaluate(async () => {
+    const family = getComputedStyle(document.body).fontFamily;
+    await document.fonts.load(`400 14px ${family}`, '角色机位');
+    await document.fonts.load(`400 12px ${family}`, '角色机位');
+    await document.fonts.ready;
+  });
 }
 
 /** 关浏览器与服务，以 code 退出。 */
 export async function close(code) {
+  const out = `test-output/reports/${process.argv[2] || 'default'}`;
+  fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(`${out}/results.json`, JSON.stringify({ results, errors: errs, warnings: warns, browser: await browser.version(), node: process.version, code }, null, 2));
+  if (code) await page.screenshot({ path: `${out}/failure.png`, fullPage: true }).catch(() => {});
   await browser.close();
   await server?.close();
   process.exit(code);
@@ -66,3 +77,10 @@ export async function twoCharacterFixture() {
     a.frameSubjects(); a.select(null); a.history.reset();
   });
 }
+
+export async function fail(err) {
+  errs.push(err.stack || String(err));
+  console.error(err);
+  await close(1);
+}
+process.on('SIGTERM', () => void fail(new Error('套件超时或作业取消')));

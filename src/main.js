@@ -13,6 +13,7 @@ import { TimelinePanel } from './ui/timeline/TimelinePanel.js';
 import { ExportModal } from './ui/ExportModal.js';
 import { AiPanel } from './ui/AiPanel.js';
 import { toast, isTyping } from './util/dom.js';
+import { SaveStatus } from './ui/SaveStatus.js';
 import { AutoSave } from './app/SceneFile.js';
 import { AiAgent } from './ai/agent.js';
 import { OpenAICompatProvider, loadSettings } from './ai/provider.js';
@@ -95,7 +96,8 @@ $('closeBtn').onclick = () => toast('（演示）关闭');
 
 // 撤销只订阅已提交的文档事务；交互预览由各编辑入口管理。
 const history = app.history;
-new AutoSave(app); // 撤销栈变化后防抖 1s 写 localStorage
+app.autosave = new AutoSave(app);
+new SaveStatus($('saveStatus'), app, app.autosave);
 
 // 键盘：输入控件内不拦截（文本框里的 ⌘Z 留给浏览器做文字撤销）
 onKey((e) => {
@@ -144,7 +146,7 @@ async function initialize() {
     app.ready = true;
     $('app').inert = false;
     startup.remove();
-    AutoSave.offerRestore(app);
+
   } catch (err) {
     startup.textContent = '场景加载失败：' + err.message;
     const retry = document.createElement('button');

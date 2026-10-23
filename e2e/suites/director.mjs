@@ -26,7 +26,13 @@ export async function run() {
     await page.screenshot({ path: `${OUT}/director-${width}x${height}.png` });
   }
   fs.writeFileSync(`${OUT}/calibration.json`, JSON.stringify(calibration, null, 2));
-  ok('复验统一构图：人物全身入镜，脚底约43%', calibration.every(x => x.director.height >= .15 && x.director.height <= .22 && x.director.feet >= .4 && x.director.feet <= .46), JSON.stringify(calibration.map(x => x.director)));
+  // 第五轮最新构图与 defaultview 同合同：机位 [0,2.2,10] 看向 [0,1.2,0]，FOV 50。
+  // 旧的约43%来自调整注视高度前的画面，不再作为当前产品基线。
+  ok('复验统一构图：全身入镜、脚底约63%，保留最新机位参数', calibration.every(x =>
+    x.director.height >= .15 && x.director.height <= .22 && x.director.feet >= .61 && x.director.feet <= .65
+    && x.camera.transform.pos.join() === '0,2.2,10' && x.camera.lookAt.join() === '0,1.2,0' && x.camera.fov === 50
+    && x.director.pos.every((v, i) => Math.abs(v - x.camera.transform.pos[i]) < 1e-6)
+    && x.director.target.every((v, i) => Math.abs(v - x.camera.lookAt[i]) < 1e-6)), JSON.stringify(calibration.map(x => x.director)));
   await page.setViewport({width:1440,height:900}); await settle();
   const preview = await page.evaluate(() => {
     const a = window.__app, before = JSON.stringify(a.store.document), sel = a.selectedId, hist = a.history.entries.length;

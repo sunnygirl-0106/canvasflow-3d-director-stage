@@ -1,0 +1,18 @@
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+✅ 启动 reset 不存档；提交修改写入真实 IndexedDB — {"id":"f686db0b-b8e0-40b8-aa6b-b8eee2cc1457","duration":17,"state":"saved","initial":0}
+✅ 刷新只提供恢复点，场景不会被异步读取自动替换 — {"duration":10,"count":1}
+✅ 真实点击恢复成功，恢复经原子加载且可撤销
+✅ 撤销/重做分别持久化最新提交 — {"undo":10,"redo":17}
+✅ 有效 2:1 大图使场景超过 4 MiB，仍可自动保存 — {"id":"d0072426-18d6-4387-9d00-5405a002a1c6","bytes":9622659,"active":true}
+✅ 大图刷新恢复：资源完整且保存状态正确
+✅ 配额与真实事务中断保留上次快照，并提供手动导出 — {"quota":true,"aborted":true,"exportVisible":true}
+✅ 保存失败后仍能下载完整场景 JSON
+✅ 重试成功恢复已保存状态
+✅ 双标签页各自保留快照；旧界面不能删除另一页刚更新的记录 — {"deleted":false,"first":21,"second":23}
+✅ 旧存档验证迁移一次；删除候选后不重复迁移，旧键保留回退 — {"duration":27,"original":true}
+✅ 损坏旧键与新记录可跳过，不阻断启动，仍可管理恢复点
+✅ 恢复点满额不淘汰未处理记录；同会话不倒退；失败迁移不写成功标记 — {"full":true,"migrationFull":true,"unchanged":true,"sequence":2,"removedOld":false,"migrated":true}
+✅ 存储不可用仍可打开和编辑场景，持续显示保存失败与导出入口
+✅ 运行期无 console 错误
+
+=== 15/15 passed ===

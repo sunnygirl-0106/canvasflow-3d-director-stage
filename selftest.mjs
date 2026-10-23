@@ -40,9 +40,9 @@
 //   node selftest.mjs all
 //     依次跑默认套件与上面全部验收套件（各起一个子进程），任一失败退出码 1。
 import { execFileSync } from 'node:child_process';
+import { SUITES } from './e2e/suites.mjs';
 
 const [CMD = 'default', ...ARGS] = process.argv.slice(2);
-const SUITES = ['motion', 'revision5', 'round5', 'defaultview', 'pathselect', 'polish', 'zoom', 'round4', 'tooltips', 'round3', 'round2', 'director', 'default', 'doc', 'anim', 'tl', 'path', 'cam', 'export', 'ai', 'store'];
 
 if (CMD === 'posediff') {
   const { poseDiff } = await import('./e2e/posediff.mjs');
@@ -51,14 +51,9 @@ if (CMD === 'posediff') {
 
 // all：逐个套件各起一个子进程（套件之间不共享页面状态），汇总退出码
 if (CMD === 'all') {
-  let bad = 0;
-  for (const suite of SUITES) {
-    console.log(`\n##### ${suite} #####`);
-    try { execFileSync(process.execPath, [process.argv[1], suite], { stdio: 'inherit' }); }
-    catch { bad++; console.log(`##### ${suite} 失败 #####`); }
-  }
-  console.log(`\n##### all：${bad ? bad + ' 个套件失败' : '全部通过'} #####`);
-  process.exit(bad ? 1 : 0);
+  try { execFileSync(process.execPath, ['scripts/run-e2e.mjs', 'all'], { stdio: 'inherit' }); }
+  catch { process.exit(1); }
+  process.exit(0);
 }
 
 const TOOLS = ['calib', 'collide', 'poses'];
@@ -71,10 +66,14 @@ const h = await import('./e2e/harness.mjs');
 if (CMD === 'calib') await h.close(await (await import('./e2e/tools.mjs')).calib(ARGS));
 if (CMD === 'collide') await h.close(await (await import('./e2e/tools.mjs')).collide(ARGS[0]));
 
-await h.openApp();
-if (CMD === 'poses') {
-  await (await import('./e2e/tools.mjs')).shootPoses(ARGS[0] || 'test-output/poses', ARGS[1]);
-  await h.close(h.errs.length ? 1 : 0);
+try {
+  await h.openApp();
+  if (CMD === 'poses') {
+    await (await import('./e2e/tools.mjs')).shootPoses(ARGS[0] || 'test-output/poses', ARGS[1]);
+    await h.close(h.errs.length ? 1 : 0);
+  }
+  await (await import(`./e2e/suites/${CMD}.mjs`)).run();
+  await h.finish();
+} catch (err) {
+  await h.fail(err);
 }
-await (await import(`./e2e/suites/${CMD}.mjs`)).run();
-await h.finish();

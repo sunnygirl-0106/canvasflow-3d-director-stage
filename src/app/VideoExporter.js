@@ -1,16 +1,13 @@
 // 导出视频：第 i 帧 = timeline.evaluate(t0 + i/fps) 后用主机位离屏渲染。
 // evaluate 是纯函数，所以导出完全离线、逐帧，与机器快慢无关；不动主 canvas 尺寸，不改文档。
 import * as THREE from 'three';
+import { withVideoEncoder, exportAbortError as abortError } from './VideoEncoding.js';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { DEFAULT_SCENE_NAME } from '../doc/schema.js';
 import { exportCamera, encoderConfig, frameCount, ExportError, hasWebCodecs, isExportSupported, UNSUPPORTED_MSG } from './exportSpec.js';
 
 // 规格 / 能力检测在 exportSpec.js（不带 mp4-muxer，首屏可直接引用）；这里转出，老调用方式不变
 export * from './exportSpec.js';
-
-function abortError() {
-  return new DOMException('导出已取消', 'AbortError');
-}
 
 /**
  * 固定分辨率的离屏渲染：主渲染器 → WebGLRenderTarget（4×MSAA）→ readRenderTargetPixels。
@@ -94,25 +91,26 @@ async function exportSession(app, { labels }, fn) {
 export async function renderFrames(app, { width, height, fps, range, labels = true, signal, onProgress }, onFrame) {
   const cam = exportCamera(app);
   if (!cam) throw new ExportError('请先添加机位');
+  return exportSession(app, { labels }, () => renderFramesInSession(app, cam, { width, height, fps, range, signal, onProgress }, onFrame));
+}
+
+/** 调用方持有整个导出会话；编码 flush 也在会话内，期间不提前解锁。 */
+async function renderFramesInSession(app, cam, { width, height, fps, range, signal, onProgress }, onFrame) {
   const [t0] = range;
   const n = frameCount(range, fps);
-  return exportSession(app, { labels }, async () => {
-    const off = new OfflineRenderer(app.stage.renderer, width, height);
-    try {
-      for (let i = 0; i < n; i++) {
-        if (signal?.aborted) throw abortError();
-        const t = t0 + i / fps;
-        const pixels = renderAt(app, off, cam.ent, t);
-        await onFrame?.(pixels, { i, t, n, width, height });
-        onProgress?.(i + 1, n);
-        await new Promise((r) => setTimeout(r, 0));
-      }
+  const off = new OfflineRenderer(app.stage.renderer, width, height);
+  try {
+    for (let i = 0; i < n; i++) {
       if (signal?.aborted) throw abortError();
-      return { n, camera: cam };
-    } finally {
-      off.dispose();
+      const t = t0 + i / fps;
+      const pixels = renderAt(app, off, cam.ent, t);
+      await onFrame?.(pixels, { i, t, n, width, height });
+      onProgress?.(i + 1, n);
+      await new Promise((r) => setTimeout(r, 0));
     }
-  });
+    if (signal?.aborted) throw abortError();
+    return { n, camera: cam };
+  } finally { off.dispose(); }
 }
 
 /** 求值到 t 并渲染一帧（调用方已处于导出会话 / 洁净渲染区间）。 */
@@ -134,33 +132,20 @@ export async function exportVideo(app, { width, height, fps, range, labels = tru
   const cfg = encoderConfig(width, height, fps);
   if (!(await isExportSupported(width, height, fps))) throw new ExportError(`当前浏览器不支持 ${width}×${height} 的 H.264 编码`);
 
-  const target = new ArrayBufferTarget();
-  const muxer = new Muxer({ target, video: { codec: 'avc', width, height, frameRate: fps }, fastStart: 'in-memory' });
-  let encErr = null;
-  const encoder = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-    error: (e) => { encErr = e; },
-  });
-  encoder.configure(cfg);
-  const gop = Math.max(1, Math.round(fps * 2));
-  const dur = Math.round(1e6 / fps);
-  try {
-    const { n } = await renderFrames(app, { width, height, fps, range, labels, signal, onProgress }, async (pixels, { i }) => {
-      if (encErr) throw encErr;
-      const frame = new VideoFrame(pixels, { format: 'RGBA', codedWidth: width, codedHeight: height, timestamp: Math.round((i * 1e6) / fps), duration: dur });
-      try { encoder.encode(frame, { keyFrame: i % gop === 0 }); }
-      finally { frame.close(); }
-      // 背压：编码器积压过多时等它消化（否则 1080p 帧会堆满内存）
-      while (encoder.encodeQueueSize > 4 && !encErr) await new Promise((r) => setTimeout(r, 2));
-    });
-    await encoder.flush();
-    if (encErr) throw encErr;
+  if (signal?.aborted) throw abortError();
+  const cam = exportCamera(app);
+  if (!cam) throw new ExportError('请先添加机位');
+  return exportSession(app, { labels }, async () => {
+    const target = new ArrayBufferTarget();
+    const muxer = new Muxer({ target, video: { codec: 'avc', width, height, frameRate: fps }, fastStart: 'in-memory' });
+    const { n } = await withVideoEncoder(cfg, { signal, output: (chunk, meta) => muxer.addVideoChunk(chunk, meta) },
+      (encode) => renderFramesInSession(app, cam, { width, height, fps, range, signal, onProgress },
+        (pixels, { i }) => encode(pixels, i)));
+    if (signal?.aborted) throw abortError();
     muxer.finalize();
     const name = (app.docMeta.name || DEFAULT_SCENE_NAME).replace(/[\\/:*?"<>|]/g, '_');
     return { blob: new Blob([target.buffer], { type: 'video/mp4' }), filename: `${name}_${width}x${height}_${fps}fps.mp4`, frames: n, width, height, fps };
-  } finally {
-    if (encoder.state !== 'closed') encoder.close();
-  }
+  });
 }
 
 /**

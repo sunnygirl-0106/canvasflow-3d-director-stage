@@ -1,0 +1,9 @@
+[
+  {
+    "suite": "default",
+    "status": "timeout",
+    "startedAt": "2026-10-23T06:03:55.167Z",
+    "code": null,
+    "durationMs": 4
+  }
+]

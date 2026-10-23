@@ -90,7 +90,7 @@ export async function run() {
       const px = cv.getContext('2d').getImageData(x0, y0, w, h).data;
       let n = 0;
       for (let i = 0; i < px.length; i += 4) if (px[i] > 245 && px[i+1] > 245 && px[i+2] > 245) n++;
-      return { ax, ay, n, fraction: n / (w*h), bx: box.x + box.w/2, by: box.y + box.h, bh: box.h, bw: box.w };
+      return { pixels: Array.from(px), w, h, ax, ay, n, fraction: n / (w*h), bx: box.x + box.w/2, by: box.y + box.h, bh: box.h, bw: box.w };
 
     };
     a.playback.stop();
@@ -107,11 +107,25 @@ export async function run() {
     const hiddenState = { dom: getComputedStyle(layer).display, groupVis: a.labelSprites.group.visible };
     a.setLabelPreview(false);
     a.setLabelsVisible(true);
-    return { on, onState, offState, hidden, hiddenState };
+    // 同一背景的开关差分：字形必须带来可见亮度变化，且保留透明空隙。
+    // 使用框内覆盖率与跨度，避免把 19px/700 的绝对纯白像素数套在 14px/400 上。
+    let ink = 0, minX = on.w, maxX = -1, minY = on.h, maxY = -1;
+    for (let i = 0; i < on.pixels.length; i += 4) {
+      const rgb = on.pixels.slice(i, i + 3), bg = hidden.pixels.slice(i, i + 3);
+      if (Math.min(...rgb) > 180 && rgb.some((v, c) => v - bg[c] > 30)) {
+        ink++;
+        const x = (i / 4) % on.w, y = Math.floor(i / 4 / on.w);
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      }
+    }
+    const glyph = { coverage: ink / (on.w * on.h), spanX: (maxX - minX + 1) / on.w, spanY: (maxY - minY + 1) / on.h };
+    delete on.pixels; delete hidden.pixels;
+    return { on, onState, offState, hidden, hiddenState, glyph };
   }, ids);
   ok('验收1 精灵名牌：快照里采到白字，透明底不出现白色气泡；DOM 名牌层隐藏',
-    lab.on.n > 50 && lab.on.fraction < .65 && lab.onState.dom === 'none' && lab.onState.vis && lab.onState.sprites >= 2,
-    `白字像素 ${lab.on.n}，DOM=${lab.onState.dom}，精灵 ${lab.onState.sprites}`);
+    lab.on.n > 0 && lab.glyph.coverage > .01 && lab.glyph.coverage < .65 && lab.glyph.spanX > .2 && lab.glyph.spanY > .2 && lab.on.fraction < .65 && lab.onState.dom === 'none' && lab.onState.vis && lab.onState.sprites >= 2,
+    `白字像素 ${lab.on.n}，字形差分 ${JSON.stringify(lab.glyph)}，DOM=${lab.onState.dom}，精灵 ${lab.onState.sprites}`);
   ok('验收1 关闭后 DOM 恢复、精灵移除；scene.labels=false 时两者都不显示',
     lab.offState.dom === 'block' && lab.offState.sprites === 0 && !lab.offState.groupVis && lab.hidden.n === 0 && lab.hiddenState.dom === 'none' && !lab.hiddenState.groupVis,
     `关闭：DOM=${lab.offState.dom} 精灵 ${lab.offState.sprites}；labels=false：白字 ${lab.hidden.n} DOM=${lab.hiddenState.dom}`);
@@ -213,6 +227,55 @@ export async function run() {
     `取消于「${at}」，文件 ${filesBefore}→${fs.readdirSync(dl).length}，t ${cBefore.time}→${cAfter.time}，UI ${JSON.stringify(ui7)}`);
   await page.evaluate(() => window.__exportModal.close());
   await page.evaluate(() => window.__app.playback.stop());
+
+  // 确定性注入编码积压/flush/异步报错，仍通过真实 WebGL 导出会话验恢复。
+  const boundaries = await page.evaluate(async () => {
+    const a = window.__app;
+    const { exportVideo } = await import('/src/app/VideoExporter.js');
+    const native = window.VideoEncoder;
+    const results = [];
+    for (const phase of ['queue', 'flush', 'error']) {
+      const ac = new AbortController();
+      let encoder, rejectFlush, wasLocked = false;
+      const before = { doc: JSON.stringify(a.store.document), time: a.playback.time, active: a.timeline.active, hist: a.history.entries.length };
+      class FakeEncoder {
+        state = 'unconfigured'; encodeQueueSize = 0; closes = 0; frames = 0;
+        static async isConfigSupported() { return { supported: true }; }
+        constructor(callbacks) { this.callbacks = callbacks; encoder = this; }
+        configure() { this.state = 'configured'; }
+        encode() {
+          this.frames++;
+          if (phase === 'flush') return;
+          this.encodeQueueSize = 5;
+          setTimeout(() => {
+            wasLocked = a.exporting && a.stage.suspended;
+            if (phase === 'error') this.callbacks.error(new Error('injected codec failure'));
+            else { ac.abort(); this.callbacks.error(new Error('late error after cancel')); }
+          }, 10);
+        }
+        flush() {
+          return new Promise((_, reject) => {
+            rejectFlush = reject;
+            setTimeout(() => { wasLocked = a.exporting && a.stage.suspended; ac.abort(); }, 10);
+          });
+        }
+        close() { this.closes++; this.state = 'closed'; rejectFlush?.(new Error('closed')); }
+      }
+      window.VideoEncoder = FakeEncoder;
+      let error;
+      try { await exportVideo(a, { width: 160, height: 90, fps: 10, range: [0, .2], signal: ac.signal }); }
+      catch (err) { error = { name: err.name, message: err.message }; }
+      finally { window.VideoEncoder = native; }
+      results.push({ phase, error, wasLocked, closes: encoder.closes, frames: encoder.frames,
+        restored: !a.exporting && !a.stage.suspended && !a.labelSprites.enabled && a._cleanDepth === 0
+          && a.playback.time === before.time && a.timeline.active === before.active
+          && JSON.stringify(a.store.document) === before.doc && a.history.entries.length === before.hist });
+    }
+    return results;
+  });
+  for (const r of boundaries) ok(`编码边界 ${r.phase}：及时退出、只清理一次、文档/播放头/渲染状态恢复`,
+    r.restored && r.wasLocked && r.closes === 1 && r.frames === (r.phase === 'flush' ? 2 : 1)
+      && (r.phase === 'error' ? r.error?.message === 'injected codec failure' : r.error?.name === 'AbortError'), JSON.stringify(r));
 
   // ---- 验收 8 不支持的浏览器 ----
   const unsup = await page.evaluate(async () => {

@@ -1,0 +1,28 @@
+
+##### director #####
+浏览器：Chrome/150.0.7871.24；Node：v22.22.1；路径：/Users/4paradigm/cowork/Projects/CanvasFlow/3D导演台/demo/.cache/test-browser/chrome/mac_arm-150.0.7871.24/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+✅ 第五轮双人一机、无初始路径、10s/30fps、选中角色、时间轴关闭
+✅ 复验统一构图：全身入镜、脚底约63%，保留最新机位参数 — [{"height":0.1864543954777485,"feet":0.6282400876199041,"pos":[0,2.1999999999999993,10],"target":[0,1.2000000239982147,-2.3998225628929504e-9]},{"height":0.1864543954777485,"feet":0.6282400876199041,"pos":[0,2.1999999999999993,10],"target":[0,1.2000000239982147,-2.3998225628929504e-9]},{"height":0.1864543954777485,"feet":0.6282400876199041,"pos":[0,2.1999999999999993,10],"target":[0,1.2000000239982147,-2.3998225628929504e-9]}]
+✅ 播放首帧即机位，暂停保持画面，辅助物隐藏，文档/选择/撤销不变 — {"immediate":true,"pause":true,"clean":true,"stable":true}
+✅ 持续预览中名牌随重命名/新增/删除同步，不残留旧对象 — {"renamed":true,"added":true,"removed":true}
+✅ 预览截图使用有效画幅并恢复嵌套洁净状态 — {"ratio":1.7803030303030303,"clean":1,"preview":true}
+✅ 横竖导出设置均不改变普通播放的全视口 aspect，框和遮罩隐藏 — [{"ratio":"16:9","aspect":1.0444444444444445,"height":0.18645439547774847,"full":true,"frame":null,"viewport":1.0444444444444445,"hidden":true},{"ratio":"9:16","aspect":1.0444444444444445,"height":0.18645439547774847,"full":true,"frame":null,"viewport":1.0444444444444445,"hidden":true}]
+✅ 停止回0和导演编辑视角，洁净计数归零
+✅ Space复用预览入口
+✅ 导演标签暂停退出预览，拖播放头不强制切机位
+✅ 末端重播/循环/自然结束/主机位删除回退/无机位拒绝 — {"restart":true,"loop":true,"end":true,"fallback":true,"empty":true}
+✅ 预览中导入暂停并解析新机位；导入空场景清理预览且不补seed — {"camera":true,"empty":true}
+✅ 30次步进到1s再返回0；299帧显示9.97；非整帧终点夹取 — {"forward":1,"back":0,"display":"9.97","edge":1.01,"duration":10}
+✅ 缩放与横滚共用坐标原点 — {"t":4,"pps":900,"scroll":3100}
+✅ 移除轨道保留实体，一步撤销恢复
+✅ 10s/30fps视频300帧，末样本299/30；取消/失败恢复预览与文档 — {"frames":300,"last":9.966666666666667,"cancelled":true,"failed":true,"restored":true,"info":{"duration":10,"width":320,"height":180,"codec":"avc1","frames":300}}
+✅ 刷新不累积对象、不覆盖旧存档
+✅ 旧双人场景恢复保留实体和7秒时长
+✅ 资源失败不暴露半成品，提供重试
+✅ 故障注入只产生预期资源错误 — Failed to load resource: net::ERR_FAILED @ http://localhost:5182/assets/figures/bodykun_male.glb | Failed to load resource: net::ERR_FAILED @ http://localhost:5182/assets/figures/bodychan_female.glb
+✅ 重试成功恢复完整默认场景
+✅ 运行期无 console 错误
+
+=== 21/21 passed ===
+
+director: passed

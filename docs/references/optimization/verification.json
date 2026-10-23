@@ -1,0 +1,344 @@
+{
+  "baseline": "1f4248fe70cb034c55bf37398ef8298c76b7e64f",
+  "node": "22.22.1",
+  "browser": "Chrome for Testing 150.0.7871.24",
+  "unitTests": {
+    "passed": 186,
+    "total": 186
+  },
+  "initialAllRun": [
+    {
+      "suite": "motion",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:00:11.955Z",
+      "code": 0,
+      "durationMs": 25008
+    },
+    {
+      "suite": "revision5",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:00:36.963Z",
+      "code": 0,
+      "durationMs": 23987
+    },
+    {
+      "suite": "round5",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:01:00.950Z",
+      "code": 0,
+      "durationMs": 16446
+    },
+    {
+      "suite": "defaultview",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:01:17.397Z",
+      "code": 0,
+      "durationMs": 10765
+    },
+    {
+      "suite": "pathselect",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:01:28.161Z",
+      "code": 0,
+      "durationMs": 9428
+    },
+    {
+      "suite": "polish",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:01:37.590Z",
+      "code": 0,
+      "durationMs": 12418
+    },
+    {
+      "suite": "zoom",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:01:50.007Z",
+      "code": 0,
+      "durationMs": 4696
+    },
+    {
+      "suite": "round4",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:01:54.703Z",
+      "code": 0,
+      "durationMs": 13571
+    },
+    {
+      "suite": "tooltips",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:02:08.275Z",
+      "code": 0,
+      "durationMs": 6429
+    },
+    {
+      "suite": "round3",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:02:14.704Z",
+      "code": 0,
+      "durationMs": 19035
+    },
+    {
+      "suite": "round2",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:02:33.739Z",
+      "code": 0,
+      "durationMs": 19357
+    },
+    {
+      "suite": "director",
+      "status": "failed",
+      "startedAt": "2026-10-23T06:02:53.097Z",
+      "code": 1,
+      "durationMs": 25973
+    },
+    {
+      "suite": "default",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:03:19.070Z",
+      "code": 0,
+      "durationMs": 12656
+    },
+    {
+      "suite": "doc",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:03:31.726Z",
+      "code": 0,
+      "durationMs": 14447
+    },
+    {
+      "suite": "anim",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:03:46.173Z",
+      "code": 0,
+      "durationMs": 20349
+    },
+    {
+      "suite": "tl",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:04:06.522Z",
+      "code": 0,
+      "durationMs": 29371
+    },
+    {
+      "suite": "path",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:04:35.894Z",
+      "code": 0,
+      "durationMs": 61012
+    },
+    {
+      "suite": "cam",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:05:36.905Z",
+      "code": 0,
+      "durationMs": 35542
+    },
+    {
+      "suite": "export",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:06:12.447Z",
+      "code": 0,
+      "durationMs": 53861
+    },
+    {
+      "suite": "ai",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:07:06.308Z",
+      "code": 0,
+      "durationMs": 14163
+    },
+    {
+      "suite": "store",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:07:20.472Z",
+      "code": 0,
+      "durationMs": 9474
+    },
+    {
+      "suite": "autosave",
+      "status": "passed",
+      "startedAt": "2026-10-23T06:07:29.946Z",
+      "code": 0,
+      "durationMs": 16510
+    }
+  ],
+  "finalCoverage": [
+    {
+      "suite": "motion",
+      "passed": 33,
+      "total": 33,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "revision5",
+      "passed": 35,
+      "total": 35,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "round5",
+      "passed": 29,
+      "total": 29,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "defaultview",
+      "passed": 12,
+      "total": 12,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "pathselect",
+      "passed": 16,
+      "total": 16,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "polish",
+      "passed": 22,
+      "total": 22,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "zoom",
+      "passed": 5,
+      "total": 5,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "round4",
+      "passed": 30,
+      "total": 30,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "tooltips",
+      "passed": 8,
+      "total": 8,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "round3",
+      "passed": 27,
+      "total": 27,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "round2",
+      "passed": 25,
+      "total": 25,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "director",
+      "passed": 21,
+      "total": 21,
+      "initialStatus": "failed",
+      "finalExitCode": 0,
+      "verification": "focused rerun after stale framing assertion fix"
+    },
+    {
+      "suite": "default",
+      "passed": 35,
+      "total": 35,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "doc",
+      "passed": 20,
+      "total": 20,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "anim",
+      "passed": 50,
+      "total": 50,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "tl",
+      "passed": 27,
+      "total": 27,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "path",
+      "passed": 25,
+      "total": 25,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "cam",
+      "passed": 34,
+      "total": 34,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "export",
+      "passed": 27,
+      "total": 27,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "ai",
+      "passed": 19,
+      "total": 19,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "store",
+      "passed": 15,
+      "total": 15,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    },
+    {
+      "suite": "autosave",
+      "passed": 15,
+      "total": 15,
+      "initialStatus": "passed",
+      "finalExitCode": 0,
+      "verification": "full run"
+    }
+  ],
+  "note": "The first all command returned 1 for an obsolete director framing assertion. Original revision reproduced it. The corrected director suite was rerun and passed; the other 21 suites passed in the full run."
+}
