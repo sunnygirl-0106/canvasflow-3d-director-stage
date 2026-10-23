@@ -18,7 +18,8 @@
     "test:e2e:all": "node selftest.mjs all",
     "check": "npm run lint && npm run test:unit",
     "test:e2e:required": "node scripts/run-e2e.mjs required",
-    "test:browser:install": "node scripts/install-test-browser.mjs"
+    "test:browser:install": "node scripts/install-test-browser.mjs",
+    "test:build": "node scripts/check-build.mjs && node scripts/test-build.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

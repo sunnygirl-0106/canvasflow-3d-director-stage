@@ -45,6 +45,7 @@ jobs:
           key: chrome-${{ runner.os }}-${{ hashFiles('scripts/install-test-browser.mjs') }}
       - run: npm run test:browser:install
         timeout-minutes: 10
+      - run: npm run test:build
       - name: Required browser checks
         if: ${{ !inputs.full }}
         run: npm run test:e2e:required

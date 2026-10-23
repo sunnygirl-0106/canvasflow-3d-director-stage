@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import { readFileSync } from 'node:fs';
+import { buildReportPlugin } from './scripts/build-report.mjs';
 import { localAiPlugin } from './scripts/local-ai.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
@@ -11,7 +12,7 @@ export default defineConfig(({ mode, command, isPreview }) => {
   const env = mode === 'test' ? {} : loadEnv(mode, process.cwd(), 'AI_');
   const localModel = command === 'serve' && !isPreview && env.AI_API_KEY && env.AI_BASE_URL && env.AI_MODEL;
   return {
-    plugins: [localAiPlugin(env)],
+    plugins: [localAiPlugin(env), buildReportPlugin()],
     base: './',
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version), // 场景文档 meta.app 用
@@ -22,6 +23,10 @@ export default defineConfig(({ mode, command, isPreview }) => {
     },
     build: {
       target: 'es2020',
+      rollupOptions: { output: { manualChunks(id) {
+        if (id.includes('/node_modules/three/')) return 'three';
+        if (id.includes('/node_modules/immer/')) return 'immer';
+      } } },
       chunkSizeWarningLimit: 1500, // three 较大，提高警告阈值避免噪音
     },
   };

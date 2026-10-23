@@ -1,0 +1,34 @@
+{
+  "units": "bytes (kB = bytes / 1000)",
+  "chunks": [
+    {
+      "file": "assets/index-Blp-jUCf.js",
+      "bytes": 1052244,
+      "gzipBytes": 308954,
+      "initial": true,
+      "imports": [],
+      "dynamicImports": [
+        "assets/VideoExporter-4paDhEwc.js"
+      ],
+      "threeModules": 13,
+      "encoderModules": 0
+    },
+    {
+      "file": "assets/VideoExporter-4paDhEwc.js",
+      "bytes": 35615,
+      "gzipBytes": 11130,
+      "initial": false,
+      "imports": [
+        "assets/index-Blp-jUCf.js"
+      ],
+      "dynamicImports": [],
+      "threeModules": 0,
+      "encoderModules": 3
+    }
+  ],
+  "initial": {
+    "bytes": 1052244,
+    "gzipBytes": 308954
+  },
+  "threeInstances": 1
+}
