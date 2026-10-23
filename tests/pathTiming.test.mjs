@@ -58,11 +58,11 @@ test('新增 / 编辑 / 缩短总时长都适配轨迹，结束帧到达完整�
   assert.throws(() => app.timeline.updatePath(path.id, { start: 1 }), /开始时间/);
 });
 
-test('新建短路径按正常步速走完，不强行拉满时间轴；显式时长仍优先', () => {
+test('非UI公共API保留步速估算；显式时长仍优先', () => {
   const doc = createEmptyDocument();
   const ent = addCharacter(doc, { name: '角色', body: 'male' });
   const points = [[0, 0, 0], [2.4, 0, 0]];
   const path = setPath(doc, ent.id, points).path;
-  assert.ok(Math.abs(path.duration - 2) < 0.01);
+  assert.ok(Math.abs(path.duration - 1.7) < 0.01);
   assert.equal(setPath(doc, ent.id, points, { set: { duration: 6 } }).path.duration, 6);
 });

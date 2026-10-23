@@ -65,7 +65,8 @@ export async function centerOf(sel) {
   return r;
 }
 
-export async function clickSel(sel, opts) { const [x, y] = await centerOf(sel); await page.mouse.click(x, y, opts); }
+// 属性树增加子行后目标可能在滚动区外；真实点击先由浏览器滚动到可见位置。
+export async function clickSel(sel, opts) { await page.click(sel, opts); }
 
 export async function dragFromTo([x0, y0], [x1, y1], { steps = 10, hold } = {}) {
   await page.mouse.move(x0, y0);
@@ -160,7 +161,10 @@ export async function pathMenu(label) {
   const names = {'点击落点':'钢笔路径','手绘':'铅笔路径','直线':'直线路径','走到':'走到目标','推到':'推到目标'};
   await page.evaluate(() => [...document.querySelectorAll('.ptabs button')].find(b => b.textContent === '运动轨迹')?.click());
   await settle();
-  await clickSel('#inspector [data-sec="path"] .sec-btn');
+  await page.evaluate(() => { const p=window.__timelinePanel; p.setCollapsed(false); });
+  const head = '.tl-head[data-ent="' + await page.evaluate(()=>window.__app.selectedId) + '"] .tl-addkey';
+  // 未动画的道具尚不列在时间轴，用 Inspector 中同一注册菜单。
+  await clickSel(await page.$(head) ? head : '#inspector [data-sec="path"] .sec-btn');
   await settle();
   await page.evaluate(l => [...document.querySelectorAll('.ctx-item')].find(n => n.textContent === l).click(), names[label] || label);
   await settle();

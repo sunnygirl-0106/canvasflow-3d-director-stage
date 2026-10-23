@@ -227,16 +227,22 @@ export class CameraEntity extends Entity {
     this._syncHelpers();
   }
 
-  /** 观察点进入摄影机模型附近时隐藏机身，避免从模型内部看出去遮住整个场景。 */
+  /** 默认机位不显示机身和近/远端方框；显式编辑时恢复完整辅助几何。 */
+  setMinimalHelpers(on) {
+    this.minimalHelpers = on;
+    this.helper.geometry.setDrawRange(0, on ? 0 : 16);
+  }
+
+  /** 观察点靠近机身时隐藏它，避免遮挡；隐藏实体不参与拾取。 */
   syncBodyVisibility(observer) {
     const eye = observer.getWorldPosition(new THREE.Vector3());
     this.root.worldToLocal(eye);
-    this.body.visible = this.visible && this._helpersOn && eye.lengthSq() > 0.35 ** 2;
+    this.body.visible = this.visible && this._helpersOn && !this.minimalHelpers && eye.lengthSq() > 2 ** 2;
   }
 
   _syncHelpers() {
     const show = this.visible && this._helpersOn;
-    this.body.visible = show;
+    this.body.visible = show && !this.minimalHelpers;
     this.helper.visible = show;
   }
 

@@ -86,7 +86,7 @@ export class AutoSave {
   }
 
   save() {
-    if (this.app.loadingDocument) { this.schedule(); return; }
+    if (this.app.loadingDocument || this.app.pathEditor?.drag) { this.schedule(); return; }
     try {
       const text = JSON.stringify(this.app.exportDocument());
       if (new Blob([text]).size > AUTOSAVE_MAX_BYTES) {

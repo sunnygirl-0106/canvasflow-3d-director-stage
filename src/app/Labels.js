@@ -95,7 +95,7 @@ export class Labels {
       for (const t of ent.labelTargets()) {
         const lab = t.labelEl;
         if (!lab) continue;
-        let show = t.visible && !(hideCameras && t.type === 'camera');
+        let show = t.visible && !((hideCameras || t.minimalHelpers) && t.type === 'camera');
         if (show) {
           labelAnchor(t, worldScale, p);
           const depth = p.distanceTo(_camPos.setFromMatrixPosition(camera.matrixWorld));

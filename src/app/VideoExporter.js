@@ -63,6 +63,7 @@ export class OfflineRenderer {
  * 恢复导出前的播放头（原来 active 则 seek(原 t)，原来 idle 则 stop()）。导出不改文档，不记撤销。
  */
 async function exportSession(app, { labels }, fn) {
+  app.pathEditor?.cancel();
   const pb = app.playback;
   pb.pause();
   const was = { active: app.timeline.active, time: pb.time };

@@ -5,13 +5,13 @@ const _camPos = new THREE.Vector3();
 
 // 名牌样式：照抄 style.css 的 .label3d / .label3d.cam（单位 CSS px）
 const STYLE = {
-  char: { font: 19, weight: 700, padX: 2, padY: 3, fg: '#fff' },
-  cam: { font: 12, weight: 600, padX: 2, padY: 2, fg: '#fff' },
+  char: { font: 14, weight: 400, padX: 2, padY: 3, fg: '#fff' },
+  cam: { font: 12, weight: 400, padX: 2, padY: 2, fg: '#fff' },
 };
 const SHADOW = { y: 2, blur: 10, color: 'rgba(0,0,0,.5)' };
 const MARGIN = 12;               // 纹理四周给阴影留的边（CSS px）
 const LINE = 1.25;               // 行高 / 字号
-const CHAR_PX = 29.75;           // 与 DOM 的 19px × 1.25 + 6px 一致
+const CHAR_PX = 23.5;            // 与 DOM 的 14px × 1.25 + 6px 一致
 const DPR = 2;                   // 纹理按 2 倍绘制，避免放大发糊
 const CHAR_BOX_H = STYLE.char.font * LINE + STYLE.char.padY * 2;
 const SCALE = CHAR_PX / CHAR_BOX_H; // CSS 尺寸比例（与 DOM 相同）

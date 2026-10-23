@@ -42,7 +42,7 @@ export async function run() {
         yaw: direction.x, pitch: Math.atan2(direction.y, direction.z) * 180 / Math.PI,
         director: camera.position.toArray(), target: a.rig.controls.target.toArray(),
         shot: a.cameras[0].toJSON(), selected: a.selectedId === characters[0].id,
-        collapsed: window.__timelinePanel.collapsed, playing: a.playback.playing,
+        gizmo: a.gizmo.visible, collapsed: window.__timelinePanel.collapsed, playing: a.playback.playing,
       };
     });
     calibration.push({ viewport: [width, height], ...state });
@@ -50,10 +50,11 @@ export async function run() {
       && state.actors[0].body === 'male' && state.actors[1].body === 'female'
       && state.actors[0].color === '#468de5' && state.actors[1].color === '#e35e61'
       && state.actors[0].pos.join() === '-0.7,0,0' && state.actors[1].pos.join() === '0.7,0,0');
-    ok(`${width}×${height} 参考构图：人物约21%、脚底约2/3、正面轻俯视`,
-      state.actors.every(e => e.height > .185 && e.height < .22 && e.feet > .64 && e.feet < .68)
-      && Math.abs(state.yaw) < 1e-8 && state.pitch > 4.9 && state.pitch < 5.1
-      && Math.abs(state.shot.transform.pos[2] - state.director[2]) < 1e-5 && state.selected && state.collapsed && !state.playing,
+    ok(`${width}×${height} 复验构图：共用机位参数，注视高度1.2m、5.71°下俯，首屏无手柄`,
+      state.actors.every(e => e.height > .15 && e.height < .22 && e.feet > .61 && e.feet < .65)
+      && Math.abs(state.yaw) < 1e-8 && state.pitch > 5.7 && state.pitch < 5.8 && !state.gizmo
+      && state.shot.lookAt.join() === '0,1.2,0'
+      && state.shot.transform.pos.join() === '0,2.2,10' && state.shot.fov === 50 && state.selected && state.collapsed && !state.playing,
       JSON.stringify(state.actors.map(e => ({ height: e.height, feet: e.feet }))));
     await page.screenshot({ path: `${OUT}/after-${width}x${height}.png` });
   }
@@ -61,29 +62,37 @@ export async function run() {
 
   const raster = await page.evaluate(() => {
     const a = window.__app, s = a.stage, c = a.cameras[0], V = s.camera.position.constructor;
+    // 同构图时视锥位于画布边缘；独立移动观察点验证侧线的真实渲染。
+    a.directorDetached = true; s.camera.position.x += 1; a.rig.controls.update(); a.beforeRender();
     const project = p => {
       p.project(s.camera);
       return [(p.x + 1) / 2 * s.renderer.domElement.width, (1 - p.y) / 2 * s.renderer.domElement.height];
     };
     const gridPoint = project(new V(2, .002, 3));
     const p = c.helper.geometry.getAttribute('position');
-    const side = new V().fromBufferAttribute(p, 16).lerp(new V().fromBufferAttribute(p, 17), .95);
-    const sidePoint = project(side.applyMatrix4(c._viz.matrixWorld));
+    // 从真实可见侧边采样，保持原有亮度差阈值。
+    const sidePoints = [];
+    for (let edge=16; edge<24; edge+=2) for (let u=.1; u<1; u+=.1) {
+      const side = new V().fromBufferAttribute(p, edge).lerp(new V().fromBufferAttribute(p, edge+1), u);
+      const point = project(side.applyMatrix4(c._viz.matrixWorld));
+      if (point[0]>5 && point[0]<s.renderer.domElement.width-5 && point[1]>5 && point[1]<s.renderer.domElement.height-5) sidePoints.push(point);
+    }
     const snapshot = () => { s.render(); return s.renderer.domElement.toDataURL(); };
     const on = snapshot();
     s.grid.visible = false; const noGrid = snapshot(); s.grid.visible = true;
     c._frustumSides.visible = false; const noSides = snapshot(); c._frustumSides.visible = true;
     s.invalidate();
-    return { on, noGrid, noSides, gridPoint, sidePoint };
+    return { on, noGrid, noSides, gridPoint, sidePoints };
   });
   const on = decode(raster.on);
   const grid = lineContrast(on, decode(raster.noGrid), raster.gridPoint);
-  const sides = lineContrast(on, decode(raster.noSides), raster.sidePoint);
+  const sides = Math.max(0, ...raster.sidePoints.map(p => lineContrast(on, decode(raster.noSides), p)));
   ok('正面视角的纵向网格线实际可见', grid > 3, `像素亮度差 ${grid.toFixed(1)}`);
   ok('跨近平面的视锥侧边实际可见', sides > 3, `像素亮度差 ${sides.toFixed(1)}`);
 
   const reset = await page.evaluate(async () => {
     const a = window.__app;
+    a.resetView();
     const original = a.stage.camera.position.clone(), target = a.rig.controls.target.clone();
     a.rig.controls.enableDamping = false;
     a.stage.camera.position.addScalar(2); a.rig.controls.update(); a.resetView();

@@ -1,5 +1,11 @@
 // 内联描边图标（全站唯一一份）：只存 path 主体，统一由 icon() 包成 <svg>。
 const PATHS = {
+  diamond: '<path d="M12 3l9 9-9 9-9-9z"/>',
+  diamondFilled: '<path d="M12 3l9 9-9 9-9-9z" fill="currentColor"/>',
+  panorama: '<path d="M3 5c5 3 13 3 18 0v14c-5-3-13-3-18 0zM3 14l5-4 4 4 4-3 5 3"/><path d="M8 21c3 1 5 1 8 0"/>',
+  imageScan: '<path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5"/><rect x="6" y="6" width="12" height="12" rx="1"/><path d="m6 16 4-4 3 2 3-4 2 3"/><circle cx="10" cy="9" r="1"/>',
+  ratio: '<rect x="3" y="5" width="18" height="14" rx="2"/><rect x="7" y="8" width="10" height="8" rx="1"/><path d="M3 12h2M19 12h2"/>',
+
   plus: '<path d="M12 4v16M4 12h16"/>',
   send: '<path d="M12 20V4M5 11l7-7 7 7"/>',
   stopwatch: '<circle cx="12" cy="14" r="7"/><path d="M12 14V9M10 3h4M12 3v4M18 7l2-2"/>',
@@ -8,9 +14,9 @@ const PATHS = {
   move: '<path d="M12 3v18M3 12h18"/><path d="M12 3l-2.4 2.6M12 3l2.4 2.6M12 21l-2.4-2.6M12 21l2.4 2.6M3 12l2.6-2.4M3 12l2.6 2.4M21 12l-2.6-2.4M21 12l-2.6 2.4"/>',
   rotate: '<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/>',
   scale: '<path d="M21 3h-6M21 3v6M21 3l-7 7"/><path d="M3 21h6M3 21v-6M3 21l7-7"/>',
-  person: '<circle cx="12" cy="5.5" r="2.4"/><path d="M12 8.4c-2.4 0-4 1.6-4 4v3M12 8.4c2.4 0 4 1.6 4 4v3M9 21v-5M15 21v-5"/>',
+  person: '<circle cx="12" cy="5.5" r="2.4"/><path d="M12 8.4c-2.4 0-4 1.6-4 4v3M12 8.4c2.4 0 4 1.6 4 4v3M9 19v-5M15 19v-5M5 21h14M5 21v-2M19 21v-2"/>',
   image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-5-4 4-2-2-7 7"/>',
-  video: '<rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3"/>',
+  video: '<rect x="3" y="7" width="12" height="11" rx="2"/><path d="M15 10l6-3v11l-6-3M6 4h6M6 10h4M8 18v3M5 21h6"/>',
   audio: '<path d="M5 10v4M9 6v12M13 8v8M17 5v14M21 10v4"/>',
   frame: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/>',
   shot: '<path d="M8 6.5 9.5 4h5L16 6.5h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2z"/><circle cx="12" cy="13" r="3.3"/>',

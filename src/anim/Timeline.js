@@ -71,14 +71,14 @@ export class Timeline extends Emitter {
 
   // ---- 求值 ----
   /** 实体 id → 被驱动的属性集合（'pos' | 'rot' | 'scale' | 'fov' | 'pose'）。空轨道不驱动任何属性。 */
-  _drivenProps() {
+  _drivenProps(tracks = this.tracks, paths = this.paths) {
     const map = new Map();
     const add = (id, ...props) => {
       if (!map.has(id)) map.set(id, new Set());
       for (const p of props) map.get(id).add(p);
     };
-    for (const t of this.tracks) if (t.keys.length) add(t.target, t.property);
-    for (const p of this.paths) {
+    for (const t of tracks) if (t.keys.length) add(t.target, t.property);
+    for (const p of paths) {
       add(p.target, 'pos');
       if (p.orient === 'tangent') add(p.target, 'rot');
       // 步态：角色自己，或组的全部成员（整组沿路径时成员一起走）
@@ -179,28 +179,37 @@ export class Timeline extends Emitter {
     if (st.fov !== undefined && ent.cam.fov !== st.fov) ent.setFov(st.fov);
   }
 
+  pathModel(json) {
+    return this._rt(json, j => new PathTrack(j, pathOptionsFor(this.app.findEntity(j.target)?.type))).path;
+  }
+
+  positionChannel(json) { return this._rt(json, j => new Track(j)).channel; }
+
   /**
    * 求 t 时刻的场景状态并写入实体（纯函数语义：结果只取决于文档与 t）。
    * 固定顺序：关键帧轨道 → 路径轨道 → 约束。
    */
-  evaluate(t) {
+  evaluate(t, preview = null) {
     if (!this.active) { this.active = true; this.emit('active', true); }
     this.time = t;
-    const driven = this._drivenProps();
+    // Only replace an existing source; preview never changes the document or driver kinds.
+    const tracks = preview?.kind === 'pos' ? this.tracks.map(j => j.id === preview.source.id ? preview.source : j) : this.tracks;
+    const paths = preview?.kind === 'path' ? this.paths.map(j => j.id === preview.source.id ? preview.source : j) : this.paths;
+    const driven = this._drivenProps(tracks, paths);
     this._syncBase(driven);
 
     const states = new Map(); // entityId → state
     for (const [ent, base] of this._base) states.set(ent.id, this._state(ent, base));
 
     // 1 关键帧轨道
-    for (const json of this.tracks) {
+    for (const json of tracks) {
       const st = states.get(json.target);
       if (!st || !json.keys.length) continue;
       this._rt(json, (j) => new Track(j)).apply(t, st);
     }
 
     // 2 路径轨道
-    for (const json of this.paths) {
+    for (const json of paths) {
       const st = states.get(json.target);
       if (st) this._rt(json, (j) => new PathTrack(j, pathOptionsFor(st.ent.type))).apply(t, st);
     }
@@ -286,6 +295,48 @@ export class Timeline extends Emitter {
   valueOf(ent, prop) {
     if (prop === 'fov') return ent.type === 'camera' ? round6(ent.cam.fov) : undefined;
     return ent.transformJSON(ent.root)[prop];
+  }
+
+  /** 路径和实体位置都使用父坐标系的文档坐标；一次提交保留曲线形状与停顿。 */
+  translatePathTo(ent, value) {
+    const path = this.paths.find(p => p.target === ent.id);
+    if (!path) return false;
+    const model = this._rt(path, p => new PathTrack(p, pathOptionsFor(ent.type))).path;
+    const from = this.active
+      ? model.positionAt(model.distanceAt(this.time)).toArray()
+      : this.app.store.document.entities.find(e => e.id === ent.id).transform.pos;
+    const delta = value.map((v, i) => v - from[i]);
+    this.app.store.transact('平移轨迹', doc => {
+      const p = doc.paths.find(p => p.id === path.id);
+      p.points = p.points.map(point => point.map((v, i) => round6(v + delta[i])));
+      const base = doc.entities.find(e => e.id === ent.id).transform.pos;
+      base.forEach((v, i) => { base[i] = round6(v + delta[i]); });
+    });
+    return true;
+  }
+
+  /** 关闭切线朝向时把当前姿态交给已有轨道或手动值，保持当前画面连续。 */
+  setPathOrientation(pathId, orient) {
+    this.app.playback.pause();
+    const path = this.paths.find(p => p.id === pathId);
+    if (!path) return;
+    const ent = this.app.findEntity(path.target);
+    const rotation = this.valueOf(ent, 'rot');
+    this.app.store.batch('修改路径朝向', () => {
+      this.updatePath(pathId, { orient });
+      if (orient !== 'keep') return;
+      const track = this.tracks.find(t => t.target === ent.id && t.property === 'rot');
+      if (track && this.active) this.setKey(track.id, this.time, rotation);
+      else this.app.store.transact('保持当前朝向', doc => { doc.entities.find(e => e.id === ent.id).transform.rot = rotation; });
+    });
+  }
+
+  /** 路径只接管朝向；X/Z 倾斜仍可通过既有旋转轨道或手动姿态编辑。 */
+  editPathTilt(ent) {
+    const value = this.valueOf(ent, 'rot');
+    const track = this.tracks.find(t => t.target === ent.id && t.property === 'rot');
+    if (track && this.active) this.setKey(track.id, this.time, value);
+    else this.app.store.transact('修改路径对象倾斜', doc => { doc.entities.find(e => e.id === ent.id).transform.rot = value; });
   }
 
   /**

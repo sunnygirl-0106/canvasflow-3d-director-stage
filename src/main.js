@@ -139,7 +139,7 @@ async function initialize() {
   try {
     const doc = await defaultScene(stage.camera);
     await app.loadDocument(doc, { history: false, applyView: true });
-    app.select(doc.entities[0].id);
+    app.select(doc.entities[0].id, { activateTransform: false });
     history.reset();
     app.ready = true;
     $('app').inert = false;

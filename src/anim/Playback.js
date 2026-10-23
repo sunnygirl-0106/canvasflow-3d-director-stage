@@ -18,8 +18,8 @@ export class Playback extends Emitter {
 
   get state() { return this.playing ? 'playing' : this.timeline.active ? 'paused' : 'idle'; }
 
-  _apply() {
-    this.timeline.evaluate(this.time);
+  _apply(preview) {
+    this.timeline.evaluate(this.time, preview);
     this.invalidate();
     this.emit('tick', this.time);
   }
@@ -58,11 +58,11 @@ export class Playback extends Emitter {
   }
 
   /** 跳转（夹到 [0, duration]）；从 idle 进入 active（暂停态）。 */
-  seek(t) {
+  seek(t, preview) {
     const prev = this.state;
     this.time = Math.min(Math.max(Number(t) || 0, 0), this.timeline.duration);
     this._last = performance.now();
-    this._apply();
+    this._apply(preview);
     this._setState(prev);
   }
 

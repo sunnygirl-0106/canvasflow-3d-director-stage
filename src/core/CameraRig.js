@@ -23,6 +23,7 @@ export class CameraRig {
     this._home = {
       pos: camera.position.clone(),
       target: this.controls.target.clone(),
+      fov: camera.fov,
     };
 
     this.ratio = null;            // 当前取景比例（null=自由）
@@ -92,13 +93,23 @@ export class CameraRig {
   saveHome() {
     this._home.pos.copy(this.camera.position);
     this._home.target.copy(this.controls.target);
+    this._home.fov = this.camera.fov;
   }
 
-  resetView() {
-    this.camera.position.copy(this._home.pos);
-    this.controls.target.copy(this._home.target);
+  /** 清空旧的阻尼增量后应用明确视角，载入/reset 不被上一次拖动带偏。 */
+  applyView(pos, target, fov) {
+    const damping = this.controls.enableDamping;
+    this.controls.enableDamping = false;
     this.controls.update();
+    this.camera.position.copy(pos);
+    this.controls.target.copy(target);
+    this.camera.fov = fov;
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    this.controls.enableDamping = damping;
   }
+
+  resetView() { this.applyView(this._home.pos, this._home.target, this._home.fov); }
 
   /** 设取景比例并重排取景框。ratioStr ∈ 'free' | 任意 'w:h'（21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16 …） */
   setRatio(ratioStr) {

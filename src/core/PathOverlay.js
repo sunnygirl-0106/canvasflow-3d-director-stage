@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { Path, pathOptionsFor } from '../anim/Path.js';
+import { Path } from '../anim/Path.js';
 
 const ACCENT = 0x3b82f6;
 const LIFT = 0.01;            // 贴地抬高 1 cm，防 z-fighting
@@ -29,7 +31,7 @@ const _s = new THREE.Vector3();
  * 顶点球 / 标记 / 亮点用 onBeforeRender 按相机距离缩放，保持固定屏幕尺寸（不论场景缩放）。
  * 机位视角下整体隐藏（从镜头里看不出现编辑标记）；洁净渲染（截图 / 机位预览）也隐藏。
  *
- * 拖动预览：setPreview(pathId, points) 只改 overlay 的曲线与顶点，不写文档；clearPreview() 回到文档。
+ * 拖动预览：setPreview 仅更新当前来源几何；角色由 PathEditor 通过 Playback 同步求值。
  */
 export class PathOverlay {
   constructor(app) {
@@ -38,9 +40,8 @@ export class PathOverlay {
     this.group.name = 'PathOverlay';
     app.stage.add(this.group);
 
-    this.selectedPathId = null; // 仅当前点中的轨迹显示编辑手柄
+    this.selection = null; // { kind, sourceId, index? / keyTime?, arrival? }
     this.hover = null;        // { pathId, index } 悬停顶点
-    this.selVertex = null;    // { pathId, index } 选中顶点（Del 删除）
     this._preview = null;     // { pathId, points }
     this._items = [];         // [{ json, path, samples, dot, ... }]
     this._hidden = false;     // 洁净渲染时临时隐藏
@@ -73,7 +74,8 @@ export class PathOverlay {
     app.timeline.on('change', () => this.rebuild());
     app.playback.on('tick', () => this._placeDots());
     app.on('selection', () => {
-      if (this.selectedPathId) this.setSelectedPath(null); else this.rebuild();
+      if (!app._cleanDepth) this._hidden = false;
+      this.rebuild();
     });
     app.on('view', () => this._applyVisible());
     app.stage.onViewportResize(() => this._syncResolution());
@@ -81,38 +83,93 @@ export class PathOverlay {
   }
 
   // ---- 构建 ----
+  get selectedPathId() { return this.selection?.sourceId || null; }
+  get selVertex() {
+    const s = this.selection;
+    return s?.kind === 'path' && s.index != null ? { pathId: s.sourceId, index: s.index } : null;
+  }
+  source(id) { return this.app.timeline.paths.find(p => p.id === id) || this.app.timeline.tracks.find(t => t.id === id && t.property === 'pos'); }
+  points(json) { return json.points || json.keys.map(k => k.value); }
+  editable(json, t = this.app.playback.time) { return this.app.timeline.forcedProps(json.target, t).get('pos') !== '跟随'; }
+
   rebuild() {
-    for (const o of [...this.group.children]) {
-      if (o === this.draftGroup || o === this.snapRing || o === this.moveGroup) continue;
-      this.group.remove(o);
-      this._disposeLine(o);
+    const sources = [...this.app.timeline.paths, ...this.app.timeline.tracks.filter(t => t.property === 'pos' && t.keys.length)];
+    const visible = sources.filter(j => this.app.selectedIds.has(j.target) && this.app.findEntity(j.target)?.visible);
+    if (this.selection && !visible.some(j => j.id === this.selectedPathId)) this.setSelection(null);
+    for (const it of this._items) { this.group.remove(it.group); it.group.traverse(o => this._disposeLine(o)); }
+    this._items = visible.map(json => this._buildItem(json));
+    this._placeDots(); this._applyVisible(); this.app.stage.invalidate();
+  }
+
+  _buildItem(json) {
+    const kind = json.points ? 'path' : 'pos';
+    const item = { json, kind, selected: this.selectedPathId === json.id, vertices: [], group: new THREE.Group() };
+    item.group.matrixAutoUpdate = false;
+    this._syncParent(item);
+    this.group.add(item.group);
+    this._updateItem(item, json);
+    item.dot = this._screenMesh(this._sphereGeo, this._mats.dot, DOT_PX);
+    item.group.add(item.dot);
+    return item;
+  }
+
+  _syncParent(item) {
+    const parent = this.app.findEntity(item.json.target)?.root.parent;
+    if (!parent) return;
+    this.group.updateWorldMatrix(true, false); parent.updateWorldMatrix(true, false);
+    item.group.matrix.copy(this.group.matrixWorld).invert().multiply(parent.matrixWorld);
+    item.group.matrixWorldNeedsUpdate = true;
+  }
+
+  _updateItem(item, json) {
+    item.json = json;
+    item.path = item.kind === 'path' ? this.app.timeline.pathModel(json) : null;
+    item.channel = item.kind === 'pos' ? this.app.timeline.positionChannel(json) : null;
+    // Channel interpolates components along straight segments; step segments have no connecting motion.
+    item.samples = item.path ? this._sample(item.path) : json.keys.flatMap((k, i) => {
+      const next = json.keys[i + 1];
+      if (!next || k.ease === 'step') return [];
+      return [...k.value.map((v, n) => v + (n === 1 ? LIFT : 0)), ...next.value.map((v, n) => v + (n === 1 ? LIFT : 0))];
+    });
+    if (item.samples.length >= 6) {
+      if (!item.line) { item.line = this._line(item.samples, item.selected, { segments: item.kind === 'pos' }); item.group.add(item.line); }
+      else {
+        const segments = item.kind === 'pos';
+        const count = segments ? item.samples.length / 6 : item.samples.length / 3 - 1;
+        const buffer = item.line.geometry.attributes.instanceStart.data;
+        if (buffer.array.length !== count * 6) {
+          item.line.geometry.dispose();
+          item.line.geometry = segments ? new LineSegmentsGeometry() : new LineGeometry();
+          item.line.geometry.setPositions(item.samples);
+        } else {
+          if (segments) buffer.array.set(item.samples);
+          else for (let i = 0; i < count; i++) for (let n = 0; n < 6; n++) buffer.array[i * 6 + n] = item.samples[i * 3 + n];
+          buffer.needsUpdate = true;
+          item.line.geometry.computeBoundingBox(); item.line.geometry.computeBoundingSphere();
+        }
+      }
     }
-    this._items = [];
-    const { paths } = this.app.timeline.toJSON();
-    const selIds = this.app.selectedIds;
-    if (this.selectedPathId && !paths.some(p => p.id === this.selectedPathId && selIds.has(p.target) && this.app.findEntity(p.target)?.visible)) {
-      this.selectedPathId = null;
-      this.setSelectedVertex(null);
-      this.app.emit('pathSelection', null);
+    const points = this.points(json);
+    if (item.selected || !item.samples.length) {
+      if (!item.vertices.length) points.forEach((p, i) => {
+        const m = this._screenMesh(this._sphereGeo, this._mats.vertex, VERTEX_PX);
+        m.renderOrder = 13; m.userData.vertex = i; item.vertices.push(m); item.group.add(m);
+      });
+      item.vertices.forEach((m, i) => { m.position.fromArray(points[i]); m.position.y += LIFT; m.material = this._vertexMat(json.id, i); });
+      if (item.path) {
+        const marks = [{ s: 0, geo: this._triGeo, px: MARKER_PX }];
+        if (!json.closed) marks.push({ s: item.path.length, geo: this._squareGeo, px: MARKER_PX });
+        if (json.orient !== 'keep') for (let s = ARROW_EVERY; s < item.path.length - ARROW_EVERY * .3; s += ARROW_EVERY) marks.push({ s, geo: this._arrowGeo });
+        item.marks ||= [];
+        while (item.marks.length > marks.length) item.group.remove(item.marks.pop());
+        marks.forEach(({ s, geo, px }, i) => {
+          let m = item.marks[i];
+          if (!m) { m = px ? this._screenMesh(geo, this._mats.marker, px) : new THREE.Mesh(geo, this._mats.arrow); m.renderOrder = 11; item.marks.push(m); item.group.add(m); }
+          item.path.positionAt(s, m.position); m.position.y += LIFT;
+          if (item.path.tangentAt(s, _w)) m.rotation.y = Math.atan2(_w.x, _w.z);
+        });
+      }
     }
-    for (const json0 of paths) {
-      if (!selIds.has(json0.target) || !this.app.findEntity(json0.target)?.visible) continue;
-      const pv = this._preview?.pathId === json0.id ? this._preview : null;
-      const json = pv ? { ...json0, points: pv.points } : json0;
-      if (json.points.length < 2) continue;
-      const selected = this.selectedPathId === json.id;
-      const item = { json, selected, path: new Path(json, pathOptionsFor(this.app.findEntity(json.target)?.type)), vertices: [] };
-      item.samples = this._sample(item.path);
-      this.group.add(this._line(item.samples, selected));
-      if (selected) this._handles(item);
-      item.dot = this._screenMesh(this._sphereGeo, this._mats.dot, DOT_PX);
-      item.dot.renderOrder = 12;
-      this.group.add(item.dot);
-      this._items.push(item);
-    }
-    this._placeDots();
-    this._applyVisible();
-    this.app.stage.invalidate();
   }
 
   /** 按弧长均匀采样曲线（局部坐标，已抬高 LIFT）。 */
@@ -133,14 +190,14 @@ export class PathOverlay {
   }
 
   _disposeLine(o) {
-    if (!o.isLine2) return;
+    if (!o.isLineSegments2) return;
     o.geometry.dispose();
     this._lineMats.delete(o.material);
     o.material.dispose();
   }
 
-  _line(samples, selected, { color = ACCENT, opacity = selected ? 1 : 0.5 } = {}) {
-    const geo = new LineGeometry();
+  _line(samples, selected, { color = ACCENT, opacity = selected ? 1 : 0.5, segments = false } = {}) {
+    const geo = segments ? new LineSegmentsGeometry() : new LineGeometry();
     geo.setPositions(samples);
     const mat = new LineMaterial({
       color, linewidth: selected ? 2 : 1, transparent: true, opacity,
@@ -148,43 +205,17 @@ export class PathOverlay {
     });
     this._lineMats.add(mat);
     this._syncResolution(mat);
-    const line = new Line2(geo, mat);
+    const line = segments ? new LineSegments2(geo, mat) : new Line2(geo, mat);
     line.computeLineDistances();
     line.renderOrder = 10;
     return line;
   }
 
-  /** 选中实体的路径：顶点球、起点三角、终点方块、每 1 m 的方向箭头（orient='keep' 不画）。 */
-  _handles(item) {
-    const { json, path } = item;
-    json.points.forEach((p, i) => {
-      const m = this._screenMesh(this._sphereGeo, this._vertexMat(json.id, i), VERTEX_PX);
-      m.position.set(p[0], p[1] + LIFT, p[2]);
-      m.renderOrder = 13;
-      m.userData.vertex = i;
-      item.vertices.push(m);
-      this.group.add(m);
-    });
-    const L = path.length;
-    const flat = (geo, mat, s, px) => {
-      path.positionAt(s, _v);
-      const m = px ? this._screenMesh(geo, mat, px) : new THREE.Mesh(geo, mat);
-      m.position.set(_v.x, _v.y + LIFT, _v.z);
-      if (path.tangentAt(s, _w)) m.rotation.y = Math.atan2(_w.x, _w.z);
-      m.renderOrder = 11;
-      this.group.add(m);
-      return m;
-    };
-    flat(this._triGeo, this._mats.marker, 0, MARKER_PX);
-    if (!json.closed) flat(this._squareGeo, this._mats.marker, L, MARKER_PX);
-    if (json.orient !== 'keep') {
-      for (let s = ARROW_EVERY; s < L - ARROW_EVERY * 0.3; s += ARROW_EVERY) flat(this._arrowGeo, this._mats.arrow, s, 0);
-    }
-  }
-
   _vertexMat(pathId, i) {
     const is = (h) => h && h.pathId === pathId && h.index === i;
-    return is(this.selVertex) ? this._mats.selected : is(this.hover) ? this._mats.hover : this._mats.vertex;
+    const sel = this.selection;
+    const index = sel?.kind === 'pos' ? this.source(pathId)?.keys.findIndex(k => k.t === sel.keyTime) : sel?.index;
+    return (sel?.sourceId === pathId && index === i) ? this._mats.selected : is(this.hover) ? this._mats.hover : this._mats.vertex;
   }
 
   /** 固定屏幕尺寸的网格：渲染前按相机距离换算局部缩放。 */
@@ -257,7 +288,10 @@ export class PathOverlay {
   _placeDots() {
     const t = this.app.playback.time;
     for (const it of this._items) {
-      it.path.positionAt(it.path.distanceAt(t), _v);
+      this._syncParent(it);
+      it.group.visible = this.editable(it.json, t);
+      if (it.path) it.path.positionAt(it.path.distanceAt(t), _v);
+      else _v.fromArray(it.channel.evaluate(t));
       it.dot.position.set(_v.x, _v.y + LIFT, _v.z);
       it.dot.visible = this.app.timeline.active;
     }
@@ -286,14 +320,22 @@ export class PathOverlay {
 
   // ---- 交互状态（顶点编辑用，非文档状态）----
   /** 轨迹选择是会话状态；删路径、换实体时自动清除，不写入文档。 */
-  setSelectedPath(pathId) {
-    if (pathId === this.selectedPathId) return;
-    if (pathId && !this._items.some(it => it.json.id === pathId)) return;
-    this.selectedPathId = pathId;
+  setSelection(selection) {
+    if (JSON.stringify(selection) === JSON.stringify(this.selection)) return;
+    this.selection = selection;
     this.hover = null;
-    this.setSelectedVertex(null);
+    this._recolor();
+    this.app.emit('pathSelection', this.selectedPathId);
+    this.app.emit('pathVertex', this.selVertex);
+    this.app.emit('motionSelection', selection);
+  }
+
+  setSelectedPath(sourceId) {
+    if (sourceId === this.selectedPathId) return;
+    const json = this.source(sourceId);
+    if (sourceId && !json) return;
+    this.setSelection(json ? { kind: json.points ? 'path' : 'pos', sourceId } : null);
     this.rebuild();
-    this.app.emit('pathSelection', pathId);
   }
 
   setHover(h) {
@@ -303,10 +345,8 @@ export class PathOverlay {
   }
 
   setSelectedVertex(v) {
-    if (sameVertex(v, this.selVertex)) return;
-    this.selVertex = v;
-    this._recolor();
-    this.app.emit('pathVertex', v); // Inspector 路径段的「在选中顶点处停顿」
+    if (v) this.app.pathEditor.selectNode({ kind: 'path', sourceId: v.pathId, index: v.index });
+    else if (this.selection) this.setSelection({ kind: this.selection.kind, sourceId: this.selection.sourceId });
   }
 
   _recolor() {
@@ -315,17 +355,20 @@ export class PathOverlay {
   }
 
   /** 拖动预览：只重画该路径（不写文档、不求值）。 */
-  setPreview(pathId, points) {
-    this._preview = { pathId, points };
-    this.rebuild();
+  setPreview(sourceId, candidate) {
+    const json = Array.isArray(candidate) ? { ...this.source(sourceId), points: candidate } : candidate;
+    this._preview = { sourceId, source: json };
+    const it = this._items.find(it => it.json.id === sourceId);
+    if (it) this._updateItem(it, json);
+    this.app.stage.invalidate();
   }
 
   clearPreview() {
-    if (!this._preview) return;
+    const id = this._preview?.sourceId;
     this._preview = null;
-    this.rebuild();
+    const it = this._items.find(it => it.json.id === id), json = this.source(id);
+    if (it && json) this._updateItem(it, json);
   }
-
 
   // ---- 命中测试（屏幕空间）----
   /**
@@ -338,7 +381,7 @@ export class PathOverlay {
     const cam = this.app.getRenderCamera();
     const rect = this.app.stage.renderer.domElement.getBoundingClientRect();
     this.group.updateWorldMatrix(true, false);
-    const mw = this.group.matrixWorld;
+    let mw = this.group.matrixWorld;
     const toScreen = (x, y, z) => {
       _v.set(x, y, z).applyMatrix4(mw).project(cam);
       if (_v.z > 1) return null; // 相机背后
@@ -347,20 +390,24 @@ export class PathOverlay {
 
     let best = null;
     for (const it of this._items) {
-      if (!it.selected) continue;
-      it.json.points.forEach((p, i) => {
+      if ((!it.selected && it.samples.length) || !this.editable(it.json)) continue;
+      it.group.updateWorldMatrix(true, false); mw = it.group.matrixWorld;
+      this.points(it.json).forEach((p, i) => {
         const s = toScreen(p[0], p[1] + LIFT, p[2]);
         if (!s) return;
         const d = Math.hypot(s[0] - clientX, s[1] - clientY);
-        if (d <= HIT_VERTEX_PX && (!best || d < best.d)) best = { d, kind: 'vertex', pathId: it.json.id, target: it.json.target, index: i };
+        if (d <= HIT_VERTEX_PX && (!best || d < best.d)) best = { d, kind: 'vertex', pathId: it.json.id, target: it.json.target, index: i, sourceKind: it.kind, keyTime: it.json.keys?.[i]?.t };
       });
     }
     if (best) { delete best.d; return best; }
 
     for (const it of this._items) {
+      if (!this.editable(it.json)) continue;
+      it.group.updateWorldMatrix(true, false); mw = it.group.matrixWorld;
       const S = it.samples;
       let prev = toScreen(S[0], S[1], S[2]);
       for (let i = 1; i < S.length / 3; i++) {
+        if (it.kind === 'pos' && i % 2 === 0) { prev = toScreen(S[i*3], S[i*3+1], S[i*3+2]); continue; }
         const cur = toScreen(S[i * 3], S[i * 3 + 1], S[i * 3 + 2]);
         if (prev && cur) {
           const { d, u } = segPx(clientX, clientY, prev, cur);
@@ -376,7 +423,7 @@ export class PathOverlay {
     return {
       kind: 'line', pathId: it.json.id, target: it.json.target,
       point: [lerp(0), lerp(1) - LIFT, lerp(2)],
-      s: S.distances[i - 1] + (S.distances[i] - S.distances[i - 1]) * u, // 命中处的弧长
+      s: S.distances ? S.distances[i - 1] + (S.distances[i] - S.distances[i - 1]) * u : null, // 命中处的弧长
     };
   }
 

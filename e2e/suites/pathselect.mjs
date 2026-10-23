@@ -91,5 +91,5 @@ export async function run() {
   await page.mouse.click(...await scr(await linePoint())); await settle();
   await page.evaluate(() => window.__timelinePanel.setCollapsed(false)); await settle();
   await page.click('#timeline .tl-head'); await settle();
-  ok('点击时间轴后交还键盘焦点，不保留轨迹编辑状态', !(await state()).selected);
+  ok('点击时间轴只交还键盘焦点，保留轨迹编辑状态', (await state()).selected === ids.path);
 }

@@ -85,7 +85,9 @@ export async function run() {
   ok('折叠后恢复自定高度，所有尺寸操作不改场景或撤销栈', await page.evaluate(before => document.querySelector('#timeline').offsetHeight === 324 && JSON.stringify(window.__app.store.document) === before.doc && window.__app.history.index === before.history, initial));
   await page.reload({ waitUntil: 'networkidle0' });
   await page.waitForFunction(() => window.__app?.ready);
-  ok('刷新后记住时间轴高度', await page.$eval('#timeline', n => n.offsetHeight === 324));
+  // 每次进入默认收起，但再次打开仍使用保存高度。
+  await page.click('#dock button:last-child');
+  ok('刷新后再次展开记住时间轴高度', await page.$eval('#timeline', n => n.offsetHeight === 324));
   await page.mouse.move(800, 180); await settle(240);
   ok('预制入口只占一个图标位，侧栏不再有独立入口', await page.evaluate(() => !!document.querySelector('.ai-input #scenePresets') && !document.querySelector('.side.left #scenePresets') && document.querySelector('.ai-presets-label').getBoundingClientRect().width === 0));
   await page.screenshot({ path: `${out}/timeline.png` });
@@ -94,7 +96,7 @@ export async function run() {
     const input = document.querySelector('.ai-input').getBoundingClientRect();
     const button = document.querySelector('#scenePresets').getBoundingClientRect();
     const tooltip = document.querySelector('#uiTooltip');
-    return input.height === 44 && button.width === 26 && button.height === 28 && !tooltip.hidden && tooltip.textContent.includes('预制场景');
+    return input.height === 44 && button.width === 32 && button.height === 32 && !tooltip.hidden && tooltip.textContent.includes('预制场景');
   }));
   await page.screenshot({ path: `${out}/capsule-hover.png` });
   const beforePreset = await page.evaluate(() => JSON.stringify(window.__app.store.document));

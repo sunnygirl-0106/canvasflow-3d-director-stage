@@ -95,7 +95,7 @@ export async function run() {
   // ---- 3 菱形状态 ----
   const diaState = async (file) => {
     await settle();
-    const s = await page.$eval('#inspector .field .kf-dia', (d) => ({ cls: d.className, bg: getComputedStyle(d).backgroundColor }));
+    const s = await page.$eval('#inspector .field .kf-dia', (d) => ({ cls: d.className, bg: getComputedStyle(d).backgroundColor, fill: d.querySelector('path')?.getAttribute('fill'), color: getComputedStyle(d).color }));
     const clip = await page.$eval('#inspector .field.kf-row, #inspector .kf-label', (n) => { const b = n.closest('.field').getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; });
     await page.screenshot({ path: file, clip });
     return s;
@@ -107,8 +107,8 @@ export async function run() {
   const dTrack = await diaState(`${OUT}/3_dia_track_t1.5.png`);
   await pickInOutliner(ids.p2Name);
   const dNone = await diaState(`${OUT}/3_dia_none.png`);
-  ok('验收3 菱形：t=0 实心 / t=1.5 空心亮 / 无轨道空心灰',
-    dKey.cls.endsWith(' key') && dKey.bg === 'rgb(2, 163, 197)' && dTrack.cls.endsWith(' track') && dTrack.bg === 'rgba(0, 0, 0, 0)' && dNone.cls.endsWith(' none'),
+  ok('验收3 菱形：t=0 实心 / t=1.5 空心亮 / 无轨道空心白',
+    dKey.cls.endsWith(' key') && dKey.fill === 'currentColor' && dKey.color === 'rgb(2, 163, 197)' && dTrack.cls.endsWith(' track') && dTrack.bg === 'rgba(0, 0, 0, 0)' && dNone.cls.endsWith(' none'),
     `${dKey.cls}(${dKey.bg}) / ${dTrack.cls} / ${dNone.cls}`);
 
   // ---- 4 拖键 3s → 4s（吸附开，fps 30）+ 撤销 / 重做 ----
@@ -144,7 +144,7 @@ export async function run() {
   const pathOf = () => page.evaluate((pid) => { const p = window.__app.timeline.toJSON().paths.find((x) => x.id === pid); return { start: p.start, duration: p.duration }; }, pathId);
   await page.evaluate(id=>window.__app.select(id),ids.p2);
   await clickSel(`.tl-head[data-ent="${ids.p2}"] .tl-caret`);
-  await page.click('.tl-path-edit'); // 行超出可见范围时先滚动到按钮
+  await page.click('.tl-path-line'); // 第五轮：区间在父行直接可拖，点击位置行打开属性 // 行超出可见范围时先滚动到按钮
   await page.$eval('.tl-bar-path', n => n.scrollIntoView({block:'nearest', inline:'nearest'}));
   await settle();
   const endXY = await centerOf('.tl-bar-path .tl-bar-end.end');
@@ -346,13 +346,13 @@ export async function run() {
   // ---- 9 折叠：视口高 +184px，刷新保持 ----
   const expandedHeight = await page.$eval('#timeline', (n) => n.offsetHeight);
   const vh0 = await page.evaluate(() => document.getElementById('viewport').clientHeight);
-  await clickSel('#timeline .tl-fold');
+  await clickSel('#dock button[title^="时间轴"]'); // 第五轮只保留底部开合入口
   await settle(150);
   const vh1 = await page.evaluate(() => document.getElementById('viewport').clientHeight);
   await page.reload({ waitUntil: 'networkidle0' });
   await page.waitForFunction(() => window.__app?.history.enabled, { timeout: 30000 });
   const kept = await page.evaluate(() => ({ collapsed: document.getElementById('timeline').classList.contains('collapsed'), h: document.getElementById('timeline').offsetHeight, vh: document.getElementById('viewport').clientHeight }));
-  ok('验收9 折叠后释放时间轴轨道高度', Math.abs(vh1 - vh0 - expandedHeight) <= 1, `${vh0} → ${vh1}`);
+  ok('验收9 折叠不改变WebGL画布高度', expandedHeight > 0 && vh1 === vh0, `${vh0} → ${vh1}`);
   ok('验收9 刷新页面保持折叠', kept.collapsed && kept.h === 0 && kept.vh === vh1, JSON.stringify(kept));
   console.log(`📁 产物：${OUT}/`);
 }

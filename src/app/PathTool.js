@@ -3,8 +3,7 @@ import { el, toast, toastError, confirmToast, isTyping, CLICK_PX } from '../util
 import { Emitter } from '../util/Emitter.js';
 import { safePathPlanePoint } from '../core/pathPicking.js';
 import { worldBox } from '../util/measure.js';
-import { line, polar, toward, simplify, PATH_MODES, rectangle, TOWARD_STOP, ARC_SWEEP, arcPoints, pathLength, defaultDuration } from '../anim/pathGen.js';
-import { rampFor } from '../anim/Path.js';
+import { line, polar, toward, simplify, PATH_MODES, rectangle, TOWARD_STOP, ARC_SWEEP, arcPoints, pathLength } from '../anim/pathGen.js';
 import { PathTrack } from '../anim/PathTrack.js';
 import { pathStartPoint, setPath } from '../doc/edit.js';
 import { round4, clone } from '../util/math.js';
@@ -374,9 +373,8 @@ export class PathTool extends Emitter {
   }
 
   /**
-   * 写入文档（一次撤销），数据由 edit.setPath 生成（与 AI 同一份）：已有路径 → 替换 points / closed，按新长度重算时长，
-   * 保留 speed / orient；否则删掉该实体的 pos 轨道（若有，request 时已确认）并新建路径：
-   * 新建人物路径按正常步速估算时长，重画保留时长；新人物路径默认匀速、orient = tangent（机位 keep）。
+   * 所有 UI 绘制/重绘统一为0～10秒；不足10秒的场景在同一事务延长。
+   * 公共 setPath 仍保留显式时长、按步速估算及 AI 的原有语义。
    * @returns {string|null} 路径 id
    */
   _commit(points, { closed = false, meta = null, interpolation } = {}) {
@@ -387,7 +385,8 @@ export class PathTool extends Emitter {
     let path, old;
     try {
       app.store.transact('绘制路径', (doc) => {
-        ({ path, replaced: old } = clone(setPath(doc, ent.id, points, { closed, set: { start: 0, ...(interpolation ? { interpolation } : {}) } })));
+        doc.timeline.duration = Math.max(10, doc.timeline.duration);
+        ({ path, replaced: old } = clone(setPath(doc, ent.id, points, { closed, set: { start: 0, duration: 10, ...(interpolation ? { interpolation } : {}) } })));
         // 同一事务保存出发朝向：idle 立即可见，撤销路径时也恢复原朝向。
         if (['character', 'group'].includes(ent.type) && path.orient === 'tangent') {
           const transform = doc.entities.find((e) => e.id === ent.id).transform;
@@ -400,9 +399,7 @@ export class PathTool extends Emitter {
     } catch (err) { toastError(err); return null; }
     if (meta) app.pathMeta[path.id] = meta; else delete app.pathMeta[path.id];
     const length = pathLength(path.points, path.closed, path.stops, path.interpolation);
-    const natural = defaultDuration(path.points, { closed: path.closed, interpolation: path.interpolation, ramp: path.speed === 'smooth' ? rampFor(ent.type) : 0 });
-    const fitted = !['character', 'group'].includes(ent.type) && path.duration < natural - 0.001 ? ' · 已自动加速适配总时长，可在运动轨迹中调整' : '';
-    toast(`${old ? '已替换' : '已创建'}轨迹：${fmt(path.start)}–${fmt(path.start + path.duration)} s · 平均 ${(length / path.duration).toFixed(2)} m/s${fitted}`);
+    toast(`${old ? '已替换' : '已创建'}轨迹：${fmt(path.start)}–${fmt(path.start + path.duration)} s · 平均 ${(length / path.duration).toFixed(2)} m/s`);
     app.pathOverlay.setSelectedPath(path.id);
     this.emit('commit', path);
     return path.id;

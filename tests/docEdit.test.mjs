@@ -99,11 +99,11 @@ test('setPath：新建删 pos 轨道并取默认值；替换保留 start / speed
   const r1 = edit.setPath(doc, a.id, [[0, 0, 0], [2.6, 0, 0]], { start: 1 });
   assert.equal(r1.replaced, false);
   assert.deepEqual(doc.timeline.tracks, []);
-  assert.deepEqual([r1.path.start, r1.path.duration, r1.path.speed, r1.path.orient], [1, 2.2, 'linear', 'tangent']);
+  assert.deepEqual([r1.path.start, r1.path.duration, r1.path.speed, r1.path.orient], [1, 1.9, 'linear', 'tangent']);
   const r2 = edit.setPath(doc, a.id, [[0, 0, 0], [1.3, 0, 0]], { start: 3 });
   assert.equal(r2.replaced, true);
   assert.equal(r2.path.id, r1.path.id);
-  assert.deepEqual([r2.path.start, r2.path.duration], [1, 2.2]); // 改路径长度保留时长，只改变移动速度
+  assert.deepEqual([r2.path.start, r2.path.duration], [1, 1.9]); // 第五轮默认步速为 1.44；改路径长度保留时长，只改变移动速度
   const r3 = edit.setPath(doc, a.id, [[0, 0, 0], [1.3, 0, 0]], { set: { start: 2, orient: 'keep', duration: 4 } });
   assert.deepEqual([r3.path.start, r3.path.duration, r3.path.orient], [2, 4, 'keep']);
   assert.equal(edit.setPath(doc, 'cam00001', [[0, 1.6, 5], [0, 1.6, 3]]).path.orient, 'keep');

@@ -12,29 +12,10 @@ export const FRAMING = Object.freeze({
   minimumDistance: 1.5,
 });
 
-/**
- * 首屏按参考图的屏幕比例标定：人物高约 21%，脚底约 2/3 画高。
- * 观察点保持在人物正前方、向下俯视 5°；默认拍摄机位与首屏共用位置、目标和视场角。
- * 与显式「对准主体」的紧凑取景分开，避免改变编辑中的缩放行为。
- */
-export function startupFraming(box, { fov, aspect }) {
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  const height = size.y;
-  const tangent = Math.tan(THREE.MathUtils.degToRad(fov / 2));
-  // 横屏按人物高度标定；窄屏也给两侧留出空间。
-  const distance = Math.max(height * Math.cos(THREE.MathUtils.degToRad(5)) ** 2 / (2 * tangent * 0.21), size.x / (2 * tangent * aspect * 0.72)) + size.z / 2;
-  const pitch = THREE.MathUtils.degToRad(5);
-  const target = new THREE.Vector3(center.x, box.min.y + height * 0.785, center.z);
-  const position = new THREE.Vector3(center.x, target.y + distance * Math.tan(pitch), center.z + distance);
-  return {
-    director: { position, target },
-    shot: {
-      position: position.clone(),
-      target: target.clone(),
-      fov,
-    },
-  };
+/** 新场景共用一份构图；手动对准主体仍使用下方 fitBounds。 */
+export function startupFraming() {
+  const view = () => ({ position: new THREE.Vector3(0, 2.2, 10), target: new THREE.Vector3(0, 1.2, 0), fov: 50 });
+  return { director: view(), shot: view() };
 }
 
 /**

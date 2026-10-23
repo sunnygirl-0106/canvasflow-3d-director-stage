@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { page, ok, twoCharacterFixture } from '../harness.mjs';
-import { pixelDiff, sleep, settle, clickSel, pickInOutliner, scr, pathMenu, toastText, toastClick, animJSON, pathOf, cleanShot, dragPath, hdist } from '../helpers.mjs';
+import { pixelDiff, sleep, settle, pickInOutliner, scr, pathMenu, toastText, toastClick, animJSON, pathOf, cleanShot, dragPath, hdist } from '../helpers.mjs';
 
 export async function run() {
   await twoCharacterFixture();
@@ -22,7 +22,8 @@ export async function run() {
     const box2 = a.addProp('box'); box2.root.position.set(-2.6, 0, 2.4); a.edited(box2);
     a.addCamera('front_mid'); // 验收 9：机位视角下路径不显示
     a.select(null);
-    a.rig.controls.target.set(0, 0, 0.6); a.stage.camera.position.set(0, 8.5, 7.5); a.rig.controls.update();
+    // 时间轴覆盖画布下部；绘制测试向上构图，点击点必须处于可见舞台。
+    a.rig.controls.target.set(0, -1.5, 0.6); a.stage.camera.position.set(0, 7, 7.5); a.rig.controls.update();
     a.history.reset();
     const n = (e) => e.name;
     return { A: A.id, B: B.id, box: box.id, cyl: cyl.id, box2: box2.id, An: n(A), Bn: n(B), boxN: n(box), cylN: n(cyl), box2N: n(box2) };
@@ -44,13 +45,13 @@ export async function run() {
   await page.keyboard.press('Enter');
   await settle(150);
   const p1 = await pathOf(ids.A);
-  const dd1 = await page.evaluate(async (pts) => (await import('/src/anim/pathGen.js')).defaultDuration(pts, { ramp: 0 }), p1?.points || [[0, 0, 0]]);
+  const dd1 = 10; // 最新UI绘制默认固定时长，非按长度估算。
   await page.evaluate(() => window.__app.playback.seek(0));
   await settle();
   const shot1 = await cleanShot(`${OUT}/1_t0.png`);
   const diff1 = pixelDiff(shot0, shot1, `${OUT}/1_diff.png`);
   await page.evaluate(() => window.__app.playback.stop());
-  ok('验收1 点击落点：3 次点击 + Enter → 4 个点、首点 ≡ 角色当前位置、start=0、duration=defaultDuration',
+  ok('验收1 点击落点：3 次点击 + Enter → 4 个点、首点 ≡ 角色当前位置、start=0、duration=10',
     p1 && p1.points.length === 4 && hdist(p1.points[0], aPos) < 1e-3 && p1.points[0][1] === 0 && p1.start === 0 && p1.duration === dd1,
     `points=${JSON.stringify(p1?.points)} start=${p1?.start} duration=${p1?.duration}/${dd1}`);
   ok('验收1 创建后 t=0 画面 ≡ 创建前（不跳）', diff1 === 0, `差异 ${(diff1 * 100).toFixed(4)}%`);
@@ -156,8 +157,7 @@ export async function run() {
   // ---- 5 Explicitly enter editing before dragging existing vertices (round 4). ----
   await pickInOutliner(ids.An);
   await page.evaluate(() => [...document.querySelectorAll('.ptabs button')].find(b => b.textContent === '运动轨迹')?.click());
-  await clickSel('#inspector [data-sec="path"] .sec-btn');
-  await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find(n => n.textContent === '编辑现有轨迹').click());
+  await pathMenu('编辑现有轨迹');
   const pA = await pathOf(ids.A);
   await page.evaluate(() => {
     const tl = window.__app.timeline;
@@ -225,8 +225,7 @@ export async function run() {
   ok('验收6 选中顶点 Del → 点数 −1（实体不被删除）', selV?.index === 2 && del.points.length === before6.points.length && stillThere, `${ins.points.length} → ${del.points.length}`);
   await pickInOutliner(ids.box2N);
   await page.evaluate(() => [...document.querySelectorAll('.ptabs button')].find(b => b.textContent === '运动轨迹')?.click());
-  await clickSel('#inspector [data-sec="path"] .sec-btn');
-  await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find(n => n.textContent === '编辑现有轨迹').click());
+  await pathMenu('编辑现有轨迹');
   const lnP = await pathOf(ids.box2);
   await page.mouse.click(...await scr(lnP.points[1]));
   await settle();
@@ -275,7 +274,8 @@ export async function run() {
   const esc8 = await page.evaluate(() => window.__app.pathTool.mode);
   ok('验收8 绘制态 ⌥ + 左键拖动 = 环绕（不落点）；Esc 退出、替换未执行', Math.hypot(...cv0.map((v, i) => v - cv1.pos[i])) > 0.1 && cv1.n === 1 && esc8 === null && JSON.stringify(await animJSON()) === doc8,
     `相机位移 ${Math.hypot(...cv0.map((v, i) => v - cv1.pos[i])).toFixed(3)} 草稿点数 ${cv1.n}`);
-  await page.evaluate(() => { const a = window.__app; a.rig.controls.target.set(0, 0, 0.6); a.stage.camera.position.set(0, 8.5, 7.5); a.rig.controls.update(); });
+  await page.evaluate(() => { const a = window.__app; // 时间轴覆盖画布下部；绘制测试向上构图，点击点必须处于可见舞台。
+    a.rig.controls.target.set(0, -1.5, 0.6); a.stage.camera.position.set(0, 7, 7.5); a.rig.controls.update(); });
   await settle(200);
 
   // ---- 9 可视化 ----
@@ -305,6 +305,9 @@ export async function run() {
   await page.screenshot({ path: `${OUT}/13_inspector.png`, clip: await panelClip() });
 
   // ---- 10 播放：角色 B 画一条 6 m 直线（替换手绘）后直接 Space ----
+  // 长直线左端需落在可见画布内，不能点到左侧场景树。
+  await page.evaluate(() => { const a = window.__app; a.rig.controls.target.set(-1.5, -1.5, 0); a.stage.camera.position.set(-1.5, 9, 11); a.rig.controls.update(); });
+  await settle();
   await pickInOutliner(ids.Bn);
   await pathMenu('直线');
   await toastClick('替换');
@@ -313,11 +316,12 @@ export async function run() {
   await page.mouse.click(...await scr(bEnd));
   await settle(150);
   const p10 = await pathOf(ids.B);
-  await page.evaluate(() => document.activeElement?.blur());
+  // 路径现在结束于场景末尾；关闭循环，才能验证自然停在10秒的终点。
+  await page.evaluate(() => { window.__timelinePanel.setPref('loop', false); document.activeElement?.blur(); });
   await page.keyboard.press('Space');
   await page.waitForFunction((t) => window.__app.playback.time >= t, { timeout: 15000 }, p10.duration * 0.5);
   const walk = await page.evaluate((id) => { const e = window.__app.findEntity(id); return Object.values(e.values).reduce((s, v) => s + Math.abs(v), 0); }, ids.B);
-  await page.waitForFunction((t) => window.__app.playback.time >= t, { timeout: 15000 }, p10.start + p10.duration + 0.1);
+  await page.waitForFunction((t) => window.__app.playback.time >= t, { timeout: 15000 }, p10.start + p10.duration);
   const end10 = await page.evaluate((id) => { const a = window.__app; a.playback.pause(); return window.__app.findEntity(id).toJSON({ base: null }).transform.pos; }, ids.B);
   const end10root = await page.evaluate((id) => { const e = window.__app.findEntity(id); return [e.root.position.x, e.root.position.z]; }, ids.B);
   const e10 = Math.hypot(end10root[0] - p10.points[1][0], end10root[1] - p10.points[1][2]);
@@ -325,13 +329,13 @@ export async function run() {
   ok('验收10 6 m 直线直接 Space：中途在走路（姿势非零），t ≥ 结束时停在终点（误差 < 1 cm）',
     Math.abs(hdist(p10.points[0], p10.points[1]) - 6) < 0.05 && walk > 1 && e10 < 0.01,
     `长 ${hdist(p10.points[0], p10.points[1]).toFixed(3)} m 时长 ${p10.duration}s 姿势Σ|v|=${walk.toFixed(1)} 终点误差 ${(e10 * 100).toFixed(3)} cm ${JSON.stringify(end10).length ? '' : ''}`);
-  // 收尾 1 · 起步平滑转身（界面画的直线，朝 −X；角色手动朝向不同）
+  // 角色匀速路径从首帧朝向切线，不使用机位的 0.8 m 转身过渡。
   const turn10 = await page.evaluate(async (pid, id) => {
     const a = window.__app, pb = a.playback;
-    const { Path, rampFor } = await import('/src/anim/Path.js');
+    const { Path, pathOptionsFor } = await import('/src/anim/Path.js');
     const { TURN_IN_DIST } = await import('/src/anim/PathTrack.js');
     const e = a.findEntity(id);
-    const P = new Path(a.timeline.toJSON().paths.find((p) => p.id === pid), { ramp: rampFor(e.type) });
+    const P = new Path(a.timeline.toJSON().paths.find((p) => p.id === pid), pathOptionsFor(e.type));
     const R2D = 180 / Math.PI;
     const yaw = () => e.root.rotation.clone().reorder('YXZ').y * R2D;
     const d = (x, y) => Math.abs(((x - y) % 360 + 540) % 360 - 180);
@@ -340,33 +344,36 @@ export async function run() {
     const tanYaw = Math.atan2(tan.x, tan.z) * R2D;
     let t06 = P.json.start;
     while (P.distanceAt(t06) < TURN_IN_DIST) t06 += 1 / 120;
-    pb.seek(P.json.start); const s0 = d(yaw(), manual);
+    pb.seek(P.json.start); const s0 = d(yaw(), tanYaw);
     pb.seek(t06); const s1 = d(yaw(), tanYaw);
     let maxStep = 0, prev = null;
     for (let t = P.json.start; t <= t06 + 0.1; t += 1 / 30) { pb.seek(t); const y = yaw(); if (prev !== null) maxStep = Math.max(maxStep, d(y, prev)); prev = y; }
     pb.stop();
     return { manual, tanYaw, s0, s1, maxStep, t06 };
   }, p10.id, ids.B);
-  ok('起步转身（界面画的直线）：t=start ≡ 手动朝向、走过 0.8 m ≡ 切线（< 0.5°），每帧 < 15°', turn10.s0 < 0.5 && turn10.s1 < 0.5 && turn10.maxStep < 15 && turn10.manual !== turn10.tanYaw,
+  ok('角色匀速直线：t=start 与走过 0.8 m 均朝向切线（< 0.5°），每帧 < 15°', turn10.s0 < 0.5 && turn10.s1 < 0.5 && turn10.maxStep < 15,
     JSON.stringify(Object.fromEntries(Object.entries(turn10).map(([k, v]) => [k, +v.toFixed(3)]))));
   // 收尾 1 · 停顿：点线插入一个中间顶点（自动选中）→ Inspector「在选中顶点处停顿」真实点击 → stops = [1]；该顶点处速度 0
   await page.evaluate((pid) => { const a = window.__app; const P = a.pathOverlay.pathOf(pid); a.pathEditor.insertAt(pid, P.length / 2); }, p10.id);
   await settle(200);
-  const stopUI0 = await page.evaluate(() => document.querySelector('#inspector [data-row="stop"] .t-label')?.textContent || '');
-  await clickSel('#inspector [data-row="stop"] .switch');
+  await page.evaluate(id => { const p=window.__timelinePanel; p.trackRows.expandedEnts.add(id); p.rebuild(); }, ids.B);
+  await settle();
+  await page.click(`.tl-track[data-path="${p10.id}"] .tl-path-node:nth-of-type(3)`, {button:'right'});
+  const stopUI0 = await page.$eval('.ctxmenu', n => n.innerText);
+  await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find(n=>n.textContent.includes('在此节点停顿')).click());
   await settle(150);
   const stopUI = await page.evaluate(async (pid) => {
     const a = window.__app;
     const { Path } = await import('/src/anim/Path.js');
     const json = a.timeline.toJSON().paths.find((p) => p.id === pid);
     const P = new Path(json);
-    return { stops: json.stops, v: P.speedAt(json.start + P.segmentTimes[0]), info: document.querySelector('#inspector [data-row="stop"]').innerText, hist: a.history.entries.length };
+    return { stops: json.stops, v: P.speedAt(json.start + P.segmentTimes[0]), info: '第五轮停顿通过节点右键操作', hist: a.history.entries.length };
   }, p10.id);
   await page.screenshot({ path: `${OUT}/14_stop_inspector.png`, clip: await panelClip() });
   await page.keyboard.down('Meta'); await page.keyboard.press('z'); await page.keyboard.up('Meta');
   await settle(200);
   const stopUndo = await pathOf(ids.B);
-  ok('停顿（Inspector）：选中中间顶点 → 勾「在选中顶点处停顿」→ stops=[1]、该顶点处速度 0；⌘Z 撤掉',
+  ok('停顿（节点右键）：选中中间顶点 → 勾「在选中顶点处停顿」→ stops=[1]、该顶点处速度 0；⌘Z 撤掉',
     stopUI0.includes('停顿') && JSON.stringify(stopUI.stops) === '[1]' && stopUI.v < 1e-9 && !('stops' in stopUndo) && stopUndo.points.length === 3,
     `「${stopUI0}」 stops=${JSON.stringify(stopUI.stops)} v=${stopUI.v} 撤销后 ${JSON.stringify(stopUndo.stops)} | ${stopUI.info.replace(/\s+/g, ' ')}`);
 

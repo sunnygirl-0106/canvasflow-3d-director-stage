@@ -11,7 +11,7 @@ export async function run() {
     return { doc: d, ready: a.ready, selected: a.selectedId, collapsed: window.__timelinePanel.collapsed, hist: a.history.entries.length };
   });
   const d = seed.doc, char = d.entities.find(e => e.type === 'character'), cam = d.entities.find(e => e.type === 'camera');
-  ok('第四轮双人一机、两条路径、10s/30fps、选中角色、时间轴关闭', seed.ready && d.entities.length === 3 && !!char && !!cam && d.timeline.duration === 10 && d.timeline.fps === 30 && d.timeline.mainCameraId === cam.id && d.scene.activeCameraId === cam.id && d.paths.length === 2 && !d.timeline.tracks.length && !d.constraints.length && seed.selected === char.id && seed.collapsed && seed.hist === 1);
+  ok('第五轮双人一机、无初始路径、10s/30fps、选中角色、时间轴关闭', seed.ready && d.entities.length === 3 && !!char && !!cam && d.timeline.duration === 10 && d.timeline.fps === 30 && d.timeline.mainCameraId === cam.id && d.scene.activeCameraId === cam.id && d.paths.length === 0 && !d.timeline.tracks.length && !d.constraints.length && seed.selected === char.id && seed.collapsed && seed.hist === 1);
   const calibration = [];
   for (const [width, height] of [[1440,900], [1920,1080], [1440,810]]) {
     await page.setViewport({ width, height }); await settle(160);
@@ -26,7 +26,7 @@ export async function run() {
     await page.screenshot({ path: `${OUT}/director-${width}x${height}.png` });
   }
   fs.writeFileSync(`${OUT}/calibration.json`, JSON.stringify(calibration, null, 2));
-  ok('第四轮导演构图：人物高度18–22%，脚底约62%', calibration.every(x => x.director.height >= .18 && x.director.height <= .22 && x.director.feet >= .58 && x.director.feet <= .65), JSON.stringify(calibration.map(x => x.director)));
+  ok('复验统一构图：人物全身入镜，脚底约43%', calibration.every(x => x.director.height >= .15 && x.director.height <= .22 && x.director.feet >= .4 && x.director.feet <= .46), JSON.stringify(calibration.map(x => x.director)));
   await page.setViewport({width:1440,height:900}); await settle();
   const preview = await page.evaluate(() => {
     const a = window.__app, before = JSON.stringify(a.store.document), sel = a.selectedId, hist = a.history.entries.length;
@@ -71,7 +71,7 @@ export async function run() {
     }
     return out;
   });
-  ok('横竖导出设置均不改变普通播放的全视口 aspect，框和遮罩隐藏', ratios.every(r=>r.full&&r.height>=.5&&r.height<=.75&&Math.abs(r.aspect-r.viewport)<.001&&r.frame===null&&r.hidden),JSON.stringify(ratios));
+  ok('横竖导出设置均不改变普通播放的全视口 aspect，框和遮罩隐藏', ratios.every(r=>r.full&&r.height>=.15&&r.height<=.25&&Math.abs(r.aspect-r.viewport)<.001&&r.frame===null&&r.hidden),JSON.stringify(ratios));
   await page.screenshot({path:`${OUT}/camera-portrait.png`});
   await page.evaluate(()=>{const a=window.__app;a.setRatio('16:9');a.stopPreview();});
   ok('停止回0和导演编辑视角，洁净计数归零',await page.evaluate(()=>{const a=window.__app;return !a.preview&&!a.cameraView&&!a.timeline.active&&a.playback.time===0&&a._cleanDepth===0;}));
@@ -118,7 +118,7 @@ export async function run() {
     return {forward,back,display,edge,duration:a.timeline.duration};
   });
   ok('30次步进到1s再返回0；299帧显示9.97；非整帧终点夹取',frames.forward===1&&frames.back===0&&frames.display==='9.97'&&frames.edge===1.01&&frames.duration===10,JSON.stringify(frames));
-  const track=await page.evaluate(()=>{const a=window.__app;window.__timelinePanel.setCollapsed(false);window.__timelinePanel.trackRows.expandedEnts.add(a.entities[0].id);a.timeline.removePath(a.timeline.toJSON().paths.find(p=>p.target===a.entities[0].id).id);const t=a.timeline.addTrack({target:a.entities[0].id,property:'pos'});a.timeline.setKey(t.id,0,[0,0,0]);a.timeline.setKey(t.id,4,[0.4,0,0]);a.timeline.setKey(t.id,10,[1,0,0]);a.history.capture();return t.id;});await settle();
+  const track=await page.evaluate(()=>{const a=window.__app;window.__timelinePanel.setCollapsed(false);window.__timelinePanel.trackRows.expandedEnts.add(a.entities[0].id);const path=a.timeline.paths.find(p=>p.target===a.entities[0].id);if(path)a.timeline.removePath(path.id);const t=a.timeline.addTrack({target:a.entities[0].id,property:'pos'});a.timeline.setKey(t.id,0,[0,0,0]);a.timeline.setKey(t.id,4,[0.4,0,0]);a.timeline.setKey(t.id,10,[1,0,0]);a.history.capture();return t.id;});await settle();
   const coords=await page.evaluate(()=>{
     const p=window.__timelinePanel, r=p.scroll.getBoundingClientRect();
     p.setZoom(900);p.scroll.scrollLeft=3100;

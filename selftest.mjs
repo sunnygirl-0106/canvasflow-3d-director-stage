@@ -42,7 +42,7 @@
 import { execFileSync } from 'node:child_process';
 
 const [CMD = 'default', ...ARGS] = process.argv.slice(2);
-const SUITES = ['defaultview', 'pathselect', 'polish', 'zoom', 'round4', 'tooltips', 'round3', 'round2', 'director', 'default', 'doc', 'anim', 'tl', 'path', 'cam', 'export', 'ai', 'store'];
+const SUITES = ['motion', 'revision5', 'round5', 'defaultview', 'pathselect', 'polish', 'zoom', 'round4', 'tooltips', 'round3', 'round2', 'director', 'default', 'doc', 'anim', 'tl', 'path', 'cam', 'export', 'ai', 'store'];
 
 if (CMD === 'posediff') {
   const { poseDiff } = await import('./e2e/posediff.mjs');

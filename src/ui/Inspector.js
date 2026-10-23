@@ -10,7 +10,7 @@ import { POSE_PRESETS } from '../entities/posePresets.js';
 import { downloadURL } from '../app/ShotManager.js';
 import { propState, toggleKey } from './timeline/animState.js';
 import { arcPoints } from '../anim/pathGen.js';
-import { pathLength, defaultDuration, stopsAfterReverse, toggleStop, WALK_PACE } from '../anim/pathGen.js';
+import { pathLength, paceFor, defaultDuration, stopsAfterReverse, toggleStop, WALK_PACE } from '../anim/pathGen.js';
 import { rampFor } from '../anim/Path.js';
 import { popupMenu } from './timeline/keyDrag.js';
 import { CAMERA_MOVES, MOVE_PARAMS, MOVE_DIRS, MOVE_LABEL } from '../anim/cameraMoves.js';
@@ -50,7 +50,7 @@ export class Inspector {
     // 播放中点进输入框 / 按下轴标签拖动：先暂停（同 gizmo），否则输入会被逐帧求值覆盖。失焦 / 回车后不自动恢复播放
     const pauseIfPlaying = () => { if (app.playback.playing) app.playback.pause(); };
     container.addEventListener('focusin', (e) => { if (e.target.matches('input:not([type=checkbox]):not([type=range]), textarea')) pauseIfPlaying(); });
-    container.addEventListener('pointerdown', (e) => { if (e.target.closest('.ax')) pauseIfPlaying(); }, true);
+    container.addEventListener('pointerdown', (e) => { if (e.target.closest('.ax, input, button')) pauseIfPlaying(); }, true);
   }
 
   _reset() {
@@ -140,7 +140,7 @@ export class Inspector {
     const nodes = [];
     const path = anim.paths.find((p) => p.target === ent.id);
     if (ent.type === 'camera') nodes.push(this._moveSection(ent));
-    if (path) nodes.push(this._pathSection(path, ent));
+    if (path) nodes.push(ent.type === 'character' ? this._characterPathSection(path, ent) : this._pathSection(path, ent));
     else if (this.app.pathTool.canDraw(ent)) nodes.push(this._pathEmpty(ent));
     if (ent.type === 'camera') nodes.push(this._constraintSection(ent, anim.constraints.filter((c) => c.target === ent.id)));
     host.replaceChildren(...nodes);
@@ -154,7 +154,8 @@ export class Inspector {
   /** 「新建路径 ▾」：五种绘制方式（与 Dock「路径」按钮等价）。 */
   _newPathBtn(label, ent) {
     return el('button', {
-      class: 'sec-btn', text: label + ' ▾',
+      class: 'sec-btn path-create',
+      html: icon('path', 14, 1.5) + `<span>${label}</span>` + icon('chevron', 12, 1.5),
       onclick: (e) => {
         openPathMenu(this.app, e.currentTarget, ent.id);
       },
@@ -163,13 +164,29 @@ export class Inspector {
 
   /** 没有路径的角色 / 道具 / 组 / 机位：只有段头与入口。 */
   _pathEmpty(ent) {
+    if (ent.type !== 'camera') return el('div', { class: 'anim-sec', 'data-sec': 'path' }, [this._newPathBtn('绘制轨迹', ent)]);
     const info = ent.type === 'camera'
       ? '未设置路径。新建后机位沿路径移动（画在机位高度的水平面上，朝向保持不变）。'
-      : '未设置路径。新建后角色沿路径移动，播放时始终走路，速度越快步频越高。';
+      : '未设置路径。新建后角色沿路径移动，播放时始终走路，按固定步频行走。';
     return el('div', { class: 'anim-sec', 'data-sec': 'path' }, [
       el('div', { class: 'sec-title' }, [el('span', { text: '路径' }), el('span', { class: 'sec-spacer' }), this._newPathBtn('新建路径', ent)]),
       el('div', { class: 'anim-info', text: info }),
     ]);
+  }
+
+  _characterPathSection(p, ent) {
+    const root = el('div', { class: 'anim-sec character-path', 'data-sec': 'path' });
+    this._animRows = [];
+    const duration = sliderRow({ label: '时长', min: 0.01, max: this.app.timeline.duration - p.start,
+      step: 0.01, value: p.duration, editable: true,
+      onChange: v => this._tl(tl => { if (tl.paths.some(path => path.id === p.id && path.target === ent.id)) tl.updatePath(p.id, { duration: v }); }),
+    });
+    root.append(duration.el);
+    this._transformFields(root, ent, { motion: true });
+    root.append(toggleRow({ label: '绑定对象沿路径朝向', checked: p.orient === 'tangent',
+      onChange: on => this._tl(tl => tl.setPathOrientation(p.id, on ? 'tangent' : 'keep')),
+    }).el);
+    return root;
   }
 
   /**
@@ -183,7 +200,7 @@ export class Inspector {
     const total = this.app.timeline.duration;
     const uniform = ['character', 'group'].includes(ent.type);
     const ramp = !uniform && p.speed === 'smooth' ? rampFor(ent.type) : 0;
-    const natural = defaultDuration(p.points, { closed: p.closed, interpolation: p.interpolation, ramp });
+    const natural = defaultDuration(p.points, { speed: paceFor(ent.type), closed: p.closed, interpolation: p.interpolation, ramp });
     const suggestedTotal = Math.ceil((p.start + natural) * 10 - 1e-9) / 10;
     const needsMoreTime = ['character', 'group'].includes(ent.type) && natural > total - p.start + 0.001;
     const tool = this.app.pathTool;
@@ -443,7 +460,7 @@ export class Inspector {
   /** 关键帧菱形状态 + 被驱动属性灰字 + active 提示条。 */
   _refreshAnim() {
     const { app } = this;
-    if (this._activeHint) this._activeHint.hidden = !app.timeline.active;
+    if (this._activeHint) this._activeHint.hidden = !app.timeline.active || this.tabs[this.entity?.type] === 'motion';
     if (!this._animRows.length) return;
     const anim = app.timeline.view(); // 播放时每帧都会走到这里：只读视图，不深拷贝
     const t = app.timeline.active ? app.playback.time : 0;
@@ -451,8 +468,9 @@ export class Inspector {
       const st = propState(app, anim, r.ent.id, r.prop, t);
       const state = st.key ? 'key' : st.track ? 'track' : 'none';
       r.dia.className = 'kf-dia ' + state;
-      r.dia.disabled = st.forced === '路径';
-      r.dia.title = st.forced === '路径' ? '由路径驱动，不能打键'
+      r.dia.disabled = !!st.forced;
+      r.dia.innerHTML = icon(st.key ? 'diamondFilled' : 'diamond', 14);
+      r.dia.title = st.forced ? (r.prop === 'rot' && st.forced === '路径' ? '请先关闭沿路径朝向' : `由${st.forced}驱动，不能打键`)
         : st.key ? '删除当前时刻的关键帧' : app.timeline.active ? '在当前时刻打关键帧' : '在 0 秒打关键帧（进入时间轴）';
       r.row.classList.toggle('driven', st.driven);
     }
@@ -461,7 +479,7 @@ export class Inspector {
   /** 给属性行的标题加一颗关键帧菱形。 */
   _keyable(ent, pairs) {
     for (const [prop, row] of pairs) {
-      const dia = el('button', { class: 'kf-dia none', onclick: (e) => { e.stopPropagation(); this._toggleKey(ent, prop); } });
+      const dia = el('button', { class: 'kf-dia none', html: icon('diamond', 14), onclick: (e) => { e.stopPropagation(); this._toggleKey(ent, prop); } });
       const label = row.querySelector('label');
       label.classList.add('kf-label');
       label.appendChild(dia);
@@ -502,31 +520,44 @@ export class Inspector {
 
   // ---- 属性页（角色 / 道具 / 群众组通用）----
   _attr(root, ent) {
-    const o = ent.root;
-    const invalidate = () => this.app.stage.invalidate();
-    const commit = (prop) => () => this.app.edited(ent, new Set([prop])); // 一次修改结束：按时间轴状态归属（3.3）
     root.appendChild(this._nameField(ent));
+    this._transformFields(root, ent);
+    root.appendChild(colorRow({ label: '颜色', hex: toHex(ent.color),
+      onChange: h => { ent.setColor(h); this.app.stage.invalidate(); }, onCommit: () => this.app.edited(ent),
+    }).el);
+    if (ent.type === 'prop') this._motion(root);
+  }
 
-    // 显示 / 输入都是文档口径（与导出 JSON、关键帧值一致）：pos 减站立基准偏移，scale 除以素体自然尺寸（docTransformOpts）
+  /** 属性与运动页共享文档坐标、缩放换算和提交入口。输入始终绑定构建时的实体。 */
+  _transformFields(root, ent, { motion = false } = {}) {
+    const app = this.app, o = ent.root;
+    const invalidate = () => app.stage.invalidate();
+    const tangent = () => app.timeline.paths.some(p => p.target === ent.id && p.orient === 'tangent');
+    const commit = prop => () => {
+      if (app.findEntity(ent.id) !== ent) return;
+      if (prop === 'rot' && tangent()) app.timeline.editPathTilt(ent);
+      else app.edited(ent, new Set([prop]));
+      this._syncFn?.();
+    };
     const opts = () => ent.docTransformOpts();
-    const pos = tripleRow({ label: '位置', step: 0.01, onCommit: commit('pos'), axes: ['x', 'y', 'z'].map((k, i) => ({ key: k, get: () => o.position[k] - opts().posOffset[i], set: (v) => { o.position[k] = v + opts().posOffset[i]; invalidate(); } })) });
-    const rot = tripleRow({ label: '旋转', deg: true, onCommit: commit('rot'), axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.rotation[k] * R2D, set: (v) => { o.rotation[k] = v * D2R; invalidate(); } })) });
-    const scl = tripleRow({ label: '缩放', step: 0.01, onCommit: commit('scale'), axes: ['x', 'y', 'z'].map((k, i) => ({ key: k, get: () => o.scale[k] / opts().scaleDiv[i], set: (v) => { o.scale[k] = Math.max(0.05, v) * opts().scaleDiv[i]; invalidate(); } })) });
-
-    const girth = ent.girth || 1; // 体型横向围度（胖瘦）；统一缩放时按 Y 为基准、保留 X/Z 比例
-    const uni = sliderRow({
-      label: '统一缩放', min: 0.2, max: 3, step: 0.01, value: o.scale.y / ent.baseScale,
-      format: (v) => v.toFixed(1),
-      onInput: (v) => { const s = ent.baseScale * v; o.scale.set(s * girth, s, s * girth); scl.syncAll(); invalidate(); },
+    const pos = tripleRow({ label: '位置', step: 0.01, onCommit: commit('pos'), axes: ['x', 'y', 'z'].map((k, i) => ({ key: k, get: () => o.position[k] - opts().posOffset[i], set: v => { o.position[k] = v + opts().posOffset[i]; invalidate(); } })) });
+    const rot = tripleRow({ label: '旋转', deg: true, onCommit: commit('rot'), axes: ['x', 'y', 'z'].map(k => ({ key: k, get: () => o.rotation[k] * R2D, set: v => { if (k === 'y' && tangent()) return; o.rotation[k] = v * D2R; invalidate(); } })) });
+    let uni;
+    const scl = tripleRow({ label: '缩放', step: 0.01, onCommit: commit('scale'), axes: ['x', 'y', 'z'].map((k, i) => ({ key: k, get: () => o.scale[k] / opts().scaleDiv[i], set: v => { o.scale[k] = Math.max(0.05, v) * opts().scaleDiv[i]; uni?.set(o.scale.y / ent.baseScale); invalidate(); } })) });
+    const girth = ent.girth || 1;
+    uni = sliderRow({ label: '统一缩放', min: 0.2, max: 3, step: 0.01, value: o.scale.y / ent.baseScale, editable: true,
+      format: v => v.toFixed(2),
+      onInput: v => { const scale = ent.baseScale * v; o.scale.set(scale * girth, scale, scale * girth); scl.syncAll(); invalidate(); },
       onChange: commit('scale'),
     });
-    const col = colorRow({ label: '颜色', hex: toHex(ent.color), onChange: (h) => { ent.setColor(h); invalidate(); }, onCommit: () => this.app.edited(ent) });
-
-    root.append(pos.el, rot.el, scl.el, uni.el, col.el);
-    this._keyable(ent, [['pos', pos.el], ['rot', rot.el], ['scale', scl.el]]);
-    if (ent.type === 'prop') this._motion(root);
-
-    this._syncFn = () => { pos.syncAll(); rot.syncAll(); scl.syncAll(); uni.set(o.scale.y / ent.baseScale); };
+    root.append(pos.el, rot.el, scl.el, uni.el);
+    if (!motion) this._keyable(ent, [['pos', pos.el], ['rot', rot.el], ['scale', scl.el]]);
+    const yaw = rot.el.querySelectorAll('input')[1];
+    this._syncFn = () => {
+      pos.syncAll(); rot.syncAll(); scl.syncAll(); uni.set(o.scale.y / ent.baseScale);
+      yaw.disabled = tangent(); yaw.title = yaw.disabled ? '由路径朝向控制' : '';
+    };
+    this._syncFn();
   }
 
   // ---- 摄像机：属性 ----
