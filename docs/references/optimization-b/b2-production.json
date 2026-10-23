@@ -1,0 +1,43 @@
+{
+  "errors": [],
+  "requests": [
+    "http://localhost:5189/director/",
+    "http://localhost:5189/director/assets/index-B4cOf8DZ.js",
+    "http://localhost:5189/director/assets/three-CMrmuAxI.js",
+    "http://localhost:5189/director/assets/immer-UhVM58eM.js",
+    "http://localhost:5189/director/assets/index-SOEnJO-o.css",
+    "http://localhost:5189/director/api/local-ai/settings",
+    "http://localhost:5189/director/assets/bodykun_male-JU0b2omf.glb",
+    "http://localhost:5189/director/assets/bodychan_female-tdh7wOv-.glb",
+    "http://localhost:5189/director/assets/pano-sunset-DDxav23A.jpg",
+    "http://localhost:5189/director/assets/Xbot-DYfLQ7L7.glb",
+    "http://localhost:5189/director/",
+    "http://localhost:5189/director/assets/index-B4cOf8DZ.js",
+    "http://localhost:5189/director/assets/three-CMrmuAxI.js",
+    "http://localhost:5189/director/assets/immer-UhVM58eM.js",
+    "http://localhost:5189/director/assets/index-SOEnJO-o.css",
+    "http://localhost:5189/director/api/local-ai/settings",
+    "http://localhost:5189/director/assets/bodykun_male-JU0b2omf.glb",
+    "http://localhost:5189/director/assets/bodychan_female-tdh7wOv-.glb",
+    "http://localhost:5189/director/assets/pano-sunset-DDxav23A.jpg",
+    "http://localhost:5189/director/assets/pano-sunset-DDxav23A.jpg",
+    "http://localhost:5189/director/assets/VideoExporter-BYduiOwq.js",
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237d7d86' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"
+  ],
+  "browser": "Chrome/150.0.7871.24",
+  "url": "http://localhost:5189/director/",
+  "startup": {
+    "entities": 3,
+    "gizmo": false
+  },
+  "panorama": {
+    "active": true,
+    "url": "./assets/panoramas/pano-sunset.jpg"
+  },
+  "video": {
+    "filename": "未命名场景_1280x720_24fps.mp4",
+    "size": 97479,
+    "frames": 12
+  },
+  "passed": true
+}

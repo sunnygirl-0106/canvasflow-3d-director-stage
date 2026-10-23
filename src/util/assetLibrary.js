@@ -1,3 +1,4 @@
+import { resolveAssetURL } from './assetURL.js';
 // 模拟「画布」历史资产服务。未来接入真实画布 SDK 时只替换本文件实现。
 //
 // 预置全景图为 Poly Haven（https://polyhaven.com）提供的 CC0 等距柱状（2:1）实拍全景，
@@ -46,7 +47,7 @@ export async function listCanvasAssets() {
     type: 'image',
     w: 2048, h: 1024, ratioLabel: '2:1',
     url: P + p.file,
-    thumb: P + p.file,
+    thumb: resolveAssetURL(P + p.file),
     title: `${p.title} · 2:1`,
     createdAt: base - i * 60000,
   }));
@@ -55,7 +56,7 @@ export async function listCanvasAssets() {
     type: e.type,
     w: e.w, h: e.h, ratioLabel: e.ratioLabel,
     url: P + e.thumb,
-    thumb: P + e.thumb,
+    thumb: resolveAssetURL(P + e.thumb),
     title: `${e.title} · ${e.ratioLabel}${e.type === 'video' ? ' 视频' : ''}`,
     createdAt: base - i * 60000,
   }));

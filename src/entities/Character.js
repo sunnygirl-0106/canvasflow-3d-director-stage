@@ -1,3 +1,4 @@
+import { resolveAssetURL } from '../util/assetURL.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -22,7 +23,7 @@ const _templates = new Map(); // url → Promise<gltf>
 
 function loadTemplate(url) {
   if (!_templates.has(url)) {
-    _templates.set(url, _loader.loadAsync(url).catch((err) => { _templates.delete(url); throw err; }));
+    _templates.set(url, _loader.loadAsync(resolveAssetURL(url)).catch((err) => { _templates.delete(url); throw err; }));
   }
   return _templates.get(url);
 }

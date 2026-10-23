@@ -30,6 +30,15 @@ try {
     await a.panorama.setFromAsset({ url: './assets/panoramas/pano-sunset.jpg', title: '旧逻辑路径' });
     a.timeline.setDuration(12); a.history.capture(); await a.autosave.save();
   });
+  await page.evaluate(async () => {
+    const a = window.__app;
+    for (const body of ['female', 'xbot']) await a.addCharacter(body);
+  });
+  const manifest = JSON.parse(fs.readFileSync('dist/asset-manifest.json'));
+  for (const logical of ['./assets/figures/bodykun_male.glb', './assets/figures/bodychan_female.glb', './assets/Xbot.glb', './assets/panoramas/pano-sunset.jpg']) {
+    assert(report.requests.some((url) => url.endsWith('/director/' + manifest[logical])), logical);
+    assert.equal(fs.existsSync('dist/' + logical), false, '不复制原名资产');
+  }
   report.panorama = await page.evaluate(() => ({ active: window.__app.panorama.active, url: window.__app.panorama.asset.url }));
   assert.deepEqual(report.panorama, { active: true, url: './assets/panoramas/pano-sunset.jpg' });
   await page.reload({ waitUntil: 'networkidle0' });

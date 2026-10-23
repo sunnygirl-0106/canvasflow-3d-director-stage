@@ -1,0 +1,26 @@
+{
+  "stableOnBusinessChange": true,
+  "changedAssetOnly": "./assets/panoramas/pano-sunset.jpg",
+  "originalManifest": {
+    "./assets/Xbot.glb": "assets/Xbot-DYfLQ7L7.glb",
+    "./assets/figures/bodychan_female.glb": "assets/bodychan_female-tdh7wOv-.glb",
+    "./assets/figures/bodykun_male.glb": "assets/bodykun_male-JU0b2omf.glb",
+    "./assets/panoramas/pano-dawn.jpg": "assets/pano-dawn-DK25-Oqu.jpg",
+    "./assets/panoramas/pano-day.jpg": "assets/pano-day-COnqC8QB.jpg",
+    "./assets/panoramas/pano-night.jpg": "assets/pano-night-CN1U7RjW.jpg",
+    "./assets/panoramas/pano-sky.jpg": "assets/pano-sky-wBKb25Mn.jpg",
+    "./assets/panoramas/pano-studio.jpg": "assets/pano-studio-DIScV7W_.jpg",
+    "./assets/panoramas/pano-sunset.jpg": "assets/pano-sunset-DDxav23A.jpg"
+  },
+  "changedManifest": {
+    "./assets/Xbot.glb": "assets/Xbot-DYfLQ7L7.glb",
+    "./assets/figures/bodychan_female.glb": "assets/bodychan_female-tdh7wOv-.glb",
+    "./assets/figures/bodykun_male.glb": "assets/bodykun_male-JU0b2omf.glb",
+    "./assets/panoramas/pano-dawn.jpg": "assets/pano-dawn-DK25-Oqu.jpg",
+    "./assets/panoramas/pano-day.jpg": "assets/pano-day-COnqC8QB.jpg",
+    "./assets/panoramas/pano-night.jpg": "assets/pano-night-CN1U7RjW.jpg",
+    "./assets/panoramas/pano-sky.jpg": "assets/pano-sky-wBKb25Mn.jpg",
+    "./assets/panoramas/pano-studio.jpg": "assets/pano-studio-DIScV7W_.jpg",
+    "./assets/panoramas/pano-sunset.jpg": "assets/pano-sunset-COXwvNPR.jpg"
+  }
+}
