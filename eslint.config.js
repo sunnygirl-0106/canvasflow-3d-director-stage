@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
-  { ignores: ['dist/', 'node_modules/', 'test-output/', '_assets_src/'] },
+  { ignores: ['dist/', 'node_modules/', '.cache/', 'test-output/', '_assets_src/', '**/*.ts'] },
   js.configs.recommended,
   {
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { ...globals.browser, __LOCAL_AI_MODEL__: 'readonly' } },

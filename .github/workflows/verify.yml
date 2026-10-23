@@ -1,0 +1,71 @@
+name: Verify revision
+
+on:
+  workflow_call:
+    inputs:
+      full:
+        type: boolean
+        default: false
+      base-ref:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+        timeout-minutes: 5
+        env:
+          npm_config_fetch_timeout: 60000
+          npm_config_fetch_retries: 2
+      - run: npm run check
+      - run: npm run build
+      - name: Install Chinese fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-wqy-microhei=0.2.0-beta-3.1 ffmpeg
+          mkdir -p test-output
+          dpkg-query -W fonts-wqy-microhei > test-output/fonts.txt
+          fc-match sans-serif:lang=zh >> test-output/fonts.txt
+      - uses: actions/cache@v4
+        with:
+          path: .cache/test-browser
+          key: chrome-${{ runner.os }}-${{ hashFiles('scripts/install-test-browser.mjs') }}
+      - run: npm run test:browser:install
+        timeout-minutes: 10
+      - run: npm run test:build
+      - name: Required browser checks
+        if: ${{ !inputs.full }}
+        run: npm run test:e2e:required
+      - name: All browser checks
+        if: ${{ inputs.full }}
+        run: npm run test:e2e:all
+      - name: Pose regression when assets or pose code change
+        env:
+          BASE_REF: ${{ inputs.base-ref }}
+        run: node scripts/pose-regression.mjs
+      - name: Upload verified build
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-dist
+          path: dist
+          if-no-files-found: error
+      - name: Upload diagnostics even on failure or timeout
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-output
+          retention-days: 14

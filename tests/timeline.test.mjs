@@ -120,3 +120,41 @@ test('pruneEntities：删实体时清掉引用它的轨道 / 路径 / 约束', (
   assert.equal(v.timeline.tracks.length + v.paths.length + v.constraints.length, 0);
   assert.ok(close(app.timeline.duration, 10));
 });
+
+test('局部三维路径候选复用模型求值，不改变 Store、时长、停顿或其它驱动', () => {
+  const app = fakeApp(), box = addProp(app), other = addProp(app);
+  const p = app.timeline.addPath({ target: box.id, points: [[0,0,0],[1,0,0],[4,0,0]], start: 1, duration: 6, speed: 'linear', orient: 'keep', interpolation: 'polyline' });
+  const tr = app.timeline.addTrack({ target: other.id, property: 'pos' });
+  app.timeline.setKey(tr.id, 0, [0,0,0]); app.timeline.setKey(tr.id, 6, [6,0,0]);
+  app.timeline.updatePath(p.id, { stops:[1], stopTimes:[2] });
+  const source = app.timeline.paths.find(j => j.id === p.id), doc = app.store.document, revision = app.store.revision;
+  const candidate = { ...source, points: [[0,0,0],[1,2,0],[4,0,0]] };
+  const model = app.timeline.pathModel(candidate), t = model.vertexTime(1);
+  assert.equal(app.timeline.pathModel(candidate), model);
+  app.timeline.evaluate(t, { kind: 'path', source: candidate });
+  assert.ok(closeVec(posOf(box), [1,2,0]));
+  assert.ok(close(posOf(other)[0], t));
+  assert.equal(app.store.document, doc); assert.equal(app.store.revision, revision);
+  assert.equal(candidate.duration, source.duration);
+  assert.ok(close(t, app.timeline.pathModel(source).vertexTime(1)));
+  assert.deepEqual(candidate.stopTimes, [2]);
+  app.timeline.evaluate(t);
+  assert.equal(posOf(box)[1], 0);
+});
+
+test('位置键候选遵循 Channel 的 linear/smooth/step，撤销预览恢复原值', () => {
+  for (const ease of ['linear', 'smooth', 'step']) {
+    const app = fakeApp(), box = addProp(app);
+    const tr = app.timeline.addTrack({ target: box.id, property: 'pos' });
+    app.timeline.setKey(tr.id, 0, [0,0,0], ease); app.timeline.setKey(tr.id, 4, [4,2,8]);
+    const source = app.timeline.tracks[0], doc = app.store.document;
+    const candidate = { ...source, keys: source.keys.map((k,i) => i ? { ...k, value: [8,4,12] } : k) };
+    for (const t of [0, .25, 1, 2.5, 4]) {
+      app.timeline.evaluate(t, { kind: 'pos', source: candidate });
+      assert.ok(closeVec(posOf(box), app.timeline.positionChannel(candidate).evaluate(t)));
+    }
+    assert.equal(app.store.document, doc);
+    assert.deepEqual(candidate.keys.map(k => [k.t,k.ease]), source.keys.map(k => [k.t,k.ease]));
+    app.timeline.evaluate(4); assert.deepEqual(posOf(box), [4,2,8]);
+  }
+});

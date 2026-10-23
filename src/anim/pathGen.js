@@ -183,8 +183,11 @@ export function toggleStop(path, index, on) {
   return { stops, stopTimes: times };
 }
 
-/** 默认步速（m/s）：匀速段的速度。1.2 为舒缓的正常走路，配合完整步幅降低迈腿频率。 */
-export const WALK_PACE = 1.2;
+/** 默认步速（m/s）：匀速段的速度。角色新路径比原先的 1.2 m/s 提高 20%。 */
+export const WALK_PACE = 1.44;
+
+/** 机位和道具沿用原速度；只调整新建角色/群众路径。 */
+export const paceFor = type => ['character', 'group'].includes(type) ? WALK_PACE : 1.2;
 
 /**
  * 默认时长：让匀速段的速度 = speed（m/s）。smooth 角色路径有起步 / 收步（ramp 秒，Path 的 ramp 选项），

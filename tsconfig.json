@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM"],
+    "types": []
+  },
+  "files": ["src/types/globals.d.ts", "src/util/math.js", "src/app/exportSpec.js", "src/ai/provider.js", "tests/types.contracts.ts"]
+}

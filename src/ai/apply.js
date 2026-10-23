@@ -1,5 +1,6 @@
 // ops → 场景：validateOps → 在文档拷贝上逐条执行（src/doc/edit.js 的纯函数）→ 现有校验器 →
 // 全部通过才 loadDocument，History 记一步。任何一步失败都返回错误列表，场景不变。
+import { checkRequestState } from '../util/requestGuard.js';
 import * as THREE from 'three';
 import { validateOps, sceneIndex, uniqueName } from './ops.js';
 import { DEFAULT_POSE } from './vocab.js';
@@ -277,10 +278,11 @@ export function compileOps(base, ops, { mode = 'modify', charSeq = 0 } = {}) {
  * 校验 → 编译 → 文档校验 → 加载（一次撤销）。失败返回 { ok:false, errors }，场景不变。
  * @param {import('../app/App.js').App} app
  * @param {object[]} ops
- * @param {{mode?:'generate'|'modify'|'image'}} opts
+ * @param {{mode?:'generate'|'modify'|'image', expectedRevision?:number, signal?:AbortSignal}} opts
  * @returns {Promise<{ok:boolean, applied:number, renames:Object<string,string>, warnings:string[], errors:string[]}>}
  */
-export async function applyOps(app, ops, { mode = 'modify' } = {}) {
+export async function applyOps(app, ops, { mode = 'modify', expectedRevision = app.store.revision, signal } = {}) {
+  checkRequestState(app.store, { expectedRevision, signal });
   const base = app.store.document;
   const v = validateOps(ops, sceneIndex(base), { mode });
   if (!v.ok) return { ok: false, applied: 0, renames: v.renames, warnings: [], errors: v.errors };
@@ -289,8 +291,9 @@ export async function applyOps(app, ops, { mode = 'modify' } = {}) {
   const check = validate(r.doc);
   if (!check.ok) return { ok: false, applied: 0, renames: r.renames, warnings: r.warnings, errors: check.errors.map((e) => `场景文档：${e}`) };
   try {
-    await app.loadDocument(r.doc, { applyView: false, pruneShots: true });
+    await app.loadDocument(r.doc, { applyView: false, pruneShots: true, expectedRevision, signal });
   } catch (err) {
+    if (err?.name === 'AbortError' || err?.name === 'StaleRequestError') throw err;
     return { ok: false, applied: 0, renames: r.renames, warnings: r.warnings, errors: [`加载失败：${err?.message || err}`] };
   }
   app.history.capture(); // 一次 AI 应用 = 一步撤销
@@ -301,52 +304,4 @@ export async function applyOps(app, ops, { mode = 'modify' } = {}) {
   return { ok: true, applied: r.applied, renames: r.renames, warnings: r.warnings, errors: [] };
 }
 
-// ---- 场景摘要 ----
-const f2 = (v) => r2(v).toString();
-const vec = (p) => `(${p.map(f2).join(', ')})`;
-const MAX_LINES = 60;
-
-/**
- * 给模型看的当前场景文本：每实体一行（名字、类型、体型 / 种类、pos、yaw、姿势、路径、运镜 / 约束），
- * 加场景参数与时间轴。实体很多时截断（控制在约 2k token 内）。
- */
-export function summarize(appOrDoc) {
-  const doc = appOrDoc.exportDocument ? appOrDoc.exportDocument({ view: false }) : appOrDoc;
-  const byId = new Map(doc.entities.map((e) => [e.id, e]));
-  const nameOf = (s) => (Array.isArray(s) ? vec(s) : byId.get(s)?.name ?? '?');
-  const span = (s, e) => `${f2(s ?? 0)}–${e == null ? '全程' : f2(e) + ' s'}`;
-  const s = doc.scene;
-  const tl = doc.timeline;
-  const lines = [
-    `场景：天空 ${s.sky} · 地面 ${s.ground.visible ? '显示' : '隐藏'}，高 ${f2(s.ground.height)} · 比例 ${s.ratio} · 全景 ${s.panorama ? '有' : '无'}`,
-    `时间轴：${f2(tl.duration)} s · ${tl.fps} fps · 主机位 ${tl.mainCameraId ? nameOf(tl.mainCameraId) : '未设'}`,
-  ];
-  const tops = doc.entities.filter((e) => !(e.type === 'character' && e.parent));
-  if (!tops.length) { lines.push('实体：（空场景）'); return lines.join('\n'); }
-  lines.push(`实体（${doc.entities.length}，名字唯一，按名字引用）：`);
-  const anim = (e) => {
-    const out = [];
-    const p = doc.paths.find((x) => x.target === e.id);
-    if (p) out.push(`路径 ${p.points.length} 点 长 ${f2(pathLength(p.points, p.closed))} m ${span(p.start, p.start + p.duration)} 终点 ${vec(p.closed ? p.points[0] : p.points[p.points.length - 1])}`);
-    for (const c of doc.constraints.filter((x) => x.target === e.id)) out.push(`${c.type === 'lookAt' ? '注视' : '跟随'} ${nameOf(c.subject)} ${span(c.start, c.end)}`);
-    for (const t of tl.tracks.filter((x) => x.target === e.id && x.keys.length)) out.push(`${t.property} 关键帧 ${t.keys.length} 个（${t.keys.map((k) => f2(k.t)).join('/')} s）`);
-    return out.length ? ' · ' + out.join(' · ') : '';
-  };
-  const yaw = (e) => (e.transform.rot[0] || e.transform.rot[2] ? `rot ${vec(e.transform.rot)}` : `yaw ${f2(e.transform.rot[1])}`);
-  const scale = (e) => (e.transform.scale.every((v) => v === 1) ? '' : ` · scale ${vec(e.transform.scale)}`);
-  let n = 0;
-  for (const e of tops) {
-    if (n >= MAX_LINES) { lines.push(`…（另有 ${tops.length - n} 个实体未列出）`); break; }
-    n++;
-    if (e.type === 'character') lines.push(`- ${e.name} · 角色 ${e.body} · pos ${vec(e.transform.pos)} · ${yaw(e)}${scale(e)} · 姿势 ${e.pose.preset ?? (Object.keys(e.pose.values).length ? '自定义' : 'stand')}${anim(e)}`);
-    else if (e.type === 'prop') lines.push(`- ${e.name} · 道具 ${e.kind} · pos ${vec(e.transform.pos)} · ${yaw(e)}${scale(e)}${anim(e)}`);
-    else if (e.type === 'camera') lines.push(`- ${e.name} · 机位 · pos ${vec(e.transform.pos)} · 对准 ${vec(e.lookAt)} · fov ${f2(e.fov)}${anim(e)}`);
-    else {
-      const ms = e.members.map((id) => byId.get(id));
-      const poses = [...new Set(ms.map((m) => m.pose.preset ?? 'stand'))].join('/');
-      const names = ms.length > 8 ? `${ms.slice(0, 8).map((m) => m.name).join('、')} 等` : ms.map((m) => m.name).join('、');
-      lines.push(`- ${e.name} · 组 ${ms.length} 人（${names}）· pos ${vec(e.transform.pos)} · ${yaw(e)} · 姿势 ${poses}${anim(e)}`);
-    }
-  }
-  return lines.join('\n');
-}
+export { summarize } from './context.js';

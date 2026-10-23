@@ -1,9 +1,8 @@
 import { popupMenu } from '../popupMenu.js';
 import { openPathMenu } from '../pathMenu.js';
-import { el, toastError } from '../../util/dom.js';
+import { el, toast, toastError } from '../../util/dom.js';
 import { icon } from '../icons.js';
-import { toggleKey, propState } from './animState.js';
-import { Path, pathOptionsFor } from '../../anim/Path.js';
+import { toggleKey, propState, hitTime } from './animState.js';
 import { toggleStop } from '../../anim/pathGen.js';
 
 /** 轨道行名（词汇表 → 中文）。 */
@@ -20,7 +19,7 @@ export const keyId = (trackId, t) => `${trackId}@${t}`;
 
 /**
  * 按实体分组的轨道行：实体表头（名字 + 类型图标 + 删除全部动画）+ 轨道 / 路径 / 约束行。
- * 每次 timeline 'change' 都按 toJSON() 全量重建（面板自己不留文档状态）；
+ * 每次 timeline 'change' 都按只读 view() 重建（面板自己不留文档状态）；
  * 横向位置用 CSS 变量 --t × --pps，缩放时只改 --pps，不重建。
  */
 export class TrackRows {
@@ -29,17 +28,16 @@ export class TrackRows {
     this.panel = panel;
     this.collapsedEnts = new Set();
     this.expandedEnts = new Set();
-    this.pathEditors = new Set(); // 折叠的实体分组（会话态）
     this.groups = [];               // [{ ent, rows:[{ kind, data }] }]
   }
 
   /**
    * 当前文档 → 分组数据。所有实体都列一行，顺序同大纲（顶层实体，成员紧跟其组）；
-   * 无动画角色只显示主行；道具在有动画时才显示，不创建虚构关键帧。
+   * 无动画角色支持展开属性描述；道具在有动画时才显示，不创建虚构轨道。
    */
   _collect() {
     const { app } = this.panel;
-    const { timeline, paths, constraints } = app.timeline.toJSON();
+    const { timeline, paths, constraints } = app.timeline.view();
     const by = new Map();
     const bucket = (id) => { if (!by.has(id)) by.set(id, []); return by.get(id); };
     for (const t of timeline.tracks) bucket(t.target).push({ kind: 'track', data: t, order: 1 + PROP_ORDER.indexOf(t.property) });
@@ -49,7 +47,13 @@ export class TrackRows {
     for (const e of app.entities) {
       for (const ent of [e, ...e.children]) {
         if (!['character', 'camera'].includes(ent.type) && !by.has(ent.id)) continue;
-        groups.push({ ent, rows: (by.get(ent.id) || []).sort((a, b) => a.order - b.order) });
+        const rows = by.get(ent.id) || [];
+        const supported = ent.type === 'camera' ? ['pos', 'rot', 'fov'] : ['pos', 'rot', 'scale'];
+        for (const property of supported) {
+          if (rows.some(r => r.data.property === property || (property === 'pos' && r.kind === 'path'))) continue;
+          rows.push({ kind: 'property', data: { target: ent.id, property, keys: [] }, order: 1 + PROP_ORDER.indexOf(property) });
+        }
+        groups.push({ ent, rows: rows.sort((a, b) => a.order - b.order) });
       }
     }
     return groups;
@@ -66,7 +70,7 @@ export class TrackRows {
     for (const g of this.groups) {
       frag.appendChild(this._headRow(g));
       if (this._folded(g.ent.id)) continue;
-      for (const r of g.rows) frag.appendChild(this._row(g.ent, r));
+      g.rows.forEach((r, index) => { const row = this._row(g.ent, r); row.classList.toggle('last-child', index === g.rows.length - 1); frag.appendChild(row); });
     }
     return frag;
   }
@@ -84,7 +88,7 @@ export class TrackRows {
     const pathRow = rows.find(r => r.kind === 'path');
     const remove = el('button', {
       class: 'tl-row-delete', title: pathRow ? '删除轨迹' : '删除动画',
-      'aria-label': `删除${ent.name}的${pathRow ? '轨迹' : '动画'}`, disabled: !rows.length || undefined,
+      'aria-label': `删除${ent.name}的${pathRow ? '轨迹' : '动画'}`, disabled: !rows.some(r => r.kind !== 'property') || undefined,
       html: icon('trash', 13, 1.5), onclick: (e) => {
         e.stopPropagation();
         try {
@@ -120,7 +124,7 @@ export class TrackRows {
 
   _row(ent, { kind, data }) {
     let label, lane;
-    const attrs = { 'data-ent': ent.id };
+    const attrs = { 'data-ent': ent.id, 'data-property-row': data.property || kind };
     if (kind === 'track' || kind === 'property') {
       label = PROP_LABEL[data.property];
       if (data.id) attrs['data-track'] = data.id;
@@ -131,7 +135,7 @@ export class TrackRows {
       }), { '--t': k.t })));
       if (data.keys.length > 1) lane.prepend(vars(el('i', { class: 'tl-key-line' }), { '--t0': data.keys[0].t, '--t1': data.keys.at(-1).t }));
     } else if (kind === 'path') {
-      label = '位置';
+      label = '位置 · 轨迹';
       attrs['data-path'] = data.id;
       lane = this._pathLane(ent, data);
     } else {
@@ -152,13 +156,11 @@ export class TrackRows {
 
   _pathLane(ent, path) {
     const end = path.start + path.duration;
-    const content = this.pathEditors.has(path.id)
-      ? this._bar('path', path.id, path.start, end, '')
-      : vars(el('button', {
+    const content = vars(el('button', {
         class: 'tl-path-line', title: '打开轨迹编辑与区间设置',
         onclick: () => this.panel.app.emit('inspect', { id: ent.id, section: 'path' }),
       }), { '--t0': path.start, '--t1': end });
-    const model = new Path(path, pathOptionsFor(ent.type));
+    const model = this._pathModel(path, ent);
     const count = path.points.length + (path.closed ? 1 : 0);
     const nodes = Array.from({ length: count }, (_, i) => {
       const time = model.vertexTime(i);
@@ -166,12 +168,10 @@ export class TrackRows {
       const stop = path.stops?.includes(index);
       const select = () => {
         const app = this.panel.app;
-        app.playback.pause(); app.select(ent.id); app.playback.seek(time);
-        app.pathOverlay.setSelectedPath(path.id);
-        app.pathOverlay.setSelectedVertex({ pathId: path.id, index });
+        app.pathEditor.selectNode({ kind: 'path', sourceId: path.id, index, ...(i === path.points.length ? { arrival: 'end' } : {}) });
       };
       return vars(el('button', {
-        class: 'tl-path-node' + (stop ? ' is-stop' : ''), 'data-time': time,
+        class: 'tl-path-node' + (stop ? ' is-stop' : ''), 'data-time': time, 'data-node-index': i, 'data-node-path': path.id,
         title: `${i === count - 1 && path.closed ? '回到起点' : `路径节点 ${i + 1}`} · ${time.toFixed(2)} 秒${stop ? ' · 停顿' : ''}；点击定位，右键设置停顿`,
         'aria-label': `路径节点 ${i + 1}，${time.toFixed(2)} 秒`,
         onclick: select,
@@ -193,23 +193,9 @@ export class TrackRows {
   _rowControls(ent, kind, data) {
     if (data.property) return this._propertyControls(ent, data.property);
     if (kind === 'path') return [
-      ...[-1, 1].map((direction) => el('button', { class: 'tl-addkey', text: direction < 0 ? '‹' : '›', title: direction < 0 ? '上一个路径节点' : '下一个路径节点', onclick: () => {
-        const model = new Path(data, pathOptionsFor(ent.type));
-        const times = Array.from({ length: data.points.length + (data.closed ? 1 : 0) }, (_, i) => model.vertexTime(i));
-        const now = this.panel.app.playback.time;
-        const time = direction < 0 ? times.filter(t => t < now - 1e-6).at(-1) : times.find(t => t > now + 1e-6);
-        if (time !== undefined) this.panel.seek(time);
-      } })),
+      ...this._navigation(ent.id, 'path', data.id),
       el('span', { class: 'tl-value', 'data-value-ent': ent.id, 'data-property': 'pos' }),
-      el('button', {
-      class: 'tl-addkey tl-path-edit', title: '展开或收起路径区间编辑', html: icon('chevron', 14),
-      onclick: () => {
-        if (this.pathEditors.has(data.id)) this.pathEditors.delete(data.id);
-        else this.pathEditors.add(data.id);
-        this.panel.rebuild();
-        this.panel.app.emit('inspect', { id: ent.id, section: 'path' });
-      },
-    })];
+    ];
     if (kind === 'constraint' && data.type === 'lookAt') {
       const subject = Array.isArray(data.subject)
         ? data.subject.map(v => v.toFixed(1)).join(', ')
@@ -219,29 +205,100 @@ export class TrackRows {
     return [];
   }
 
-  _propertyControls(ent, property) {
+  _pathModel(path) {
+    return this.panel.app.timeline.pathModel(path);
+  }
+
+  _points(path, ent) {
+    const model = this._pathModel(path, ent);
+    // 缓存节点时刻；播放 tick 不构建 Path 或逐节点反求弧长。
+    if (!model.nodeTimes) model.nodeTimes = Array.from({ length: path.points.length + (path.closed ? 1 : 0) }, (_, index) => ({ t: model.vertexTime(index), ordinal: index, index: index % path.points.length }));
+    return model.nodeTimes;
+  }
+
+  _navigation(entId, property, pathId = '') {
     const app = this.panel.app;
-    const nav = (direction) => {
-      const keys = propState(app, app.timeline.view(), ent.id, property, app.playback.time).track?.keys || [];
-      const candidates = keys.filter((k) => direction < 0 ? k.t < app.playback.time - 1e-6 : k.t > app.playback.time + 1e-6);
-      const key = direction < 0 ? candidates.at(-1) : candidates[0];
-      if (key) { app.playback.pause(); app.playback.seek(key.t); }
+    const attrs = { 'data-nav-ent': entId, 'data-property': property, 'data-nav-path': pathId };
+    const nav = direction => {
+      const state = this._navState(entId, property, pathId);
+      const target = direction < 0 ? state.previous : state.next;
+      if (target) {
+        if (property !== 'path' && property !== 'pos') this.panel.seek(target.t);
+        if (property === 'pos') {
+          const tr = app.timeline.tracks.find(t => t.target === entId && t.property === 'pos');
+          app.pathEditor.selectNode({ kind: 'pos', sourceId: tr.id, keyTime: target.t });
+        }
+        if (property === 'path') {
+          app.pathEditor.selectNode({ kind: 'path', sourceId: pathId, index: target.index, ...(target.ordinal === app.timeline.paths.find(p => p.id === pathId).points.length ? { arrival: 'end' } : {}) });
+        }
+      }
     };
-    const value = el('span', { class: 'tl-value', 'data-value-ent': ent.id, 'data-property': property });
-    const key = el('button', { class: 'tl-addkey tl-key-toggle', text: '◇', title: '关键帧：在当前时刻记录属性值；已有关键帧时再次点击删除', 'data-key-ent': ent.id, 'data-property': property, onclick: () => {
-      try { app.select(ent.id); toggleKey(app, ent, property); } catch (err) { toastError(err); }
-    } });
     return [
-      el('button', { class: 'tl-addkey', text: '‹', title: '上一个关键帧', onclick: () => nav(-1) }),
-      key,
-      el('button', { class: 'tl-addkey', text: '›', title: '下一个关键帧', onclick: () => nav(1) }), value,
+      el('button', { class: 'tl-addkey', html: icon('prevFrame', 13), ...attrs, 'data-direction': '-1', onclick: () => nav(-1) }),
+      el('button', { class: 'tl-addkey tl-key-toggle', html: icon('diamond', 14), ...attrs, 'data-direction': '0', onclick: () => {
+        try {
+          if (property === 'path') this._pathPoint(entId, pathId);
+          else { const ent = app.findEntity(entId); if (ent) toggleKey(app, ent, property); }
+        } catch (err) { toastError(err); }
+      } }),
+      el('button', { class: 'tl-addkey', html: icon('nextFrame', 13), ...attrs, 'data-direction': '1', onclick: () => nav(1) }),
     ];
   }
 
+  _navState(entId, property, pathId) {
+    const app = this.panel.app, tl = app.timeline, t = tl.active ? app.playback.time : 0;
+    let items, current, disabled = false, reason = '';
+    if (property === 'path') {
+      const path = tl.paths.find(p => p.id === pathId && p.target === entId), ent = app.findEntity(entId);
+      items = path && ent ? this._points(path, ent) : [];
+      current = hitTime(items, t, tl.fps);
+      disabled = !path || t < path.start || t > path.start + path.duration || this._pathModel(path, ent).length < 1e-6;
+      reason = '在轨迹时间范围内插入控制点';
+    } else {
+      const st = propState(app, tl.view(), entId, property, t);
+      items = st.track?.keys || []; current = st.key; disabled = !!st.forced;
+      reason = st.forced === '路径' && property === 'rot' ? '请先关闭沿路径朝向' : `由${st.forced}驱动，不能打键`;
+    }
+    return { current, disabled, reason,
+      previous: items.filter(k => k.t < (current?.t ?? t) - 1e-6).at(-1),
+      next: items.find(k => k.t > (current?.t ?? t) + 1e-6),
+    };
+  }
+
+  _pathPoint(entId, pathId) {
+    const app = this.panel.app, tl = app.timeline;
+    const t = tl.active ? app.playback.time : 0;
+    app.playback.pause();
+    if (tl.active) app.playback.seek(t);
+    const path = tl.paths.find(p => p.id === pathId && p.target === entId), ent = app.findEntity(entId);
+    if (!path || !ent || t < path.start || t > path.start + path.duration) return;
+    const model = this._pathModel(path, ent);
+    if (model.length < 1e-6) return;
+    const hit = hitTime(this._points(path, ent), t, tl.fps);
+    const result = hit ? { index: hit.index, inserted: false } : app.pathEditor.insertAt(pathId, model.distanceAt(t));
+    if (!result) return;
+    const next = tl.paths.find(p => p.id === pathId);
+    app.pathEditor.selectNode({ kind: 'path', sourceId: next.id, index: result.index, ...(hit?.ordinal === next.points.length ? { arrival: 'end' } : {}) });
+    if (result.inserted) toast('已插入控制点，已定位到节点');
+    this.reflectValues();
+  }
+
+  _propertyControls(ent, property) {
+    return [...this._navigation(ent.id, property), el('span', { class: 'tl-value', 'data-value-ent': ent.id, 'data-property': property })];
+  }
+
   reflectValues() {
-    const app = this.panel.app, anim = app.timeline.view();
+    const app = this.panel.app;
+    const pathHits = new Map();
     for (const node of this.panel.rows.querySelectorAll('.tl-path-node')) {
-      node.classList.toggle('is-current', Math.abs(+node.dataset.time - app.playback.time) < 1 / (2 * app.timeline.fps));
+      const pathId = node.dataset.nodePath;
+      if (!pathHits.has(pathId)) {
+        const path = app.timeline.paths.find(p => p.id === pathId), ent = app.findEntity(path?.target);
+        pathHits.set(pathId, path && ent ? hitTime(this._points(path, ent), app.timeline.active ? app.playback.time : 0, app.timeline.fps) : null);
+      }
+      const ref = app.pathOverlay.selection;
+      node.classList.toggle('is-selected', ref?.kind === 'path' && ref.sourceId === pathId && (ref.arrival === 'end' ? +node.dataset.nodeIndex === app.timeline.paths.find(p => p.id === pathId)?.points.length : ref.index === +node.dataset.nodeIndex));
+      node.classList.toggle('is-current', pathHits.get(pathId)?.ordinal === +node.dataset.nodeIndex);
     }
     for (const node of this.panel.rows.querySelectorAll('[data-value-ent]')) {
       const ent = app.findEntity(node.dataset.valueEnt);
@@ -249,10 +306,22 @@ export class TrackRows {
       const value = app.timeline.valueOf(ent, node.dataset.property);
       node.textContent = (Array.isArray(value) ? value : [value]).map((v) => v.toFixed(1)).join(', ');
     }
-    for (const node of this.panel.rows.querySelectorAll('[data-key-ent]')) {
-      const st = propState(app, anim, node.dataset.keyEnt, node.dataset.property, app.playback.time);
-      node.textContent = st.key ? '◆' : '◇';
-      node.disabled = !!st.forced;
+    const states = new Map();
+    for (const node of this.panel.rows.querySelectorAll('[data-nav-ent]')) {
+      const { navEnt, property, navPath, direction } = node.dataset;
+      const id = `${navEnt}/${property}/${navPath}`;
+      if (!states.has(id)) states.set(id, this._navState(navEnt, property, navPath));
+      const st = states.get(id), noun = property === 'path' ? '路径控制点' : '关键帧';
+      if (+direction === 0) {
+        const filled = !!st.current;
+        if (node.dataset.filled !== String(filled)) { node.innerHTML = icon(filled ? 'diamondFilled' : 'diamond', 14); node.dataset.filled = filled; }
+        node.disabled = st.disabled;
+        node.title = st.disabled ? st.reason : filled ? (property === 'path' ? '选中当前路径控制点' : '删除当前关键帧') : (property === 'path' ? '插入路径控制点' : '记录当前属性关键帧');
+      } else {
+        node.disabled = !(+direction < 0 ? st.previous : st.next);
+        node.title = `${+direction < 0 ? '上' : '下'}一个${noun}`;
+      }
+      node.setAttribute('aria-label', node.title);
     }
   }
 

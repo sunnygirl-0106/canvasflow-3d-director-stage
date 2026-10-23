@@ -20,7 +20,6 @@ import * as edit from '../doc/edit.js';
 import { round6, clone } from '../util/math.js';
 import { History } from './History.js';
 import { Timeline } from '../anim/Timeline.js';
-import { exportCamera } from './exportSpec.js';
 import { Playback } from '../anim/Playback.js';
 
 const GIZMO_PROP = { translate: 'pos', rotate: 'rot', scale: 'scale' };
@@ -34,7 +33,7 @@ const PROP_NAME = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视野'
  *   'transform' gizmo 拖动导致选中对象变换
  *   'mode'      变换模式（移动/旋转/缩放）
  *   'view'      导演视角 / 机位视角切换
- *   'pov'       机位视角下出画机位变化（{ camera, main, unset }：时间轴 active 时透过主机位，见 _syncPov）
+ *   'pov'       机位视角下出画机位变化（{ camera, main, unset }，见 _syncPov）
  *   'scene'     场景级参数（全景等）变化
  *   'shots'     截图增删、勾选
  *   'document'  整份场景文档被加载（导入 / 撤销 / 恢复）
@@ -50,6 +49,9 @@ export class App extends Emitter {
     this.selectedId = null;        // 主选实体（右侧面板 / gizmo 作用对象）
     this.selectedIds = new Set();  // 多选集合（Shift 点击；恒包含 selectedId）
     this.transformMode = 'translate';
+    this.transformEditing = false; // 程序默认选择只显示属性；明确选取/工具操作才激活手柄。
+    this.defaultCameraId = null;
+    this.directorDetached = true;
     this.cameraView = false;
     this.povCameraId = null;       // 机位视角下此刻实际出画的机位
     this.mainPreview = false;     // 正透过主机位看成片（gizmo 隐藏）
@@ -68,18 +70,23 @@ export class App extends Emitter {
     this.timeline = new Timeline(this);
     this.playback = new Playback(this.timeline, { invalidate: () => stage.invalidate() });
     this.autoKey = false;               // 自动打键（会话偏好，由时间轴面板写入）
-    this.loadingDocument = false;       // 加载期间为 true：history / 自动保存据此屏蔽
+    this.loadingDocument = false;       // 加载期间为 true：history 据此屏蔽
     this.history = new History(this);
-    // 主机位播放：机位视角下时间轴 active ↔ idle、主机位变化时切换出画机位
-    this.timeline.on('active', () => this._syncPov());
-    this.playback.on('state', (state) => { if (state === 'idle') this.endPreview(); });
+    // 时间轴只驱动实体；导演相机从此保持用户的观察位置。
+    this.timeline.on('active', () => { if (this.timeline.active) this.directorDetached = true; this._syncPov(); });
+    this.playback.on('state', (state) => {
+      if (state === 'idle') this.endPreview();
+      if (state === 'playing') this.pathTool?.cancel();
+      this.gizmo?.setVisible(this.gizmoShouldShow());
+    });
     this.timeline.on('change', () => this._syncPov());
 
     const dom = stage.renderer.domElement;
     this.gizmo = new TransformGizmo(stage.camera, dom, stage.scene, rig.controls, () => !this.cameraView);
     // gizmo：拖动中只改 root（实时显示）；松手时按时间轴状态归属（idle 改手动值 / active 打键或改 base，见 edited）
-    this.gizmo.onObjectChange(() => { this._gizmoMoved = true; this.emit('transform'); });
+    this.gizmo.onObjectChange(() => { if (this.gizmo.attached === this.pathEditor?.proxy) { this.pathEditor.onGizmoChange(); return; } this._gizmoMoved = true; this.emit('transform'); });
     this.gizmo.onDragState((dragging, cancelled) => {
+      if (this.gizmo.attached === this.pathEditor?.proxy) { this.pathEditor.onGizmoDrag(dragging, cancelled); return; }
       if (dragging) {
         this._gizmoMoved = false;
         this.playback.pause(); // 播放中拖动会被逐帧求值覆盖：先暂停
@@ -90,7 +97,14 @@ export class App extends Emitter {
     });
     this.gizmo.onChange(() => stage.invalidate());
     this.selection = new Selection(stage.renderer, stage.camera, stage.scene, () => this.entities, (id) => this.select(id));
-    rig.controls.addEventListener('change', () => stage.invalidate());
+    // OrbitControls 的 change 只有处于用户手势内才表示主动脱离；程序更新与视角切换不算。
+    let orbitGesture = false;
+    rig.controls.addEventListener('start', () => { orbitGesture = true; });
+    rig.controls.addEventListener('end', () => { orbitGesture = false; });
+    rig.controls.addEventListener('change', () => {
+      if (orbitGesture && !this.cameraView) this.directorDetached = true;
+      stage.invalidate();
+    });
     this.pathOverlay = new PathOverlay(this); // 视口路径可视化
     this.pathTool = new PathTool(this);       // 路径绘制
     this.pathEditor = new PathEditor(this);   // 顶点编辑
@@ -171,7 +185,9 @@ export class App extends Emitter {
   }
 
   // ---- 选择 ----
-  select(id) {
+  select(id, { activateTransform = true } = {}) {
+    if (id !== this.selectedId) this.pathEditor?.cancel();
+    this.transformEditing = id != null && activateTransform;
     this.selectedId = id;
     this.selectedIds = id != null ? new Set([id]) : new Set();
     this._reflectPrimary();
@@ -179,6 +195,7 @@ export class App extends Emitter {
 
   /** Shift 多选：在多选集合中切换某实体；主选取为最后一次加入项。 */
   toggleSelect(id) {
+    this.transformEditing = true;
     if (this.selectedIds.has(id)) {
       this.selectedIds.delete(id);
       if (this.selectedId === id) this.selectedId = [...this.selectedIds].pop() ?? null;
@@ -192,21 +209,30 @@ export class App extends Emitter {
   /** gizmo 是否应显示：有可见的主选实体，且不是「POV 下正在透过它看的出画机位」。 */
   gizmoShouldShow() {
     const ent = this.selected;
-    if (!ent || !ent.visible || this.mainPreview || this._cleanDepth || this.pathOverlay?.selectedPathId) return false; // 透过主机位 = 成片预览，不显示 gizmo
+    if (this.pathEditor?.hasPoint && this.pathOverlay.editable(this.pathEditor.source()) && this.pathOverlay?.visible && !this.cameraView && !this.pathTool?.mode && !this.playback.playing && !this._cleanDepth) return true;
+    if (!this.transformEditing || this.playback.playing || this.pathTool?.busy || this.pathEditor?.drag || !ent || !ent.visible || this.mainPreview || this._cleanDepth || this.pathOverlay?.selectedPathId) return false; // 透过主机位 = 成片预览，不显示 gizmo
     return !(this.cameraView && ent.id === this.povCameraId);
   }
 
   /** 把 gizmo / 高亮环同步到主选实体，并广播选择变化。 */
+  syncGizmo() {
+    const point = this.pathEditor?.hasPoint && this.selectedIds.has(this.pathEditor.source()?.target);
+    const ent = this.selected, target = point ? this.pathEditor.proxy : ent?.root;
+    const leavingPoint = !point && this.gizmo.attached === this.pathEditor?.proxy;
+    if (target) {
+      if (this.gizmo.attached !== target) {
+        if (point) this._entityGizmoSpace = this.gizmo.control.space;
+        this.gizmo.attach(target);
+      }
+      this.gizmo.setMode(point ? 'translate' : ent.type === 'camera' && this.transformMode === 'scale' ? 'rotate' : this.transformMode);
+      this.gizmo.setSpace(point ? 'world' : leavingPoint ? this._entityGizmoSpace || 'local' : this.gizmo.control.space);
+      this.gizmo.setVisible(this.gizmoShouldShow());
+    } else this.gizmo.detach();
+  }
+
   _reflectPrimary() {
     const ent = this.selected;
-    if (ent) {
-      this.gizmo.attach(ent.root);
-      // 相机不支持缩放：若当前为 scale 则退回 rotate
-      this.gizmo.setMode(ent.type === 'camera' && this.transformMode === 'scale' ? 'rotate' : this.transformMode);
-      this.gizmo.setVisible(this.gizmoShouldShow());
-    } else {
-      this.gizmo.detach();
-    }
+    this.syncGizmo();
     this.selection.highlight(ent);
     this.emit('selection', ent);
   }
@@ -261,7 +287,9 @@ export class App extends Emitter {
 
   // ---- 变换模式 ----
   setTransformMode(mode) {
+    if (this.pathEditor?.hasPoint) { if (mode !== 'translate') toast('运动节点仅支持世界轴平移'); return; }
     if (mode === 'scale' && this.selected?.type === 'camera') { toast('相机不支持缩放'); return; }
+    this.transformEditing = true;
     this.transformMode = mode;
     if (this.selected) { this.gizmo.setMode(mode); this.gizmo.setVisible(this.gizmoShouldShow()); }
     this.emit('mode', mode);
@@ -293,23 +321,19 @@ export class App extends Emitter {
   }
 
   /**
-   * 机位视角下实际出画的机位（主机位播放）：时间轴 active（播放或拖播放头）→ 主机位，
-   * 未设主机位则用当前机位并提示；idle → 当前机位（activeCameraId）。导演视角不切换。
-   * 透过主机位时 gizmo 隐藏（画面是成片预览），仍可选中其他实体。
+   * 机位视角始终使用用户指定的当前机位。主机位只决定导出，不接管播放视角。
    */
   _syncPov() {
     const tl = this.timeline;
-    const main = this.cameraView && tl.active ? this.findCamera(tl.mainCameraId) : null;
-    const ent = this.cameraView ? (this.preview ? exportCamera(this)?.ent : main || this.findCamera(this.activeCameraId)) : null;
-    if (this.preview && this.povCameraId && this.povCameraId !== ent?.id) this.playback.pause();
-    if (this.preview && !ent) { this.endPreview(false); return; }
+    const ent = this.cameraView ? this.findCamera(this.activeCameraId) : null;
+    const main = ent && tl.active && ent.id === tl.mainCameraId;
     if (ent && this.stage.activeCamera !== ent.cam) {
       ent.cam.aspect = this.viewportAspect();
       ent.cam.updateProjectionMatrix();
       this.stage.activeCamera = ent.cam;
       this._syncEditCamera();
     }
-    const unset = this.cameraView && tl.active && !main;
+    const unset = this.cameraView && tl.active && !this.findCamera(tl.mainCameraId);
     const id = ent?.id ?? null;
     if (this.povCameraId === id && this.mainPreview === !!main && this.povUnset === unset) return;
     this.povCameraId = id;
@@ -328,42 +352,37 @@ export class App extends Emitter {
     this.select(id);
   }
 
-  /** 播放入口：先切机位画面，再让时间推进，避免播放导演编辑视角。 */
-  startPreview({ play = true, returnView = this.cameraView } = {}) {
-    if (!exportCamera(this)) { toast('请先添加或选择机位'); return false; }
-    if (!this.preview) {
-      this.preview = { cameraView: returnView };
+  /** 播放保留当前视角；用户已进入机位视角时才隐藏拍摄辅助物。 */
+  startPreview({ play = true } = {}) {
+    this.pathTool.cancel();
+    this.directorDetached = true;
+    if (this.cameraView && !this.preview) {
+      this.preview = true;
       this.labelSprites.enable();
       this.beginCleanRender();
     }
-    this.cameraView = true;
-    this.rig.controls.enabled = false;
     this._applyFrame();
     this._syncPov();
-    this.emit('view', true);
     if (play) this.playback.play();
     return true;
   }
 
-  endPreview(restore = this.preview?.cameraView) {
+  endPreview() {
     if (!this.preview) return;
     this.playback.pause();
     this.preview = null;
-    this.cameraView = !!restore && !!exportCamera(this);
-    this.stage.activeCamera = null;
-    this.rig.controls.enabled = !this.cameraView;
     this.endCleanRender();
     this.labelSprites.disable();
     this._applyFrame();
     this._syncPov();
     this._syncEditCamera();
-    this.emit('view', this.cameraView);
   }
 
   stopPreview() { this.playback.stop(); this.endPreview(); }
 
   setCameraView(on) {
-    if (this.preview) this.endPreview(on);
+    const playing = this.playback.playing;
+    this.endPreview();
     if (on) {
       // 选定出画机位：当前选中相机 > 上次 active > 第一个相机
       const sel = this.selected?.type === 'camera' ? this.selected : null;
@@ -378,7 +397,7 @@ export class App extends Emitter {
       this.setCameraHelpersVisible(false);
       this._usePovCamera(target);
       this._applyFrame();
-      this.select(target.id);
+      this.select(target.id, { activateTransform: false });
     } else {
       this.cameraView = false;
       this.stage.activeCamera = null;
@@ -389,6 +408,7 @@ export class App extends Emitter {
       this._syncPov();
     }
     this.emit('view', this.cameraView);
+    if (playing) this.startPreview();
   }
 
   // ---- 场景级参数（ScenePanel）----
@@ -430,8 +450,8 @@ export class App extends Emitter {
   setGroundOpacity(v, opts) { this.sceneEdit((s) => { s.ground.opacity = round6(v); }, opts); }
   setGroundHeight(v, opts) { this.sceneEdit((s) => { s.ground.height = round6(v); }, opts); }
 
-  exportDocument(opts) { return this.documents.export(opts); }
-  loadDocument(doc, opts) { return this.documents.load(doc, opts); }
+  exportDocument(opts) { this.pathEditor?.cancel(); return this.documents.export(opts); }
+  loadDocument(doc, opts) { this.pathEditor?.cancel(); this.pathOverlay?.setSelectedPath(null); return this.documents.load(doc, opts); }
 
   // ---- 洁净渲染（截图 / 机位预览 / 导出）----
   /**
@@ -452,6 +472,7 @@ export class App extends Emitter {
    * labels=false：本区间不画名牌（导出「名牌」开关关闭时）。
    */
   beginCleanRender({ labels = true } = {}) {
+    this.pathEditor?.cancel();
     this._cleanDepth++;
     this.hideOverlays();
     this.labelSprites.beginClean({ labels });
@@ -478,9 +499,51 @@ export class App extends Emitter {
   }
 
   /** 自动对准主体；AI 胶囊和选项不改变取景区域。 */
-  frameSubjects() { this.rig.frameAll(this.entities); }
+  frameSubjects() { this.directorDetached = true; this.rig.frameAll(this.entities); }
 
-  resetView() { if (this.cameraView) this.setCameraView(false); this.rig.resetView(); toast('已重置视角'); }
+  /** 仅在载入时识别保存的同构图；不逐帧比较浮点位置猜测用户意图。 */
+  restoreDirectorSync(view) {
+    const ent = this.findCamera(this.timeline.mainCameraId);
+    if (!ent || view.fov == null) return;
+    ent.root.updateWorldMatrix(true, true);
+    this.defaultCameraId = ent.id;
+    const position = ent.cam.getWorldPosition(new THREE.Vector3());
+    const direction = ent.cam.getWorldDirection(new THREE.Vector3());
+    const savedDirection = new THREE.Vector3().fromArray(view.target).sub(new THREE.Vector3().fromArray(view.pos)).normalize();
+    if (position.distanceTo(this.stage.camera.position) > 1e-5 || direction.distanceTo(savedDirection) > 1e-5 || Math.abs(ent.fov - view.fov) > 1e-6) return;
+    this.directorDetached = false;
+    this.syncDirectorCamera();
+  }
+
+  /** 同步真实世界位姿和投影；控制器目标沿真实前向，兼容旋转和场景变换。 */
+  syncDirectorCamera() {
+    const ent = !this.directorDetached && this.findCamera(this.defaultCameraId);
+    if (!ent || this._cleanDepth) return;
+    ent.root.updateWorldMatrix(true, true);
+    const camera = this.stage.camera;
+    const position = ent.cam.getWorldPosition(new THREE.Vector3());
+    const distance = Math.max(1.5, position.distanceTo(ent.lookTarget));
+    const target = ent.cam.getWorldDirection(new THREE.Vector3()).multiplyScalar(distance).add(position);
+    camera.position.copy(position);
+    this.rig.controls.target.copy(target);
+    camera.quaternion.copy(ent.cam.getWorldQuaternion(new THREE.Quaternion()));
+    camera.fov = ent.fov;
+    camera.aspect = this.viewportAspect();
+    camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
+    ent.cam.aspect = camera.aspect; ent.cam.updateProjectionMatrix();
+  }
+
+  resetView() {
+    if (this.cameraView) this.setCameraView(false);
+    if (this.findCamera(this.defaultCameraId)) {
+      this.directorDetached = false;
+      this.syncDirectorCamera();
+      this.rig.saveHome();
+    }
+    this.rig.resetView();
+    this.syncDirectorCamera();
+    toast('已重置视角');
+  }
 
   /**
    * 实体被 gizmo / 面板修改后（一次操作结束时）调用。时间轴 idle：把指定实体的手动值提交到 Store。
@@ -494,6 +557,12 @@ export class App extends Emitter {
 
   _edited(ent, props) {
     if (!ent || this.findEntity(ent.id) !== ent) return null;
+    if (props?.has('pos') && this.timeline.paths.some(p => p.target === ent.id)
+      && (!this.timeline.active || this.timeline.forcedProps(ent.id, this.playback.time).get('pos') === '路径')) {
+      this.timeline.translatePathTo(ent, this.timeline.valueOf(ent, 'pos'));
+      if (props.size === 1) return null;
+      props = new Set([...props].filter(p => p !== 'pos'));
+    }
     if (!this.timeline.active) {
       this.documents.commitEntities([ent, ...ent.children]);
       return null;
@@ -528,14 +597,18 @@ export class App extends Emitter {
 
   /** 渲染前同步：视锥、选中环、名牌。 */
   beforeRender() {
+    this.pathEditor?.flushPreview();
+    this.syncDirectorCamera();
     const [ratioWidth, ratioHeight] = this.ratio.split(':').map(Number);
     const aspect = this.cameraView || this.ratio === 'auto' ? this.viewportAspect() : ratioWidth / ratioHeight;
     for (const ent of this.entities) {
       if (ent.type === 'camera' && !this._cleanDepth) {
-        if (Number.isFinite(aspect) && ent.cam.aspect !== aspect) { ent.cam.aspect = aspect; ent.cam.updateProjectionMatrix(); }
+        const effectiveAspect = ent.id === this.defaultCameraId && !this.directorDetached ? this.viewportAspect() : aspect;
+        if (Number.isFinite(effectiveAspect) && ent.cam.aspect !== effectiveAspect) { ent.cam.aspect = effectiveAspect; ent.cam.updateProjectionMatrix(); }
       }
       ent.update();
       if (ent.type === 'camera') {
+        ent.setMinimalHelpers(ent.id === this.defaultCameraId && !(this.transformEditing && this.selectedId === ent.id));
         ent.syncBodyVisibility(this.getRenderCamera());
         ent.helper.visible = ent.visible && ent._helpersOn && (ent.id === this.timeline.mainCameraId || this.selectedIds.has(ent.id));
       }

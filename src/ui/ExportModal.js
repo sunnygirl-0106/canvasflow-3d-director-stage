@@ -180,12 +180,13 @@ export class ExportModal {
     const onProgress = (i, n) => {
       fill.style.width = `${(i / n) * 100}%`;
       const used = performance.now() - t0;
-      text.textContent = `帧 ${i}/${n} · 已用 ${fmtClock(used)} · 预计剩余 ${fmtClock((used / i) * (n - i))}`;
+      text.textContent = `帧 ${i}/${n} · 已用 ${fmtClock(used)} · 预计剩余 ${fmtClock(i ? (used / i) * (n - i) : 0)}`;
     };
     onProgress(0, p.n || 1);
     try {
       const { exportVideo } = await import('../app/VideoExporter.js'); // 编码 / 封装（含 mp4-muxer）只在导出时加载
       const out = await exportVideo(this.app, { ...p, signal: ac.signal, onProgress });
+      if (ac.signal.aborted) throw new DOMException('导出已取消', 'AbortError');
       const url = URL.createObjectURL(out.blob);
       downloadURL(url, out.filename);
       setTimeout(() => URL.revokeObjectURL(url), 60000);

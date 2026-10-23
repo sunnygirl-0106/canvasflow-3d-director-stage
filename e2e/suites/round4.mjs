@@ -10,7 +10,7 @@ export async function run() {
     window.__seed=a.exportDocument();
     return {n:a.entities.length,paths:a.timeline.toJSON().paths.length,collapsed:window.__timelinePanel.collapsed,h:document.querySelector('#timeline').offsetHeight,playing:a.playback.playing,handles:a.pathOverlay._items.reduce((n,i)=>n+i.vertices.length,0)};
   });
-  ok('新鲜双人双路径、不自动播放、无控制点、时间轴零高度',seed.n===3&&seed.paths===2&&seed.collapsed&&seed.h===0&&!seed.playing&&seed.handles===0,JSON.stringify(seed));
+  ok('新鲜双人无路径、不自动播放、无控制点、时间轴零高度',seed.n===3&&seed.paths===0&&seed.collapsed&&seed.h===0&&!seed.playing&&seed.handles===0,JSON.stringify(seed));
   for(const [width,height] of [[2048,1120],[1440,900],[1440,810]]) { await page.setViewport({width,height});await shot(`initial-${width}x${height}`); }
   const ids=await page.evaluate(()=>window.__app.entities.map(e=>e.id));
   const initial=await page.evaluate(()=>JSON.stringify(window.__app.store.document));
@@ -56,7 +56,9 @@ export async function run() {
   ok('识图入口实际压缩附图、保持草稿、不自动请求',await page.evaluate(()=>window.__aiPanel.image.startsWith('data:image/jpeg')&&window.__aiPanel.textarea.value.length>0&&!window.__app.ai.busy));
   await page.evaluate(()=>{const p=window.__aiPanel;p.image=null;p.mode='generate';p.toggle(false);});
   ok('六项导航',await page.$$eval('#sideRail button',bs=>bs.length===6&&bs[5].title==='识图导入'));
-  await page.evaluate(()=>{const a=window.__app;a.rig.controls.target.set(0,0,0);a.stage.camera.position.set(0,8,8);a.rig.controls.update();});
+  await page.evaluate(()=>{const a=window.__app;a.directorDetached=true;a.rig.controls.target.set(0,0,0);a.stage.camera.position.set(0,8,8);a.rig.controls.update();});
+  // 路径替换用例显式创建自己的路径，不依赖已取消的双路径启动场景。
+  await page.evaluate(id=>{const a=window.__app;a.timeline.addPath({target:id,points:[[.7,0,0],[1,0,-1]],duration:5});},ids[1]);
   for (const [mode,label] of [['circle','圆环路径'],['line','直线路径'],['rectangle','矩形路径'],['freehand','铅笔路径'],['points','钢笔路径']]) {
     await page.click(`.tl-head[data-ent="${ids[1]}"] .tl-addkey`);
     await page.evaluate(label=>[...document.querySelectorAll('.ctx-item')].find(e=>e.textContent===label).click(),label);

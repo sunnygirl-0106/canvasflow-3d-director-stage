@@ -1,3 +1,4 @@
+import { resolveAssetURL } from '../util/assetURL.js';
 import * as THREE from 'three';
 import { isEquirectImage } from '../config.js';
 import { toast } from '../util/dom.js';
@@ -5,7 +6,7 @@ import { genId } from '../entities/Entity.js';
 
 /** 全景纹理加载 + 2:1 校验；非 2:1 则 dispose 并抛错（错误信息可直接 toast）。 */
 async function loadEquirect(loader, src) {
-  const tex = await loader.loadAsync(src);
+  const tex = await loader.loadAsync(resolveAssetURL(src));
   if (!isEquirectImage(tex.image)) {
     const w = tex.image?.naturalWidth || tex.image?.width || 0;
     const h = tex.image?.naturalHeight || tex.image?.height || 0;
@@ -111,7 +112,7 @@ export class Panorama {
     if (handle.kind === 'reuse') {
       this.assetId = handle.id;
       this.asset = handle.asset;
-      this.info = { thumb: handle.asset.url || handle.asset.dataURL, title: handle.asset.name };
+      this.info = { thumb: resolveAssetURL(handle.asset.url || handle.asset.dataURL), title: handle.asset.name };
       return;
     }
     this._apply(handle.tex, handle.id, handle.asset, { silent: true });
@@ -124,7 +125,7 @@ export class Panorama {
     this.active = true;
     this.assetId = assetId;
     this.asset = asset;
-    this.info = { thumb: asset.url || asset.dataURL, title: asset.name };
+    this.info = { thumb: resolveAssetURL(asset.url || asset.dataURL), title: asset.name };
     this.onChange(true, { silent });
   }
 }

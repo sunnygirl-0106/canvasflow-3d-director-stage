@@ -2,24 +2,37 @@ import * as THREE from 'three';
 import { el } from '../util/dom.js';
 
 // 滑条行：label 在上，[====蓝色填充滑条====] [数值框]。onChange：松手时（一次操作结束）。
-export function sliderRow({ label, min, max, step = 1, value = 0, disabled = false, format = (v) => String(v), onInput, onChange }) {
-  const valbox = el('span', { class: 'valbox', text: format(value) });
+export function sliderRow({ label, min, max, step = 1, value = 0, disabled = false, editable = false, format = (v) => String(v), onInput, onChange }) {
+  const valbox = editable ? el('input', { class: 'valbox val-input', type: 'number', min, max, step, value }) : el('span', { class: 'valbox', text: format(value) });
+  const show = v => { if (editable) valbox.value = String(+v.toFixed(4)); else valbox.textContent = format(v); };
+  let current = value;
+  if (editable) valbox.addEventListener('change', () => {
+    const v = Number(valbox.value);
+    if (!valbox.value.trim() || !Number.isFinite(v)) { show(current); return; }
+    const next = Math.max(min, Math.min(max, v));
+    input.value = next; setFill(next); show(next); onInput?.(next); onChange?.(next); current = next;
+  });
   const input = el('input', { type: 'range', class: 'filled', min, max, step, value });
-  if (disabled) input.disabled = true;
+  if (disabled) { input.disabled = true; if (editable) valbox.disabled = true; }
   const setFill = (v) => { const pct = ((v - min) / (max - min)) * 100; input.style.setProperty('--fill', pct + '%'); };
   setFill(value);
   input.addEventListener('input', () => {
     const v = parseFloat(input.value);
     setFill(v);
-    valbox.textContent = format(v);
+    show(v);
     onInput && onInput(v);
   });
-  if (onChange) input.addEventListener('change', () => onChange(parseFloat(input.value)));
+  if (onChange) input.addEventListener('change', () => { current = parseFloat(input.value); onChange(current); });
+  let before = value;
+  input.addEventListener('pointerdown', () => { before = current; });
+  const cancel = () => { input.value = before; setFill(before); show(before); onInput?.(before); };
+  input.addEventListener('pointercancel', cancel);
+  input.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); cancel(); } });
   const row = el('div', { class: 'field' }, [
     label != null ? el('label', { text: label }) : null,
     el('div', { class: 'slider-row' }, [input, valbox]),
   ]);
-  return { el: row, set(v) { input.value = v; setFill(v); valbox.textContent = format(v); } };
+  return { el: row, set(v) { current = v; input.value = v; setFill(v); if (document.activeElement !== valbox) show(v); } };
 }
 
 // 轴标签 hover 左右拖动改值（scrubber）。
@@ -60,8 +73,11 @@ export function tripleRow({ label, axes, deg = false, step, onCommit }) {
   const inputs = {};
   const fields = axes.map(({ key, get, set, step: axStep }) => {
     const input = el('input', { value: fx(get()) });
-    input.addEventListener('input', () => { const v = parseFloat(input.value); if (!isNaN(v)) set(v); });
-    if (onCommit) input.addEventListener('change', () => onCommit());
+    input.addEventListener('input', () => { const v = parseFloat(input.value); if (Number.isFinite(v)) set(v); });
+    input.addEventListener('change', () => {
+      if (!input.value.trim() || !Number.isFinite(Number(input.value))) { input.value = fx(get()); return; }
+      onCommit?.(); input.value = fx(get());
+    });
     inputs[key] = { input, get };
     const ax = el('span', { class: 'ax', text: key.toUpperCase() });
     attachScrub(ax, { get, set, step: axStep != null ? axStep : baseStep, after: () => { input.value = fx(get()); }, end: onCommit });

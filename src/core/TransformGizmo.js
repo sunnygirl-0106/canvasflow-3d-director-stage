@@ -71,6 +71,16 @@ export class TransformGizmo {
   /** 当前是否悬停在某个轴上（按下时即将抓取 gizmo）。 */
   get overAxis() { return this.control.axis != null; }
 
+  /** Refresh picking matrices before arbitration, independent of the render schedule. */
+  hitTest(clientX, clientY) {
+    if (!this.visible || !this.control.enabled || this.dragging) return this.dragging;
+    const r = this.control.domElement.getBoundingClientRect();
+    this.control.updateMatrixWorld(true);
+    this.control.pointerHover({ x: (clientX - r.left) / r.width * 2 - 1, y: 1 - (clientY - r.top) / r.height * 2 });
+    this.control.updateMatrixWorld(true);
+    return this.overAxis;
+  }
+
   /** 手柄当前是否显示。 */
   get visible() { return !!this._helper?.visible; }
 
@@ -83,6 +93,8 @@ export class TransformGizmo {
     giz.updateMatrixWorld(true);
     return giz.picker.translate.children.find((c) => c.name === axis.toUpperCase()) || null;
   }
+
+  setSpace(space) { this.control.setSpace(space); }
 
   setMode(mode) {
     this.control.setMode(mode); // 'translate' | 'rotate' | 'scale'

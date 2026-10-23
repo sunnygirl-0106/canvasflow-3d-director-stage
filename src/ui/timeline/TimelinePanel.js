@@ -60,6 +60,35 @@ export class TimelinePanel extends Emitter {
     app.on('entities', () => { this.transport.reflectCameras(); this.rebuild(); }); // 改名 / 删除
     app.on('selection', () => this.rebuild());
     app.on('transform', () => this.trackRows.reflectValues());
+    app.on('motionSelection', ref => {
+      this.selKeys = ref?.kind === 'pos' && ref.keyTime != null ? new Set([keyId(ref.sourceId, ref.keyTime)]) : new Set();
+      this.applySelection(); this.trackRows.reflectValues();
+    });
+    app.on('motionFocus', ref => {
+      const source = app.pathEditor.source(ref);
+      if (this.trackRows._folded(source.target)) {
+        this.trackRows.collapsedEnts.delete(source.target); this.trackRows.expandedEnts.add(source.target); this.rebuild();
+      }
+      queueMicrotask(() => {
+        if (this.collapsed) return;
+        const selector = ref.kind === 'path' ? `[data-node-path="${ref.sourceId}"][data-node-index="${ref.arrival === 'end' ? source.points.length : ref.index}"]` : `.tl-key[data-track="${ref.sourceId}"][data-t="${ref.keyTime}"]`;
+        this.rows.querySelector(selector)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      });
+    });
+    app.on('motionPreview', preview => {
+      if (preview?.ref.kind === 'path') {
+        const model = app.timeline.pathModel(preview.source);
+        for (const node of this.rows.querySelectorAll(`[data-node-path="${preview.ref.sourceId}"]`)) {
+          const t = model.vertexTime(+node.dataset.nodeIndex);
+          node.style.setProperty('--t', t); node.dataset.time = t;
+        }
+      } else if (!preview) {
+        for (const node of this.rows.querySelectorAll('[data-node-path]')) {
+          const path = app.timeline.paths.find(p => p.id === node.dataset.nodePath);
+          if (path) { const t = app.timeline.pathModel(path).vertexTime(+node.dataset.nodeIndex); node.style.setProperty('--t', t); node.dataset.time = t; }
+        }
+      }
+    });
     app.pathTool.on('commit', (path) => {
       this.trackRows.collapsedEnts.delete(path.target);
       this.trackRows.expandedEnts.add(path.target);
@@ -68,7 +97,8 @@ export class TimelinePanel extends Emitter {
     onKey((e) => this._onKey(e), { priority: KEY_PRIORITY.timeline }); // 先于全局快捷键（Del 删键而非删实体）
     // 点面板以外的地方 = 取消选键（之后 Del 删的是实体而不是键）
     window.addEventListener('pointerdown', (e) => {
-      if (this.selKeys.size && !this.container.contains(e.target) && !e.target.closest?.('.tl-menu')) { this.selKeys.clear(); this.applySelection(); }
+      const motion = e.target === app.stage.renderer.domElement && (app.gizmo.hitTest(e.clientX, e.clientY) || app.pathOverlay.hitTest(e.clientX, e.clientY));
+      if (this.selKeys.size && !motion && !this.container.contains(e.target) && !e.target.closest?.('.tl-menu')) { this.selKeys.clear(); this.applySelection(); }
     }, true);
     new ResizeObserver(() => this._layout()).observe(this.scroll);
     new ResizeObserver(() => this._syncWorkspaceInset()).observe(this.container);
@@ -142,13 +172,19 @@ export class TimelinePanel extends Emitter {
     if (!alive || !this.app.selectedIds.has(alive.dataset.ent)) this.selectedAnimation = null;
     this.reflectTrackAction();
     const sel = this.app.selectedIds;
-    for (const row of this.rows.querySelectorAll('.tl-row')) row.classList.toggle('sel', sel.has(row.dataset.ent));
+    for (const row of this.rows.querySelectorAll('.tl-row')) {
+      row.classList.toggle('sel', row.classList.contains('tl-head') && sel.has(row.dataset.ent));
+      row.classList.toggle('current', this.currentRow === `${row.dataset.ent}/${row.dataset.propertyRow}`);
+    }
     for (const k of this.rows.querySelectorAll('.tl-key')) k.classList.toggle('sel', this.selKeys.has(keyId(k.dataset.track, k.dataset.t)));
   }
 
   /** 行区按下：键 = 选键（⇧ 多选）并可拖动；区间条 = 拖动；行其它位置 = 选中实体。 */
   _onRowsPointer(e) {
     if (e.button !== 0) return;
+    const current = e.target.closest('.tl-track');
+    this.currentRow = current ? `${current.dataset.ent}/${current.dataset.propertyRow}` : null;
+    this.applySelection();
     const key = e.target.closest('.tl-key');
     if (key) { // 不 preventDefault：那会吞掉 mousedown，dblclick 就不再触发（user-select:none 已防选中文字）
       const id = keyId(key.dataset.track, key.dataset.t);
@@ -157,6 +193,7 @@ export class TimelinePanel extends Emitter {
       else if (!wasSel) { this.selKeys.clear(); this.selKeys.add(id); }
       this._selectEntityOf(key);
       this.applySelection();
+      this.syncMotionKey();
       if (this.selKeys.has(id)) dragKeys(this, e, key, { collapseOnClick: wasSel && this.selKeys.size > 1 });
       return;
     }
@@ -171,6 +208,21 @@ export class TimelinePanel extends Emitter {
     if (!e.shiftKey) this.selKeys.clear();
     if (row) this._selectEntityOf(row);
     this.applySelection();
+  }
+
+  syncMotionKey() {
+    if (this.selKeys.size === 1) {
+      const id = [...this.selKeys][0], at = id.lastIndexOf('@');
+      const tr = this.app.timeline.tracks.find(t => t.id === id.slice(0, at));
+      if (tr?.property === 'pos') {
+        this.app.pathEditor.selectNode({ kind: 'pos', sourceId: tr.id, keyTime: +id.slice(at + 1) });
+        return;
+      }
+    }
+    // Multi-key selection belongs to the timeline; do not mutate that set via motionSelection.
+    const keys = this.selKeys;
+    this.app.pathOverlay.setSelectedVertex(null);
+    this.selKeys = keys; this.applySelection();
   }
 
   /** 双击：键 = 选 ease；路径 / 约束条 = 打开 Inspector 对应段。 */
@@ -237,7 +289,10 @@ export class TimelinePanel extends Emitter {
 
   /** 面板级快捷键（由 _onKey 在播放类快捷键之后调用），返回是否已处理。 */
   handleKey(e) {
-    if ((e.key === 'Delete' || e.key === 'Backspace') && this.selKeys.size) { this.deleteSelectedKeys(); return true; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && this.app.pathEditor.timelineFocus) {
+      if (this.selKeys.size) { this.deleteSelectedKeys(); return true; }
+      return !!this.app.pathEditor.ref;
+    }
     return false;
   }
 

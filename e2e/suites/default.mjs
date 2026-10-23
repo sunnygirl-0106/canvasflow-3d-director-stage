@@ -391,9 +391,9 @@ export async function run() {
     const px = cv ? cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data : [];
     let lit = 0; for (let i = 0; i < px.length; i += 4) if (px[i] + px[i + 1] + px[i + 2] > 30) lit++;
     document.querySelector('#sideRail .dockbtn[title^="添加角色"]').click();
-    const menuOpen = !!document.querySelector('.dockmenu.open');
-    document.body.click();
-    const menuClosed = !document.querySelector('.dockmenu.open');
+    const menuOpen = !document.querySelector('.sidebar-tool').hidden;
+    document.querySelector('#sideRail button:first-child').click();
+    const menuClosed = document.querySelector('.sidebar-tool').hidden;
     return { rows, entities: a.entities.length, hasPreview: !!cv, lit, menuOpen, menuClosed };
   });
   ok('UI：清单条目/机位预览出图/菜单开合', ui.rows === ui.entities && ui.hasPreview && ui.lit > 100 && ui.menuOpen && ui.menuClosed, JSON.stringify(ui));

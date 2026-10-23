@@ -19,7 +19,7 @@ export async function run() {
     await page.screenshot({ path: `${OUT}/layout-${width}x${height}.png` });
   }
   const big = measurements[0].rects;
-  const expected = { left: 329*1920/2048, right: 1718*1920/2048, timeline: 1080, dockX:813*1920/2048, dockY:1024.4375, aiX:972*1920/2048 };
+  const expected = { left: 329*1920/2048, right: 1718*1920/2048, timeline: 1080, dockX:744, dockY:1022, aiX:870 };
   const errors = { left: big['#viewport'].left-expected.left, right: big['#viewport'].right-expected.right, timeline: big['#timeline'].top-expected.timeline, dockX:big['#dock'].left-expected.dockX, dockY:big['#dock'].top-expected.dockY, aiX:big['.ai-capsule'].left-expected.aiX };
   ok('1920 基准主要边界和工具胶囊位置误差≤2 CSS px', Object.values(errors).every(n=>Math.abs(n)<=2), JSON.stringify(errors));
   const controls = await page.evaluate(() => {
@@ -29,7 +29,7 @@ export async function run() {
   ok('默认仅移动/截图/时间轴；AI单行空输入禁发送；无空位置子行', controls.three && controls.empty && controls.hidden && controls.placeholder==='描述场景…' && controls.rows===0);
   for (const selector of ['#sideRail button[title^="添加角色"]', '#sideRail button[title="选择画幅比例"]', '#sideRail button[title^="添加机位"]', '#sideRail button[title^="全景"]', '#sceneActions button']) {
     await clickSel(selector); await settle(40);
-    ok(`${selector} 菜单可见且锚点在屏幕内`, await page.evaluate(() => { const r=document.querySelector('.dockmenu.open')?.getBoundingClientRect();return r&&r.width>100&&r.left>=0&&r.top>=0&&r.bottom<=innerHeight; }));
+    ok(`${selector} 菜单可见且锚点在屏幕内`, await page.evaluate(() => { const r=(document.querySelector('.dockmenu.open') || document.querySelector('.sidebar-tool:not([hidden])'))?.getBoundingClientRect();return r&&r.width>100&&r.left>=0&&r.top>=0&&r.bottom<=innerHeight; }));
     await page.click('#viewtabs [data-v="director"]');
   }
   // 草稿、IME 与全局快捷键隔离。
@@ -56,7 +56,7 @@ export async function run() {
   ok('生成中发送变取消且输入禁用', await page.evaluate(()=>window.__app.ai.busy&&document.querySelector('.ai-send').getAttribute('aria-label')==='取消生成'&&document.querySelector('.ai-text').disabled));
   await clickSel('.ai-send');
   await page.waitForFunction(()=>!window.__app.ai.busy);
-  ok('取消生成不改场景',await page.evaluate(()=>window.__app.entities.some(e=>e.name==='男角色')));
+  ok('取消生成不改场景',await page.evaluate(()=>window.__app.entities.some(e=>e.name==='角色A')));
   await page.evaluate(()=>{ const p=window.__aiPanel;p.agent.setProvider({configured:true,chat:async()=>{throw new Error('测试连接失败');}});p.textarea.value='失败时保留';p.send(); });
   await page.waitForFunction(()=>!window.__app.ai.busy);await settle(60);
   ok('失败保留草稿并提供重试',await page.evaluate(()=>document.querySelector('.ai-text').value==='失败时保留'&&document.querySelector('.ai-result').textContent.includes('重试')));

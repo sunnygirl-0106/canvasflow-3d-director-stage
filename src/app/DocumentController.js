@@ -1,9 +1,9 @@
+import { checkRequestState } from '../util/requestGuard.js';
 import { DocumentStore, updateDraft } from '../doc/Store.js';
 import { createEmptyDocument, APP_ID } from '../doc/schema.js';
 import { clone, xyz } from '../util/math.js';
 import { PROP_LABEL } from '../config.js';
 import { parseCharName } from '../doc/edit.js';
-import { exportCamera } from './exportSpec.js';
 import { loadDocument, APP_VERSION } from '../doc/serialize.js';
 
 /** 文档与 Three 场景之间的边界。普通事务只同步改动的实体；资源加载走 prepare/commit。 */
@@ -20,7 +20,7 @@ export class DocumentController {
   export({ view = true } = {}) {
     const doc = clone(this.store.document);
     doc.meta.updatedAt = new Date().toISOString();
-    doc.meta.editorView = view ? { pos: xyz(this.app.stage.camera.position), target: xyz(this.app.rig.controls.target) } : null;
+    doc.meta.editorView = view ? { pos: xyz(this.app.stage.camera.position), target: xyz(this.app.rig.controls.target), fov: this.app.stage.camera.fov } : null;
     return doc;
   }
 
@@ -125,6 +125,7 @@ export class DocumentController {
     this.app._scenePreview = null;
     this.app.gizmo.cancel();
     const prevSel = this.app.selectedId;
+    const transformEditing = this.app.transformEditing;
     this._clearEntities(new Set(entities));
     for (const fn of apply) fn();
     for (const ent of entities) {
@@ -146,17 +147,21 @@ export class DocumentController {
 
     this.app.emit('entities');
     this.app.emit('scene');
-    this.app.select(this.app.findEntity(prevSel) ? prevSel : null); // id 稳定：撤销后仍选中同一对象
-    if (preview && exportCamera(this.app)) this.app.startPreview({ play: false, returnView: preview.cameraView });
+    this.app.select(this.app.findEntity(prevSel) ? prevSel : null, { activateTransform: transformEditing }); // id 稳定：撤销后仍选中同一对象
+    if (preview && this.app.cameraView) this.app.startPreview({ play: false });
     this.app.emit('document', doc);
   }
 
   /** 应用导演相机视角；文档没存视角时自动取景。 */
   _applyEditorView(view) {
-    if (!view) { this.app.frameSubjects(); return; }
-    this.app.stage.camera.position.fromArray(view.pos);
-    this.app.rig.controls.target.fromArray(view.target);
-    this.app.rig.controls.update();
+    const { app } = this;
+    app.defaultCameraId = null;
+    app.directorDetached = true;
+    app.stage.camera.fov = view?.fov ?? 40; // 缺字段的旧文件保持旧投影。
+    app.stage.camera.updateProjectionMatrix();
+    if (!view) { app.frameSubjects(); return; }
+    app.rig.applyView(app.stage.camera.position.clone().fromArray(view.pos), app.rig.controls.target.clone().fromArray(view.target), view.fov ?? 40);
+    app.restoreDirectorSync(view);
     this.app.rig.saveHome(); // 「重置视角」回到存档时的视角
   }
 
@@ -178,6 +183,7 @@ export class DocumentController {
   }
 
   load(input, opts = {}) {
+    checkRequestState(this.store, opts);
     if (opts.history !== false) this.app.history?.capture();
     // 调用时取得请求副本，调用方随后修改自己的对象不会改变排队任务。
     const snapshot = clone(input);

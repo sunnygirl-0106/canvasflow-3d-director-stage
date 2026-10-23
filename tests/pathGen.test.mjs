@@ -112,7 +112,7 @@ test('simplify：≤ 2 点原样返回（拷贝）', () => {
 
 test('defaultDuration：匀速段速度 = 步速（含 0.4 s 起步 / 收步），向上取 0.1 s，最短 1 s', () => {
   assert.ok(close(pathLength(line([0, 0, 0], [6, 0, 0])), 6, 1e-6));
-  assert.equal(defaultDuration(line([0, 0, 0], [6.8, 0, 0])), 6.1);            // 6.8/1.2 + 0.4，向上取 0.1 s
+  assert.equal(defaultDuration(line([0, 0, 0], [6.8, 0, 0])), 5.2);            // 第五轮：6.8/1.44 + 0.4，向上取 0.1 s
   assert.equal(defaultDuration(line([0, 0, 0], [6, 0, 0]), { speed: 3 }), 2.4); // 2 + 0.4
   assert.equal(defaultDuration(line([0, 0, 0], [6.5, 0, 0]), { speed: 1, ramp: 0 }), 6.5); // 机位：长 ÷ 速度
   assert.equal(defaultDuration(line([0, 0, 0], [1.2, 0, 0]), { speed: 1 }), 1.6); // 1.2 ≥ 0.4 → 1.2 + 0.4

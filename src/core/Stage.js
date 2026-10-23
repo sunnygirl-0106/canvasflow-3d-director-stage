@@ -10,7 +10,7 @@ const VIEWPORT_EVENTS = ['pointermove', 'wheel'];
 // 将长网格线按格距分段：部分 WebGL 后端会丢失跨过观察相机近平面的整条线。
 // 仍合并为一个 LineSegments，不增加网格的 draw call。
 function groundGrid() {
-  const divisions = 60; // 120m 范围，保留 2m 格距。
+  const divisions = 120; // 120m 范围，每格 1m，与角色米制身高对应。
   const grid = new THREE.GridHelper(120, divisions, 0x536878, 0x354956);
   const source = grid.geometry;
   const p = source.getAttribute('position'), c = source.getAttribute('color');
@@ -118,7 +118,7 @@ export class Stage {
     this.ground.receiveShadow = true;
     this.groundGroup.add(this.ground);
 
-    // 2m 蓝灰网格：平视时保留纵向透视线，远处不挤成密集条纹。
+    // 1m 蓝灰网格：提供尺度参照，不改变实体、机位或整个场景的比例。
     this.grid = groundGrid();
     this.grid.material.transparent = true;
     this.grid.material.opacity = 0.6;

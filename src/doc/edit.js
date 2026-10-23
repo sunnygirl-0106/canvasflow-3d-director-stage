@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { genId, hexColor } from '../entities/Entity.js';
 import { BODY_TYPES, CROWD_PALETTE, CHARACTER_COLOR, CHARACTER_PALETTE } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
-import { defaultDuration, fitStops, fitPathToDuration } from '../anim/pathGen.js';
+import { paceFor, defaultDuration, fitStops, fitPathToDuration } from '../anim/pathGen.js';
 import { rampFor } from '../anim/Path.js';
 import { cameraMove, appendMove, lookAtWindows, pathEnd, MoveError } from '../anim/cameraMoves.js';
 import { round6, clone, round4 } from '../util/math.js';
@@ -246,8 +246,8 @@ export function setPath(doc, target, points, { closed = false, start = 0, set = 
   const old = doc.paths.find((p) => p.target === target);
   const speed = ['character', 'group'].includes(ent.type) ? 'linear' : set.speed ?? old?.speed ?? PATH_DEFAULTS.speed(ent.type);
   const duration = set.duration ?? (['character', 'group'].includes(ent.type)
-    ? old?.duration ?? defaultDuration(points, { closed, interpolation: set.interpolation, ramp: 0 })
-    : defaultDuration(points, { closed, interpolation: set.interpolation, ramp: speed === 'smooth' ? rampFor(ent.type) : 0 }));
+    ? old?.duration ?? defaultDuration(points, { speed: paceFor(ent.type), closed, interpolation: set.interpolation, ramp: 0 })
+    : defaultDuration(points, { speed: paceFor(ent.type), closed, interpolation: set.interpolation, ramp: speed === 'smooth' ? rampFor(ent.type) : 0 }));
   let path;
   if (old) { // 重新绘制：旧停顿作废（set.stops 给出时用新的）
     path = fitStops(null, { ...old, interpolation: undefined, points: clone(points), closed, duration, stops: undefined, stopTimes: undefined, ...clone(set), speed });

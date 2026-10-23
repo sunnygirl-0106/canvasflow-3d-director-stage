@@ -7,7 +7,7 @@ const FPS_OPTIONS = [24, 25, 30, 60];
 export function fmtTime(t) { return Math.max(0, t).toFixed(2); }
 
 /**
- * 播放条：⏮ ◀ ▶/⏸ ⏹ ▶| ⏭ ｜ 当前时刻 / 时长 ｜ 循环 ｜ 吸附 ｜ 自动打键 ｜ fps ｜ 时长 ｜ 主机位 ｜ 折叠。
+ * 播放条：⏮ ◀ ▶/⏸ ⏹ ▶| ⏭ ｜ 当前时刻 / 时长 ｜ 循环 ｜ 吸附 ｜ 自动打键 ｜ fps ｜ 时长 ｜ 主机位 。
  * 只发命令、只显示状态；数据一律从 timeline / playback 读，写经 timeline API。
  */
 export class Transport {
@@ -37,14 +37,13 @@ export class Transport {
     this.camSel = el('select', { class: 'tl-sel tl-cam', title: '主机位：机位视角下播放 / 拖播放头时透过它看（成片预览）' });
     this.camSel.addEventListener('change', () => { try { tl.setMainCamera(this.camSel.value || null); } catch (e) { toastError(e); this.reflectCameras(); } });
 
-    this.foldBtn = btn('timelinePanel', '折叠 / 展开时间轴', () => panel.toggleCollapsed(), 'tl-fold');
 
     this.removeBtn = el('button', { class: 'tl-track-action', title: '新建轨道', text: '＋ 新建轨道', onclick: (e) => panel.selectedAnimation ? panel.removeSelectedAnimation() : panel.addTrackMenu(e) });
     this.zoom = el('input', { type: 'range', min: 0, max: 100, value: 0, title: '时间轴缩放：向右拖动放大，查看更精细的时间和关键帧', class: 'tl-zoom' });
     this.zoom.addEventListener('input', () => panel.setZoom(panel._fitPps() * Math.pow(1500 / panel._fitPps(), +this.zoom.value / 100)));
     const fit = el('button', { class: 'tl-addkey', text: '显示全长', title: '适配完整时长', onclick: () => panel.setZoom(panel._fitPps()) });
     const exp = el('button', { class: 'tl-export', text: '导出视频', onclick: () => app.emit('exportVideo') });
-    this.tools = el('div', { class: 'tl-tools' }, [fit, this.zoom, this.fpsSel, exp, this.foldBtn]);
+    this.tools = el('div', { class: 'tl-tools' }, [fit, this.zoom, this.fpsSel, exp]);
     const menu = el('details', { class: 'tl-more' }, [
       el('summary', { text: '···', title: '帧操作与时间轴设置' }),
       el('div', { class: 'tl-settings' }, [
@@ -104,6 +103,5 @@ export class Transport {
     this.loopBtn.classList.toggle('on', panel.app.playback.loop);
     this.snapBtn.classList.toggle('on', panel.snap);
     this.autoKeyBtn.classList.toggle('on', panel.autoKey);
-    this.foldBtn.classList.toggle('up', panel.collapsed);
   }
 }

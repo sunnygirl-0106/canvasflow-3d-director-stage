@@ -5,7 +5,7 @@
 // 文档形状（director-stage/0.1）：
 // {
 //   schema: 'director-stage/0.1',
-//   meta: { name, createdAt, updatedAt, app, editorView: { pos:[x,y,z], target:[x,y,z] } | null },
+//   meta: { name, createdAt, updatedAt, app, editorView: { pos:[x,y,z], target:[x,y,z], fov?:number } | null },
 //   scene: { scale, pos:[3], rot:[3](度), sky:'#rrggbb', labels, ground:{visible, opacity, height},
 //            ratio, activeCameraId, panorama: { assetId, rotation(度), radius } | null },
 //   assets: { [id]: { type:'image', name, url | dataURL } },        // url 只接受同源 ./assets/…
@@ -189,9 +189,10 @@ export function validate(doc) {
       if (m[k] !== undefined && (!isStr(m[k]) || Number.isNaN(Date.parse(m[k])))) err(`meta.${k}`, `应为 ISO 时间字符串，实际为 ${fmt(m[k])}`);
     }
     str(m.app, 'meta.app');
-    if (m.editorView != null && checkKeys(m.editorView, 'meta.editorView', ['pos', 'target'])) {
+    if (m.editorView != null && checkKeys(m.editorView, 'meta.editorView', ['pos', 'target'], ['fov'])) {
       vec3(m.editorView.pos, 'meta.editorView.pos');
       vec3(m.editorView.target, 'meta.editorView.target');
+      num(m.editorView.fov, 'meta.editorView.fov', { gt: 0, max: 179 });
     }
   }
 

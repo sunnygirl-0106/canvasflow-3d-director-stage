@@ -1,0 +1,30 @@
+name: Validate
+
+on:
+  pull_request:
+  schedule:
+    - cron: '30 18 * * *'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Run every browser suite
+        type: boolean
+        default: true
+      base-ref:
+        description: Optional pose baseline commit
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+    with:
+      full: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full) }}
+      base-ref: ${{ github.event.pull_request.base.sha || inputs.base-ref || '' }}

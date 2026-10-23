@@ -1,4 +1,8 @@
-const T_EPS = 1e-6; // "当前时刻有键"的判定容差（播放头吸附到帧时为精确相等）
+/** UI 命中使用同一显示帧；非整帧导入键按真实距离、原始时间稳定择一。 */
+export function hitTime(items, t, fps, timeOf = item => item.t) {
+  return items.filter(item => Math.round(timeOf(item) * fps) === Math.round(t * fps))
+    .sort((a, b) => Math.abs(timeOf(a) - t) - Math.abs(timeOf(b) - t) || timeOf(a) - timeOf(b))[0] || null;
+}
 
 /**
  * 实体某属性在 t 时刻的动画状态（Inspector 菱形 / 灰字用）。
@@ -9,7 +13,7 @@ const T_EPS = 1e-6; // "当前时刻有键"的判定容差（播放头吸附到�
 export function propState(app, anim, entId, prop, t) {
   const tl = app.timeline;
   const track = anim.timeline.tracks.find((x) => x.target === entId && x.property === prop) || null;
-  const key = track?.keys.find((k) => Math.abs(k.t - t) < T_EPS) || null;
+  const key = hitTime(track?.keys || [], t, tl.fps);
   const forced = tl.forcedProps(entId, t).get(prop) || null;
   const driven = tl.active && (!!track?.keys.length || !!forced);
   return { track, key, forced, driven };
@@ -23,7 +27,10 @@ export function toggleKey(app, ent, prop) {
   const tl = app.timeline, pb = app.playback;
   const idle = !tl.active;
   const t = idle ? 0 : pb.time;
+  pb.pause();
+  if (!idle) pb.seek(t);
   const st = propState(app, tl.view(), ent.id, prop, t);
+  if (st.forced) throw new Error(prop === 'rot' && st.forced === '路径' ? '请先关闭沿路径朝向' : `该属性由${st.forced}驱动，不能打键`);
   app.store.batch('切换关键帧', () => {
   if (st.key) tl.removeKey(st.track.id, st.key.t);
   else {

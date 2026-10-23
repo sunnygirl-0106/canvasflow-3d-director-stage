@@ -310,12 +310,12 @@ export async function run() {
   await sleep(700);
   await page.keyboard.press('Space'); // 暂停：仍 active
   await settle(150);
-  const playing = await canvasVs(c2.id);
+  const playing = await canvasVs(ids.c1);
   const d9 = writePair(playing, '9_main');
   const mainLabel = await page.$eval('#povLabel', (n) => ({ text: n.textContent, main: n.classList.contains('main') }));
   await page.screenshot({ path: `${OUT}/12_main_playing.png` });
-  ok('验收9 机位视角选中机位1、主机位 = 机位2，Space 播放：视口 ≡ 机位2 同一 t 的 snapshot（< 0.5%）、标签「▶ 主机位 · 机位2」',
-    playing.pov === c2.id && playing.t > 0 && d9 < 0.005 && mainLabel.main && mainLabel.text.includes(c2.name) && !idleLabel.main && idleLabel.text === ids.c1n,
+  ok('验收9 机位视角选中机位1、主机位 = 机位2，Space 播放：视口保持机位1（与 snapshot 差异 < 0.5%）',
+    playing.pov === ids.c1 && playing.t > 0 && d9 < 0.005 && !mainLabel.main && mainLabel.text === ids.c1n && !idleLabel.main && idleLabel.text === ids.c1n,
     `t=${playing.t.toFixed(2)} 差异 ${(d9 * 100).toFixed(4)}% idle=${JSON.stringify(idleLabel)} active=${JSON.stringify(mainLabel)}`);
   await pickInOutliner(ids.An);
   const giz = await page.evaluate(() => ({ sel: window.__app.selected?.name, giz: window.__app.gizmo.visible }));
@@ -326,7 +326,7 @@ export async function run() {
   await settle(150);
   const back = await canvasVs(ids.c1);
   const d9b = writePair(back, '9_back');
-  ok('验收9 播放中在大纲点机位1 仍透过主机位；Esc 后视口回到机位1（像素 0%）', still9 === c2.id && back.pov === ids.c1 && d9b === 0,
+  ok('验收9 播放中点选和 Esc 停止均保持机位1（像素 0%）', still9 === ids.c1 && back.pov === ids.c1 && d9b === 0,
     `pov=${back.pov === ids.c1 ? '机位1' : back.pov} 差异 ${(d9b * 100).toFixed(4)}%`);
 
   // 未设主机位：用当前机位并提示

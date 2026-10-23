@@ -28,7 +28,7 @@ export class ShotManager {
     this._count = 0;
   }
 
-  /** 截图归属的机位：机位视角下的出画机位（播放中 = 主机位）> 选中的机位 > 按当前视角新建。 */
+  /** 截图归属的机位：机位视角下用户指定的出画机位 > 选中的机位 > 按当前视角新建。 */
   _resolveShotCamera() {
     const app = this.app;
     if (app.cameraView && app.povCameraId) {

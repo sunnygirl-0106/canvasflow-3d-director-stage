@@ -73,7 +73,7 @@ export function dragKeys(panel, e, anchorEl, { collapseOnClick = false } = {}) {
       panel.showDragTime(null);
       ghosts.forEach((g) => g.remove());
       if (!dragged) {
-        if (collapseOnClick && !e.shiftKey) { panel.selKeys = new Set([keyId(anchor.trackId, anchor.t)]); panel.applySelection(); }
+        if (collapseOnClick && !e.shiftKey) { panel.selKeys = new Set([keyId(anchor.trackId, anchor.t)]); panel.applySelection(); panel.syncMotionKey(); }
         return;
       }
       if (Math.abs(delta) < 1e-9) { for (const n of nodes) n.style.setProperty('--t', n.dataset.t); return; }
@@ -91,6 +91,7 @@ export function dragKeys(panel, e, anchorEl, { collapseOnClick = false } = {}) {
         });
         panel.selKeys = next;
       } catch (err) { toastError(err); }
+      panel.syncMotionKey();
       panel.rebuild();
     },
   });
