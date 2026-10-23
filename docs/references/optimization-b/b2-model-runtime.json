@@ -1,0 +1,2216 @@
+{
+  "tool": "gltfpack@1.3.0",
+  "sourceRevision": "7717264",
+  "results": [
+    {
+      "name": "bodykun_male",
+      "variant": "lossless",
+      "args": [
+        "-i",
+        "test-output/model-candidates/bodykun_male-original.glb",
+        "-o",
+        "test-output/model-candidates/bodykun_male-lossless.glb",
+        "-cc",
+        "-ce",
+        "ext",
+        "-kn",
+        "-km",
+        "-ke",
+        "-noq"
+      ],
+      "sourceHash": "9c70a86364376a5357f6d9ecc41b5890a013c20b2aa9c524063728b004c4b0a3",
+      "outputHash": "c7950af89c0a98f109cc3ca9f1b620cb54c832c3988d0a0becebb69ac2efc358",
+      "sourceBytes": 984980,
+      "outputBytes": 401256,
+      "extensions": [
+        "EXT_meshopt_compression"
+      ],
+      "sameJointNamesAndOrder": true,
+      "sourceSkins": 1,
+      "outputSkins": 1,
+      "sourceNodes": 67,
+      "outputNodes": 67
+    },
+    {
+      "name": "bodykun_male",
+      "variant": "compact",
+      "args": [
+        "-i",
+        "test-output/model-candidates/bodykun_male-original.glb",
+        "-o",
+        "test-output/model-candidates/bodykun_male-compact.glb",
+        "-cc",
+        "-ce",
+        "ext",
+        "-kn",
+        "-km",
+        "-ke",
+        "-vpf",
+        "-vp",
+        "16",
+        "-vn",
+        "12",
+        "-kv"
+      ],
+      "sourceHash": "9c70a86364376a5357f6d9ecc41b5890a013c20b2aa9c524063728b004c4b0a3",
+      "outputHash": "cbb6c53d058d29dccdfadaa3b2173412f1df70bcc296077619c02d82921246ed",
+      "sourceBytes": 984980,
+      "outputBytes": 209092,
+      "extensions": [
+        "KHR_mesh_quantization",
+        "EXT_meshopt_compression"
+      ],
+      "sameJointNamesAndOrder": true,
+      "sourceSkins": 1,
+      "outputSkins": 1,
+      "sourceNodes": 67,
+      "outputNodes": 67
+    },
+    {
+      "name": "bodychan_female",
+      "variant": "lossless",
+      "args": [
+        "-i",
+        "test-output/model-candidates/bodychan_female-original.glb",
+        "-o",
+        "test-output/model-candidates/bodychan_female-lossless.glb",
+        "-cc",
+        "-ce",
+        "ext",
+        "-kn",
+        "-km",
+        "-ke",
+        "-noq"
+      ],
+      "sourceHash": "1c377f055fc3ada457cf7d8ba79eb4698f7125dcb83281b8afa0e647016543b0",
+      "outputHash": "0d4f5534e6a217cf69b8239219c27435a089bb2f18258df061af0e784851610b",
+      "sourceBytes": 883400,
+      "outputBytes": 365632,
+      "extensions": [
+        "EXT_meshopt_compression"
+      ],
+      "sameJointNamesAndOrder": true,
+      "sourceSkins": 1,
+      "outputSkins": 1,
+      "sourceNodes": 67,
+      "outputNodes": 67
+    },
+    {
+      "name": "bodychan_female",
+      "variant": "compact",
+      "args": [
+        "-i",
+        "test-output/model-candidates/bodychan_female-original.glb",
+        "-o",
+        "test-output/model-candidates/bodychan_female-compact.glb",
+        "-cc",
+        "-ce",
+        "ext",
+        "-kn",
+        "-km",
+        "-ke",
+        "-vpf",
+        "-vp",
+        "16",
+        "-vn",
+        "12",
+        "-kv"
+      ],
+      "sourceHash": "1c377f055fc3ada457cf7d8ba79eb4698f7125dcb83281b8afa0e647016543b0",
+      "outputHash": "50509c064b2e6b017481f9bc69228f4a2ffb84673b59c6eff6a4ef78ffb2a9ab",
+      "sourceBytes": 883400,
+      "outputBytes": 193148,
+      "extensions": [
+        "KHR_mesh_quantization",
+        "EXT_meshopt_compression"
+      ],
+      "sameJointNamesAndOrder": true,
+      "sourceSkins": 1,
+      "outputSkins": 1,
+      "sourceNodes": 67,
+      "outputNodes": 67
+    }
+  ],
+  "runtime": [
+    {
+      "body": "male",
+      "variant": "lossless",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0,
+          "soleError": 2.2963583813497023e-9,
+          "boundsMaxError": 1.1161349622312855e-9
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0,
+          "soleError": 2.2963583813497023e-9,
+          "boundsMaxError": 1.5999702673852312e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0,
+          "soleError": 1.3939863742484793e-9,
+          "boundsMaxError": 1.1880437189581983e-9
+        },
+        {
+          "pose": "run",
+          "ratio": 0.000008680555555555556,
+          "soleError": 1.3848060892440728e-9,
+          "boundsMaxError": 9.51639933521875e-10
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0,
+          "soleError": 2.2963583813497023e-9,
+          "boundsMaxError": 7.295191672973544e-10
+        },
+        {
+          "pose": "bow",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.235798533108683e-9,
+          "boundsMaxError": 1.5982330736630246e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.2963583813497023e-9,
+          "boundsMaxError": 5.599731789374118e-10
+        },
+        {
+          "pose": "fight",
+          "ratio": 0,
+          "soleError": 1.3786872667814754e-9,
+          "boundsMaxError": 5.778669209810516e-10
+        },
+        {
+          "pose": "kick",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 6.18874871488595e-10,
+          "boundsMaxError": 1.379699576808946e-9
+        },
+        {
+          "pose": "throw",
+          "ratio": 0,
+          "soleError": 1.3828401271287483e-9,
+          "boundsMaxError": 8.623681213570933e-10
+        },
+        {
+          "pose": "push",
+          "ratio": 0,
+          "soleError": 1.3845374777221586e-9,
+          "boundsMaxError": 7.580056027300941e-10
+        },
+        {
+          "pose": "wave",
+          "ratio": 0,
+          "soleError": 2.2963583813497023e-9,
+          "boundsMaxError": 1.311124209202319e-9
+        },
+        {
+          "pose": "reach",
+          "ratio": 0,
+          "soleError": 2.2963583813497023e-9,
+          "boundsMaxError": 1.1161349622312855e-9
+        },
+        {
+          "pose": "sit",
+          "ratio": 0,
+          "soleError": 2.3926701594015498e-9,
+          "boundsMaxError": 6.32868007999221e-10
+        },
+        {
+          "pose": "cross",
+          "ratio": 0,
+          "soleError": 2.2963583813497023e-9,
+          "boundsMaxError": 5.859499552229863e-10
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0,
+          "soleError": 2.478340310752003e-9,
+          "boundsMaxError": 1.1689703649508942e-9
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0,
+          "soleError": 2.3763589439099807e-9,
+          "boundsMaxError": 1.141368333179571e-9
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.3391471281289096e-9,
+          "boundsMaxError": 1.0750028089923092e-9
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0,
+          "soleError": 8.740654935945891e-10,
+          "boundsMaxError": 1.106057023747553e-9
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0,
+          "soleError": 6.604055635683892e-10,
+          "boundsMaxError": 1.1352545570275652e-9
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0,
+          "soleError": 1.5181656092704189e-9,
+          "boundsMaxError": 1.0877299061462509e-9
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0,
+          "soleError": 1.4809029158812943e-9,
+          "boundsMaxError": 1.0750028645034604e-9
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 3.8677587001212377e-10,
+          "boundsMaxError": 1.141368333179571e-9
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 9.800000000745058,
+        "candidateLoadMs": 13.5,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.842877388000488e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "male",
+      "variant": "compact",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0.000011574074074074073,
+          "soleError": 2.297911748843988e-9,
+          "boundsMaxError": 1.1161349622312855e-9
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0.000011574074074074073,
+          "soleError": 2.297911748843988e-9,
+          "boundsMaxError": 1.5999702673852312e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0.000011574074074074073,
+          "soleError": 0.000007348150448328178,
+          "boundsMaxError": 1.1880437189581983e-9
+        },
+        {
+          "pose": "run",
+          "ratio": 0.00001736111111111111,
+          "soleError": 0.00001180728419557589,
+          "boundsMaxError": 9.51639933521875e-10
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.297911748843988e-9,
+          "boundsMaxError": 7.295191672973544e-10
+        },
+        {
+          "pose": "bow",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.237436042448443e-9,
+          "boundsMaxError": 1.5982330736630246e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.297911748843988e-9,
+          "boundsMaxError": 5.599731789374118e-10
+        },
+        {
+          "pose": "fight",
+          "ratio": 0.000005787037037037037,
+          "soleError": 0.000010551396426951298,
+          "boundsMaxError": 5.778669209810516e-10
+        },
+        {
+          "pose": "kick",
+          "ratio": 0.00001736111111111111,
+          "soleError": 0.000006989587948442316,
+          "boundsMaxError": 1.379699576808946e-9
+        },
+        {
+          "pose": "throw",
+          "ratio": 0.000011574074074074073,
+          "soleError": 0.000010701965761708565,
+          "boundsMaxError": 8.623681213570933e-10
+        },
+        {
+          "pose": "push",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 0.000010701970930185323,
+          "boundsMaxError": 7.580056027300941e-10
+        },
+        {
+          "pose": "wave",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.297911748843988e-9,
+          "boundsMaxError": 1.311124209202319e-9
+        },
+        {
+          "pose": "reach",
+          "ratio": 0.000014467592592592593,
+          "soleError": 2.297911748843988e-9,
+          "boundsMaxError": 1.1161349622312855e-9
+        },
+        {
+          "pose": "sit",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.3940658910244626e-9,
+          "boundsMaxError": 6.32868007999221e-10
+        },
+        {
+          "pose": "cross",
+          "ratio": 0.000014467592592592593,
+          "soleError": 2.297911748843988e-9,
+          "boundsMaxError": 5.859499552229863e-10
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0.00002025462962962963,
+          "soleError": 0.000011343514010914157,
+          "boundsMaxError": 0.000011963247862345483
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.3700005602235554e-9,
+          "boundsMaxError": 0.000004765198816814031
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0.00001736111111111111,
+          "soleError": 2.3251581764066352e-9,
+          "boundsMaxError": 0.0000014060260939974256
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0.0000318287037037037,
+          "soleError": 0.000007203632994489187,
+          "boundsMaxError": 0.000006110774296352872
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0.000023148148148148147,
+          "soleError": 0.00001138385393560995,
+          "boundsMaxError": 0.000011994925928959788
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0.000011574074074074073,
+          "soleError": 6.263034732390213e-9,
+          "boundsMaxError": 0.000004776878187090494
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0.000008680555555555556,
+          "soleError": 6.217989098826427e-9,
+          "boundsMaxError": 0.0000014243692270099473
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0.000011574074074074073,
+          "soleError": 0.000007184312965355377,
+          "boundsMaxError": 0.0000060721122130402705
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 0.5,
+        "candidateLoadMs": 6.099999999627471,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.842877388000488e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "female",
+      "variant": "lossless",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0,
+          "soleError": 4.986057738562422e-10,
+          "boundsMaxError": 7.343759156341889e-9
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 4.986057738562422e-10,
+          "boundsMaxError": 6.9226597787519495e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0,
+          "soleError": 3.4104433964399217e-9,
+          "boundsMaxError": 7.40767810980536e-9
+        },
+        {
+          "pose": "run",
+          "ratio": 0.000005787037037037037,
+          "soleError": 2.2283528321176416e-9,
+          "boundsMaxError": 7.0052250389363024e-9
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 4.986057738562422e-10,
+          "boundsMaxError": 6.662879692420631e-9
+        },
+        {
+          "pose": "bow",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.9059019900485863e-10,
+          "boundsMaxError": 7.305574034610629e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0,
+          "soleError": 4.986057738562422e-10,
+          "boundsMaxError": 6.690483611571096e-9
+        },
+        {
+          "pose": "fight",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.2840025669379482e-9,
+          "boundsMaxError": 6.2474456163919e-9
+        },
+        {
+          "pose": "kick",
+          "ratio": 0.000005787037037037037,
+          "soleError": 2.5059803884786014e-10,
+          "boundsMaxError": 7.263292467474258e-9
+        },
+        {
+          "pose": "throw",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.0040616839633874e-9,
+          "boundsMaxError": 6.6597431458426115e-9
+        },
+        {
+          "pose": "push",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.0042575030188026e-9,
+          "boundsMaxError": 6.773524713343804e-9
+        },
+        {
+          "pose": "wave",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 4.986057738562422e-10,
+          "boundsMaxError": 6.227802051839149e-9
+        },
+        {
+          "pose": "reach",
+          "ratio": 0,
+          "soleError": 4.986057738562422e-10,
+          "boundsMaxError": 7.1132194578993335e-9
+        },
+        {
+          "pose": "sit",
+          "ratio": 0.000005787037037037037,
+          "soleError": 5.374017400788106e-10,
+          "boundsMaxError": 6.852835354731468e-9
+        },
+        {
+          "pose": "cross",
+          "ratio": 0,
+          "soleError": 4.986057738562422e-10,
+          "boundsMaxError": 6.642320193872564e-9
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0.000008680555555555556,
+          "soleError": 1.46248298193985e-9,
+          "boundsMaxError": 7.223337761264048e-9
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0,
+          "soleError": 4.940567857169426e-10,
+          "boundsMaxError": 7.242563659914936e-9
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 4.938450742092426e-10,
+          "boundsMaxError": 7.292068615605274e-9
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0.000005787037037037037,
+          "soleError": 4.56892043296242e-10,
+          "boundsMaxError": 7.343960828354312e-9
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0,
+          "soleError": 2.9452047536904225e-9,
+          "boundsMaxError": 7.365554666183272e-9
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0,
+          "soleError": 4.894106148990718e-10,
+          "boundsMaxError": 7.343961050398917e-9
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 4.891849731281789e-10,
+          "boundsMaxError": 7.292068671116425e-9
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 4.6477475340589436e-10,
+          "boundsMaxError": 7.242563548892633e-9
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 7.299999998882413,
+        "candidateLoadMs": 6.200000001117587,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.470348358154297e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "female",
+      "variant": "compact",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0.000008680555555555556,
+          "soleError": 0.000007365014062254895,
+          "boundsMaxError": 7.343759156341889e-9
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0.000008680555555555556,
+          "soleError": 0.000007365014062254895,
+          "boundsMaxError": 6.9226597787519495e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0.000005787037037037037,
+          "soleError": 0.0000020916044657127986,
+          "boundsMaxError": 7.40767810980536e-9
+        },
+        {
+          "pose": "run",
+          "ratio": 0.000023148148148148147,
+          "soleError": 0.0000034251291952530627,
+          "boundsMaxError": 7.0052250389363024e-9
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0.000011574074074074073,
+          "soleError": 0.000007365014062254895,
+          "boundsMaxError": 6.662879692420631e-9
+        },
+        {
+          "pose": "bow",
+          "ratio": 0,
+          "soleError": 0.000007365321590370715,
+          "boundsMaxError": 7.305574034610629e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0.000005787037037037037,
+          "soleError": 0.000007365014062254895,
+          "boundsMaxError": 6.690483611571096e-9
+        },
+        {
+          "pose": "fight",
+          "ratio": 0.000005787037037037037,
+          "soleError": 0.000002422663621815674,
+          "boundsMaxError": 6.2474456163919e-9
+        },
+        {
+          "pose": "kick",
+          "ratio": 0.000014467592592592593,
+          "soleError": 3.155142146160639e-7,
+          "boundsMaxError": 7.263292467474258e-9
+        },
+        {
+          "pose": "throw",
+          "ratio": 0.000014467592592592593,
+          "soleError": 0.000003098817815527094,
+          "boundsMaxError": 6.6597431458426115e-9
+        },
+        {
+          "pose": "push",
+          "ratio": 0.000014467592592592593,
+          "soleError": 0.000003098818002842535,
+          "boundsMaxError": 6.773524713343804e-9
+        },
+        {
+          "pose": "wave",
+          "ratio": 0.000011574074074074073,
+          "soleError": 0.000007365014062254895,
+          "boundsMaxError": 6.227802051839149e-9
+        },
+        {
+          "pose": "reach",
+          "ratio": 0.000011574074074074073,
+          "soleError": 0.000007365014062254895,
+          "boundsMaxError": 7.1132194578993335e-9
+        },
+        {
+          "pose": "sit",
+          "ratio": 0.000005787037037037037,
+          "soleError": 0.000007364975130623105,
+          "boundsMaxError": 6.852835354731468e-9
+        },
+        {
+          "pose": "cross",
+          "ratio": 0.000014467592592592593,
+          "soleError": 0.000007365014062254895,
+          "boundsMaxError": 6.642320193872564e-9
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0.000014467592592592593,
+          "soleError": 0.000003296997288865927,
+          "boundsMaxError": 0.000004525484388784307
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0.000008680555555555556,
+          "soleError": 0.00000736501867087719,
+          "boundsMaxError": 0.0000012749253785471204
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0.000008680555555555556,
+          "soleError": 0.000007365018943598272,
+          "boundsMaxError": 2.9335491369408828e-8
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0.000008680555555555556,
+          "soleError": 0.000007316996169078049,
+          "boundsMaxError": 9.640581090653022e-7
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 0.0000032868002007059582,
+          "boundsMaxError": 0.0000045360077813860755
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0.000005787037037037037,
+          "soleError": 0.000007365023319628409,
+          "boundsMaxError": 0.0000012724477016223812
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0.000014467592592592593,
+          "soleError": 0.000007365023604011169,
+          "boundsMaxError": 7.645524924271285e-8
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0,
+          "soleError": 0.000007316988288397566,
+          "boundsMaxError": 9.646998040402366e-7
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 0.40000000037252903,
+        "candidateLoadMs": 4.900000000372529,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.470348358154297e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "tall",
+      "variant": "lossless",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0,
+          "soleError": 2.690019718632608e-9,
+          "boundsMaxError": 1.3859206005051306e-9
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0,
+          "soleError": 2.690019718632608e-9,
+          "boundsMaxError": 1.9867056888500656e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0,
+          "soleError": 1.6329554201888197e-9,
+          "boundsMaxError": 1.4752110089055748e-9
+        },
+        {
+          "pose": "run",
+          "ratio": 0,
+          "soleError": 1.622201251799682e-9,
+          "boundsMaxError": 1.181664821547912e-9
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0,
+          "soleError": 2.690019718632608e-9,
+          "boundsMaxError": 9.058543359863336e-10
+        },
+        {
+          "pose": "bow",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.6190783023749037e-9,
+          "boundsMaxError": 1.9845490806247312e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.690019718632608e-9,
+          "boundsMaxError": 6.953266296072513e-10
+        },
+        {
+          "pose": "fight",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.6150336866471715e-9,
+          "boundsMaxError": 7.175455785102258e-10
+        },
+        {
+          "pose": "kick",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 7.249675547382761e-10,
+          "boundsMaxError": 1.713192587793344e-9
+        },
+        {
+          "pose": "throw",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.6198984514881332e-9,
+          "boundsMaxError": 1.070814770187667e-9
+        },
+        {
+          "pose": "push",
+          "ratio": 0.000005787037037037037,
+          "soleError": 1.6218866041861624e-9,
+          "boundsMaxError": 9.412263191066472e-10
+        },
+        {
+          "pose": "wave",
+          "ratio": 0,
+          "soleError": 2.690019718632608e-9,
+          "boundsMaxError": 1.628041701451366e-9
+        },
+        {
+          "pose": "reach",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.690019718632608e-9,
+          "boundsMaxError": 1.3859206560162818e-9
+        },
+        {
+          "pose": "sit",
+          "ratio": 0.000005787037037037037,
+          "soleError": 2.802842107941046e-9,
+          "boundsMaxError": 7.85841114403496e-10
+        },
+        {
+          "pose": "cross",
+          "ratio": 0,
+          "soleError": 2.690019718632608e-9,
+          "boundsMaxError": 7.275822166974422e-10
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.9136384277483884e-9,
+          "boundsMaxError": 1.4515270652104562e-9
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0,
+          "soleError": 2.783657681170774e-9,
+          "boundsMaxError": 1.4172533147061017e-9
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0,
+          "soleError": 2.7394804922979343e-9,
+          "boundsMaxError": 1.3348463445694847e-9
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0.00001736111111111111,
+          "soleError": 1.0238912738491646e-9,
+          "boundsMaxError": 1.350649703191209e-9
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0,
+          "soleError": 7.893407021758447e-10,
+          "boundsMaxError": 1.4096616651748661e-9
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.7783452486579949e-9,
+          "boundsMaxError": 1.3506497587023603e-9
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0,
+          "soleError": 1.7340926782385744e-9,
+          "boundsMaxError": 1.3348462890583335e-9
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0,
+          "soleError": 4.5306748977513855e-10,
+          "boundsMaxError": 1.4172532036837993e-9
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 0.40000000037252903,
+        "candidateLoadMs": 0.19999999925494194,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.842877388000488e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "tall",
+      "variant": "compact",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0.00002025462962962963,
+          "soleError": 2.6918393901373273e-9,
+          "boundsMaxError": 1.3859206005051306e-9
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0.00002025462962962963,
+          "soleError": 2.6918393901373273e-9,
+          "boundsMaxError": 1.9867056888500656e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0.000014467592592592593,
+          "soleError": 0.000008607833382270197,
+          "boundsMaxError": 1.4752110089055748e-9
+        },
+        {
+          "pose": "run",
+          "ratio": 0.000005787037037037037,
+          "soleError": 0.000013831390057505999,
+          "boundsMaxError": 1.181664821547912e-9
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.6918393901373273e-9,
+          "boundsMaxError": 9.058543359863336e-10
+        },
+        {
+          "pose": "bow",
+          "ratio": 0.00002025462962962963,
+          "soleError": 2.620996531748133e-9,
+          "boundsMaxError": 1.9845490806247312e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.6918393901373273e-9,
+          "boundsMaxError": 6.953266296072513e-10
+        },
+        {
+          "pose": "fight",
+          "ratio": 0.000023148148148148147,
+          "soleError": 0.000012360207243027749,
+          "boundsMaxError": 7.175455785102258e-10
+        },
+        {
+          "pose": "kick",
+          "ratio": 0.000005787037037037037,
+          "soleError": 0.000008187803025170443,
+          "boundsMaxError": 1.713192587793344e-9
+        },
+        {
+          "pose": "throw",
+          "ratio": 0.000014467592592592593,
+          "soleError": 0.000012536588463743503,
+          "boundsMaxError": 1.070814770187667e-9
+        },
+        {
+          "pose": "push",
+          "ratio": 0.000023148148148148147,
+          "soleError": 0.000012536594518060273,
+          "boundsMaxError": 9.412263191066472e-10
+        },
+        {
+          "pose": "wave",
+          "ratio": 0.000011574074074074073,
+          "soleError": 2.6918393901373273e-9,
+          "boundsMaxError": 1.628041701451366e-9
+        },
+        {
+          "pose": "reach",
+          "ratio": 0.000023148148148148147,
+          "soleError": 2.6918393901373273e-9,
+          "boundsMaxError": 1.3859206560162818e-9
+        },
+        {
+          "pose": "sit",
+          "ratio": 0.00002604166666666667,
+          "soleError": 2.8044771078421566e-9,
+          "boundsMaxError": 7.85841114403496e-10
+        },
+        {
+          "pose": "cross",
+          "ratio": 0.000005787037037037037,
+          "soleError": 2.6918393901373273e-9,
+          "boundsMaxError": 7.275822166974422e-10
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0.000023148148148148147,
+          "soleError": 0.00001334430818466896,
+          "boundsMaxError": 0.000014072043641233378
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0.000011574074074074073,
+          "soleError": 2.7763279994994e-9,
+          "boundsMaxError": 0.000005920805954795494
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0.00001736111111111111,
+          "soleError": 2.7229231228539524e-9,
+          "boundsMaxError": 0.0000016539987734986994
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0.00002604166666666667,
+          "soleError": 0.000008438541536103655,
+          "boundsMaxError": 0.000007169402845175199
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0.000023148148148148147,
+          "soleError": 0.00001339207251676959,
+          "boundsMaxError": 0.000014109648260429708
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0.000011574074074074073,
+          "soleError": 7.3367380899247075e-9,
+          "boundsMaxError": 0.000005935508894217012
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0.000005787037037037037,
+          "soleError": 7.2831634619929275e-9,
+          "boundsMaxError": 0.0000016624279548516085
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0.00002604166666666667,
+          "soleError": 0.000008415909496937296,
+          "boundsMaxError": 0.0000071371655177010496
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 0.5,
+        "candidateLoadMs": 0.10000000149011612,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.842877388000488e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "small",
+      "variant": "lossless",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0,
+          "soleError": 1.6402557237192822e-9,
+          "boundsMaxError": 7.494048437362011e-10
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0,
+          "soleError": 1.6402557237192822e-9,
+          "boundsMaxError": 1.0742655653928068e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0,
+          "soleError": 9.957043644454044e-10,
+          "boundsMaxError": 7.976865279424317e-10
+        },
+        {
+          "pose": "run",
+          "ratio": 0,
+          "soleError": 9.891471270534469e-10,
+          "boundsMaxError": 6.389582196675292e-10
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0,
+          "soleError": 1.6402557237192822e-9,
+          "boundsMaxError": 4.89819934612612e-10
+        },
+        {
+          "pose": "bow",
+          "ratio": 0,
+          "soleError": 1.5969987499442743e-9,
+          "boundsMaxError": 1.0730992483498625e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0,
+          "soleError": 1.6402557237192822e-9,
+          "boundsMaxError": 3.7598196778176884e-10
+        },
+        {
+          "pose": "fight",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 9.847763784986974e-10,
+          "boundsMaxError": 3.8799638502062805e-10
+        },
+        {
+          "pose": "kick",
+          "ratio": 0,
+          "soleError": 4.4205328807167543e-10,
+          "boundsMaxError": 9.263695366357183e-10
+        },
+        {
+          "pose": "throw",
+          "ratio": 0.000005787037037037037,
+          "soleError": 9.877426567633796e-10,
+          "boundsMaxError": 5.790184443021928e-10
+        },
+        {
+          "pose": "push",
+          "ratio": 0,
+          "soleError": 9.88955110511891e-10,
+          "boundsMaxError": 5.08946579325098e-10
+        },
+        {
+          "pose": "wave",
+          "ratio": 0,
+          "soleError": 1.6402557237192822e-9,
+          "boundsMaxError": 8.803262008250101e-10
+        },
+        {
+          "pose": "reach",
+          "ratio": 0,
+          "soleError": 1.6402557237192822e-9,
+          "boundsMaxError": 7.494048714917767e-10
+        },
+        {
+          "pose": "sit",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.7090500278909173e-9,
+          "boundsMaxError": 4.2492559471085656e-10
+        },
+        {
+          "pose": "cross",
+          "ratio": 0,
+          "soleError": 1.6402557237192822e-9,
+          "boundsMaxError": 3.934234604763276e-10
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0,
+          "soleError": 9.825215363523654e-10,
+          "boundsMaxError": 7.848799665755024e-10
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0,
+          "soleError": 1.8045921844518642e-9,
+          "boundsMaxError": 7.663472634256152e-10
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0,
+          "soleError": 1.6719530856810668e-9,
+          "boundsMaxError": 7.217875463982892e-10
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0,
+          "soleError": 6.243024066460157e-10,
+          "boundsMaxError": 8.098794967992262e-10
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 9.902795146399246e-10,
+          "boundsMaxError": 7.622422693032149e-10
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 5.466141157327992e-10,
+          "boundsMaxError": 7.303329052632535e-10
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0,
+          "soleError": 1.0590640458628408e-9,
+          "boundsMaxError": 7.217875741538649e-10
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0,
+          "soleError": 2.7623672620158413e-10,
+          "boundsMaxError": 7.663472634256152e-10
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 0.2999999988824129,
+        "candidateLoadMs": 0.2000000011175871,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.842877388000488e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "small",
+      "variant": "compact",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.6413652871002013e-9,
+          "boundsMaxError": 7.494048437362011e-10
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.6413652871002013e-9,
+          "boundsMaxError": 1.0742655653928068e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0.000011574074074074073,
+          "soleError": 0.000005248678891470182,
+          "boundsMaxError": 7.976865279424317e-10
+        },
+        {
+          "pose": "run",
+          "ratio": 0.000008680555555555556,
+          "soleError": 0.000008433774425331553,
+          "boundsMaxError": 6.389582196675292e-10
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.6413652871002013e-9,
+          "boundsMaxError": 4.89819934612612e-10
+        },
+        {
+          "pose": "bow",
+          "ratio": 0.000005787037037037037,
+          "soleError": 1.5981683969442157e-9,
+          "boundsMaxError": 1.0730992483498625e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.6413652871002013e-9,
+          "boundsMaxError": 3.7598196778176884e-10
+        },
+        {
+          "pose": "fight",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 0.000007536711733292789,
+          "boundsMaxError": 3.8799638502062805e-10
+        },
+        {
+          "pose": "kick",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 0.000004992562820131316,
+          "boundsMaxError": 9.263695366357183e-10
+        },
+        {
+          "pose": "throw",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 0.000007644261258075297,
+          "boundsMaxError": 5.790184443021928e-10
+        },
+        {
+          "pose": "push",
+          "ratio": 0,
+          "soleError": 0.000007644264949901655,
+          "boundsMaxError": 5.08946579325098e-10
+        },
+        {
+          "pose": "wave",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.6413652871002013e-9,
+          "boundsMaxError": 8.803262008250101e-10
+        },
+        {
+          "pose": "reach",
+          "ratio": 0,
+          "soleError": 1.6413652871002013e-9,
+          "boundsMaxError": 7.494048714917767e-10
+        },
+        {
+          "pose": "sit",
+          "ratio": 0.000008680555555555556,
+          "soleError": 1.7100469739932482e-9,
+          "boundsMaxError": 4.2492559471085656e-10
+        },
+        {
+          "pose": "cross",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.6413652871002013e-9,
+          "boundsMaxError": 3.934234604763276e-10
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0.000014467592592592593,
+          "soleError": 0.00000810518820375944,
+          "boundsMaxError": 0.00000850983966937946
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 0.000007331078554184169,
+          "boundsMaxError": 0.0000075546069064902355
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0.000008680555555555556,
+          "soleError": 1.663269421184727e-9,
+          "boundsMaxError": 8.305225336346922e-7
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 0.000005145452183738172,
+          "boundsMaxError": 0.000004440629586488498
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0.00001736111111111111,
+          "soleError": 0.000008128521405251915,
+          "boundsMaxError": 0.000008532164409880139
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0.000008680555555555556,
+          "soleError": 0.000007357799624387691,
+          "boundsMaxError": 0.000007415592233606105
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0.000008680555555555556,
+          "soleError": 4.442964415014338e-9,
+          "boundsMaxError": 0.0000010104185561576884
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0,
+          "soleError": 0.000005131652168338663,
+          "boundsMaxError": 0.000004401245419671795
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 0.40000000037252903,
+        "candidateLoadMs": 0.09999999962747097,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.842877388000488e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "broad",
+      "variant": "lossless",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0,
+          "soleError": 2.2307480559151803e-9,
+          "boundsMaxError": 1.4095190015162018e-9
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0,
+          "soleError": 2.2307480559151803e-9,
+          "boundsMaxError": 2.0205335182765793e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0,
+          "soleError": 1.3541582473408642e-9,
+          "boundsMaxError": 1.500329582793114e-9
+        },
+        {
+          "pose": "run",
+          "ratio": 0,
+          "soleError": 1.3452402317093437e-9,
+          "boundsMaxError": 1.2017853379120425e-9
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0,
+          "soleError": 2.2307480559151803e-9,
+          "boundsMaxError": 9.21278442422846e-10
+        },
+        {
+          "pose": "bow",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.1719184752976903e-9,
+          "boundsMaxError": 2.018339939624525e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0,
+          "soleError": 2.2307480559151803e-9,
+          "boundsMaxError": 7.071661034530052e-10
+        },
+        {
+          "pose": "fight",
+          "ratio": 0,
+          "soleError": 1.3392962260050378e-9,
+          "boundsMaxError": 7.297632498293183e-10
+        },
+        {
+          "pose": "kick",
+          "ratio": 0.000005787037037037037,
+          "soleError": 6.011928004034939e-10,
+          "boundsMaxError": 1.7423632536761602e-9
+        },
+        {
+          "pose": "throw",
+          "ratio": 0.000011574074074074073,
+          "soleError": 1.3433303566734445e-9,
+          "boundsMaxError": 1.0890479629210859e-9
+        },
+        {
+          "pose": "push",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.3449792946040873e-9,
+          "boundsMaxError": 9.572527215340187e-10
+        },
+        {
+          "pose": "wave",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.2307480559151803e-9,
+          "boundsMaxError": 1.6557623050417192e-9
+        },
+        {
+          "pose": "reach",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.2307480559151803e-9,
+          "boundsMaxError": 1.409519057027353e-9
+        },
+        {
+          "pose": "sit",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.3243082855176744e-9,
+          "boundsMaxError": 7.992218553631858e-10
+        },
+        {
+          "pose": "cross",
+          "ratio": 0,
+          "soleError": 2.2307480559151803e-9,
+          "boundsMaxError": 7.399708623623269e-10
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0,
+          "soleError": 2.44994931893755e-9,
+          "boundsMaxError": 1.476242517117754e-9
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.3081490855706377e-9,
+          "boundsMaxError": 1.4413851778805054e-9
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0.000005787037037037037,
+          "soleError": 2.2719142228271454e-9,
+          "boundsMaxError": 1.3575750523742158e-9
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 8.489061519706409e-10,
+          "boundsMaxError": 1.3736474180348068e-9
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0,
+          "soleError": 7.058602868870167e-10,
+          "boundsMaxError": 1.4336642428780522e-9
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.4744753885574715e-9,
+          "boundsMaxError": 1.3736473625236556e-9
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0.000008680555555555556,
+          "soleError": 1.438158008112756e-9,
+          "boundsMaxError": 1.3575750523742158e-9
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 3.7554159088015737e-10,
+          "boundsMaxError": 1.4413851778805054e-9
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 0.40000000037252903,
+        "candidateLoadMs": 0.30000000074505806,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.842877388000488e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "broad",
+      "variant": "compact",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0.000014467592592592593,
+          "soleError": 2.2322570449197476e-9,
+          "boundsMaxError": 1.4095190015162018e-9
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0.000014467592592592593,
+          "soleError": 2.2322570449197476e-9,
+          "boundsMaxError": 2.0205335182765793e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0.000011574074074074073,
+          "soleError": 0.000007138203292712808,
+          "boundsMaxError": 1.500329582793114e-9
+        },
+        {
+          "pose": "run",
+          "ratio": 0.000011574074074074073,
+          "soleError": 0.000011469933218596212,
+          "boundsMaxError": 1.2017853379120425e-9
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.2322570449197476e-9,
+          "boundsMaxError": 9.21278442422846e-10
+        },
+        {
+          "pose": "bow",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.1735092020950095e-9,
+          "boundsMaxError": 2.018339939624525e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0.000011574074074074073,
+          "soleError": 2.2322570449197476e-9,
+          "boundsMaxError": 7.071661034530052e-10
+        },
+        {
+          "pose": "fight",
+          "ratio": 0.000023148148148148147,
+          "soleError": 0.000010249927957627775,
+          "boundsMaxError": 7.297632498293183e-10
+        },
+        {
+          "pose": "kick",
+          "ratio": 0.000008680555555555556,
+          "soleError": 0.000006789885435707493,
+          "boundsMaxError": 1.7423632536761602e-9
+        },
+        {
+          "pose": "throw",
+          "ratio": 0.00002025462962962963,
+          "soleError": 0.000010396195311325462,
+          "boundsMaxError": 1.0890479629210859e-9
+        },
+        {
+          "pose": "push",
+          "ratio": 0.000008680555555555556,
+          "soleError": 0.000010396200332211947,
+          "boundsMaxError": 9.572527215340187e-10
+        },
+        {
+          "pose": "wave",
+          "ratio": 0.000014467592592592593,
+          "soleError": 2.2322570449197476e-9,
+          "boundsMaxError": 1.6557623050417192e-9
+        },
+        {
+          "pose": "reach",
+          "ratio": 0.000014467592592592593,
+          "soleError": 2.2322570449197476e-9,
+          "boundsMaxError": 1.409519057027353e-9
+        },
+        {
+          "pose": "sit",
+          "ratio": 0.000014467592592592593,
+          "soleError": 2.325664145971586e-9,
+          "boundsMaxError": 7.992218553631858e-10
+        },
+        {
+          "pose": "cross",
+          "ratio": 0.000014467592592592593,
+          "soleError": 2.2322570449197476e-9,
+          "boundsMaxError": 7.399708623623269e-10
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0.00002604166666666667,
+          "soleError": 0.0000112524058833198,
+          "boundsMaxError": 0.000011861734362739185
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0.00001736111111111111,
+          "soleError": 2.3024690311009557e-9,
+          "boundsMaxError": 0.000006037040703898988
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0.000028935185185185186,
+          "soleError": 2.2507996006653646e-9,
+          "boundsMaxError": 0.000002454037230537054
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0.000023148148148148147,
+          "soleError": 0.000006997815486766562,
+          "boundsMaxError": 0.000004922657048211931
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0.000028935185185185186,
+          "soleError": 0.000011293703724644423,
+          "boundsMaxError": 0.000011894564098113847
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0.00002025462962962963,
+          "soleError": 6.0842697663268405e-9,
+          "boundsMaxError": 0.000006052809642165258
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0.000023148148148148147,
+          "soleError": 6.03269831187965e-9,
+          "boundsMaxError": 0.0000024203511954645762
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0.000005787037037037037,
+          "soleError": 0.00000697904744622127,
+          "boundsMaxError": 0.00000493657998457131
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 0.40000000037252903,
+        "candidateLoadMs": 0.19999999925494194,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.842877388000488e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "slim",
+      "variant": "lossless",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0,
+          "soleError": 2.335724381009323e-9,
+          "boundsMaxError": 9.082149199368672e-10
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0,
+          "soleError": 2.335724381009323e-9,
+          "boundsMaxError": 1.301918683971337e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0,
+          "soleError": 1.417883182391888e-9,
+          "boundsMaxError": 9.667281974934383e-10
+        },
+        {
+          "pose": "run",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.4085455059265062e-9,
+          "boundsMaxError": 7.743630181522576e-10
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0,
+          "soleError": 2.335724381009323e-9,
+          "boundsMaxError": 5.936200975220629e-10
+        },
+        {
+          "pose": "bow",
+          "ratio": 0,
+          "soleError": 2.274126403546995e-9,
+          "boundsMaxError": 1.3005050369940818e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0,
+          "soleError": 2.335724381009323e-9,
+          "boundsMaxError": 4.556581778558666e-10
+        },
+        {
+          "pose": "fight",
+          "ratio": 0,
+          "soleError": 1.4023218020825512e-9,
+          "boundsMaxError": 4.702186140459474e-10
+        },
+        {
+          "pose": "kick",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 6.294842286314051e-10,
+          "boundsMaxError": 1.1226812812736853e-9
+        },
+        {
+          "pose": "throw",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.4065456299672263e-9,
+          "boundsMaxError": 7.017211811621848e-10
+        },
+        {
+          "pose": "push",
+          "ratio": 0,
+          "soleError": 1.4082721933039721e-9,
+          "boundsMaxError": 6.167999999640017e-10
+        },
+        {
+          "pose": "wave",
+          "ratio": 0,
+          "soleError": 2.335724381009323e-9,
+          "boundsMaxError": 1.066880528366454e-9
+        },
+        {
+          "pose": "reach",
+          "ratio": 0,
+          "soleError": 2.335724381009323e-9,
+          "boundsMaxError": 9.082149754480184e-10
+        },
+        {
+          "pose": "sit",
+          "ratio": 0,
+          "soleError": 2.4336874341444706e-9,
+          "boundsMaxError": 5.149737025700318e-10
+        },
+        {
+          "pose": "cross",
+          "ratio": 0,
+          "soleError": 2.335724381009323e-9,
+          "boundsMaxError": 4.76795714021705e-10
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0,
+          "soleError": 1.3993993464023191e-9,
+          "boundsMaxError": 9.51207834720691e-10
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.549631009790554e-9,
+          "boundsMaxError": 9.287478008879191e-10
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0,
+          "soleError": 2.379754922721065e-9,
+          "boundsMaxError": 8.747451651913707e-10
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0,
+          "soleError": 8.890785902632148e-10,
+          "boundsMaxError": 1.1755107998112635e-9
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 1.4104467802034115e-9,
+          "boundsMaxError": 9.237727804922713e-10
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 7.457725045151298e-10,
+          "boundsMaxError": 8.851013255650741e-10
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0,
+          "soleError": 1.5068974016010166e-9,
+          "boundsMaxError": 8.747451651913707e-10
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0,
+          "soleError": 3.9342771748773764e-10,
+          "boundsMaxError": 9.287478008879191e-10
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 0.3999999985098839,
+        "candidateLoadMs": 0.2000000011175871,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.842877388000488e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "slim",
+      "variant": "compact",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0,
+          "soleError": 2.3373043956632384e-9,
+          "boundsMaxError": 9.082149199368672e-10
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0,
+          "soleError": 2.3373043956632384e-9,
+          "boundsMaxError": 1.301918683971337e-9
+        },
+        {
+          "pose": "walk",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 0.00000747411874163148,
+          "boundsMaxError": 9.667281974934383e-10
+        },
+        {
+          "pose": "run",
+          "ratio": 0.000005787037037037037,
+          "soleError": 0.000012009694781663083,
+          "boundsMaxError": 7.743630181522576e-10
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0,
+          "soleError": 2.3373043956632384e-9,
+          "boundsMaxError": 5.936200975220629e-10
+        },
+        {
+          "pose": "bow",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 2.275791973673885e-9,
+          "boundsMaxError": 1.3005050369940818e-9
+        },
+        {
+          "pose": "think",
+          "ratio": 0.000008680555555555556,
+          "soleError": 2.3373043956632384e-9,
+          "boundsMaxError": 4.556581778558666e-10
+        },
+        {
+          "pose": "fight",
+          "ratio": 0.000005787037037037037,
+          "soleError": 0.000010732277508447921,
+          "boundsMaxError": 4.702186140459474e-10
+        },
+        {
+          "pose": "kick",
+          "ratio": 0.000008680555555555556,
+          "soleError": 0.000007109409456206722,
+          "boundsMaxError": 1.1226812812736853e-9
+        },
+        {
+          "pose": "throw",
+          "ratio": 0.000014467592592592593,
+          "soleError": 0.000010885428031588013,
+          "boundsMaxError": 7.017211811621848e-10
+        },
+        {
+          "pose": "push",
+          "ratio": 0,
+          "soleError": 0.000010885433288781998,
+          "boundsMaxError": 6.167999999640017e-10
+        },
+        {
+          "pose": "wave",
+          "ratio": 0,
+          "soleError": 2.3373043956632384e-9,
+          "boundsMaxError": 1.066880528366454e-9
+        },
+        {
+          "pose": "reach",
+          "ratio": 0,
+          "soleError": 2.3373043956632384e-9,
+          "boundsMaxError": 9.082149754480184e-10
+        },
+        {
+          "pose": "sit",
+          "ratio": 0.000005787037037037037,
+          "soleError": 2.4351070889946806e-9,
+          "boundsMaxError": 5.149737025700318e-10
+        },
+        {
+          "pose": "cross",
+          "ratio": 0,
+          "soleError": 2.3373043956632384e-9,
+          "boundsMaxError": 4.76795714021705e-10
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0.00001736111111111111,
+          "soleError": 0.000011541786018240408,
+          "boundsMaxError": 0.000012000597586547812
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0.00002025462962962963,
+          "soleError": 0.000010416041705377937,
+          "boundsMaxError": 0.000010686630774525696
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0.000005787037037037037,
+          "soleError": 2.361674637494903e-9,
+          "boundsMaxError": 0.0000020231631021605523
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0.00001736111111111111,
+          "soleError": 0.0000073271224326539736,
+          "boundsMaxError": 0.000012707503878495174
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0.000014467592592592593,
+          "soleError": 0.000011575012499199372,
+          "boundsMaxError": 0.000012031383108457305
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0.00001736111111111111,
+          "soleError": 0.00001045243504073888,
+          "boundsMaxError": 0.000010650070090045816
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0.0000028935185185185184,
+          "soleError": 6.320713454779783e-9,
+          "boundsMaxError": 0.000002140176045717368
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0.000014467592592592593,
+          "soleError": 0.000007307471220647371,
+          "boundsMaxError": 0.000012665030898251217
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 0.3999999985098839,
+        "candidateLoadMs": 0.2000000011175871,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 4.842877388000488e-8,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    },
+    {
+      "body": "xbot",
+      "variant": "lossless",
+      "samples": [
+        {
+          "pose": "stand",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "tpose",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "walk",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "run",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "akimbo",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "bow",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "think",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "fight",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "kick",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "throw",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "push",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "wave",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "reach",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "sit",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "cross",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "gait:0",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "gait:1",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "gait:2",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "gait:3",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "gait:4",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "gait:5",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "gait:6",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        },
+        {
+          "pose": "gait:7",
+          "ratio": 0,
+          "soleError": 0,
+          "boundsMaxError": 0
+        }
+      ],
+      "structure": {
+        "originalLoadMs": 12.400000000372529,
+        "candidateLoadMs": 0.2999999988824129,
+        "missingJoints": [],
+        "sameBoneNames": true,
+        "inverseBindMaxError": 0,
+        "originalWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        },
+        "candidateWeights": {
+          "maxSumError": 2.220446049250313e-16,
+          "invalidJoints": 0
+        }
+      },
+      "acceptable": true
+    }
+  ]
+}
