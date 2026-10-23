@@ -24,7 +24,7 @@ const _w = new THREE.Vector3();
 const _s = new THREE.Vector3();
 
 /**
- * 视口只显示选中实体的路径（Line2）；进入路径编辑时另画顶点球、起止标记、方向箭头。
+ * 非播放时，视口只显示选中实体的路径（Line2）；进入路径编辑时另画顶点球、起止标记、方向箭头。
  * 播放头所在位置画一个亮点。不持有文档状态：在 timeline 'change' / 选择 / 视角变化时按 toJSON() 重建，'tick' 时只挪亮点。
  *
  * 坐标：overlay 挂在 stage.world 下，路径点（文档口径 = 实体父坐标系）直接作为局部坐标。
@@ -73,6 +73,7 @@ export class PathOverlay {
 
     app.timeline.on('change', () => this.rebuild());
     app.playback.on('tick', () => this._placeDots());
+    app.playback.on('state', () => { this._applyVisible(); app.emit('pathVisibility'); });
     app.on('selection', () => {
       if (!app._cleanDepth) this._hidden = false;
       this.rebuild();
@@ -306,7 +307,7 @@ export class PathOverlay {
 
   // ---- 显隐 ----
   _applyVisible() {
-    this.group.visible = !this._hidden && (!this.app.cameraView || this.draftGroup.children.length > 0);
+    this.group.visible = !this._hidden && !this.app.playback.playing && (!this.app.cameraView || this.draftGroup.children.length > 0);
     this.app.stage.invalidate();
   }
 

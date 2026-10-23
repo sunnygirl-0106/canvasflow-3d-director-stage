@@ -74,6 +74,7 @@ export async function shootPoses(outDir, bodyKey) {
     a.select(null);
     for (const e of a.entities) if (e !== c) e.setVisible(false);
     a.setLabelsVisible(false);
+    a.stage.grid.visible = false; // 姿势比较保留地面阴影，排除编辑网格密度的变化。
     c.root.position.set(0, c.root.position.y, 0);
     c.root.rotation.set(0, 0, 0);
     c.root.updateMatrixWorld(true);

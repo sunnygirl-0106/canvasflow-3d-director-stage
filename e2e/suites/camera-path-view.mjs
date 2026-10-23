@@ -73,16 +73,37 @@ export async function run() {
   }
   ok('选择、创建和再次绘制均未移动导演观察位置', await page.evaluate(before => JSON.stringify(window.__app.stage.camera.matrixWorld.toArray()) === JSON.stringify(before), initialView));
 
-  // 真实播放按钮：相机实体移动，导演相机矩阵保持不变。
+  // 手动环绕后点击播放：保留导演观察视角，机位独立沿路径运动。
   await page.evaluate(() => window.__timelinePanel.setCollapsed(false));
-  const beforePlay = await page.evaluate(() => ({ view: window.__app.stage.camera.matrixWorld.toArray(), pos: window.__app.cameras[0].root.position.toArray() }));
-  await page.click('.tl-play'); await settle(450); await page.click('.tl-play');
-  ok('导演视角播放/暂停：机位沿路径移动，导演位置不跟随，轨迹保持可见', await page.evaluate(before => {
+  const camerasBeforeOrbit = await page.evaluate(() => JSON.stringify(window.__app.cameras.map(c => c.toJSON())));
+  const orbit = await page.evaluate(() => {
+    const r = window.__app.stage.renderer.domElement.getBoundingClientRect();
+    return [r.left + r.width * .25, r.top + r.height * .25];
+  });
+  await page.mouse.move(...orbit); await page.mouse.down();
+  await page.mouse.move(orbit[0] + 100, orbit[1] + 30, { steps: 12 }); await page.mouse.up(); await settle(1000);
+  const beforePlay = await page.evaluate(() => {
     const a = window.__app;
-    return !a.cameraView && !a.playback.playing && a.playback.time > 0 && !a.stage.activeCamera && a.pathOverlay.visible && a._cleanDepth === 0 && JSON.stringify(a.stage.camera.matrixWorld.toArray()) === JSON.stringify(before.view) && a.cameras[0].root.position.distanceTo(a.stage.camera.position.clone().fromArray(before.pos)) > .01;
+    // 消耗手势剩余阻尼，避免把惯性尾帧误判为播放改变观察位置。
+    const damping = a.rig.controls.enableDamping;
+    a.rig.controls.enableDamping = false; a.rig.controls.update();
+    a.rig.controls.enableDamping = damping; a.beforeRender(); a.stage.camera.updateMatrixWorld(true);
+    return { view: a.stage.camera.matrixWorld.toArray(), pos: a.cameras[0].root.position.toArray(), selected: a.selectedId };
+  });
+  ok('手动环绕已改变观察视角', JSON.stringify(beforePlay.view) !== JSON.stringify(initialView));
+  ok('手动环绕不改写机位位置、朝向或镜头参数', await page.evaluate(before => JSON.stringify(window.__app.cameras.map(c => c.toJSON())) === before, camerasBeforeOrbit));
+  await page.click('.tl-play'); await settle(450);
+  ok('导演视角播放中：可观察机位，隐藏运动轨迹，仍可操作观察视角', await page.evaluate(() => {
+    const a = window.__app;
+    return !a.cameraView && a.playback.playing && !a.stage.activeCamera && !a.pathOverlay.visible && a.rig.controls.enabled && a.cameras.every(c => c.helper.visible);
+  }));
+  await page.click('.tl-play');
+  ok('手动观察后播放/暂停：导演位置不跟随机位，暂停恢复所选对象轨迹', await page.evaluate(before => {
+    const a = window.__app;
+    return !a.cameraView && !a.playback.playing && a.playback.time > 0 && !a.stage.activeCamera && a.pathOverlay.visible && a._cleanDepth === 0 && a.selectedId === before.selected && a.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8) && a.cameras[0].root.position.distanceTo(a.stage.camera.position.clone().fromArray(before.pos)) > .01;
   }, beforePlay));
   await page.keyboard.press('Escape'); await page.keyboard.press('Space'); await settle(100); await page.keyboard.press('Space');
-  ok('导演视角停止/Space重播保持用户观察位置', await page.evaluate(before => !window.__app.cameraView && JSON.stringify(window.__app.stage.camera.matrixWorld.toArray()) === JSON.stringify(before.view), beforePlay));
+  ok('导演视角停止/Space重播保持用户观察位置', await page.evaluate(before => !window.__app.cameraView && window.__app.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8), beforePlay));
   await page.keyboard.press('Escape');
 
   const second = await page.evaluate(() => { const a = window.__app, c = a.addCamera('front_mid'); a.timeline.setMainCamera(c.id); return { id: c.id, name: c.name }; });
