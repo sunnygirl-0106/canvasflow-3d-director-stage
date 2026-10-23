@@ -21,6 +21,8 @@ const run = (file, args, cwd = process.cwd()) => execFileSync(file, args, { cwd,
 try {
   run('git', ['worktree', 'add', '--detach', worktree, base]);
   run('npm', ['ci', '--no-audit', '--no-fund'], worktree);
+  // 两个版本使用同一截图条件；只替换测试驱动，模型与业务代码仍来自各自提交。
+  fs.copyFileSync('e2e/tools.mjs', path.join(worktree, 'e2e/tools.mjs'));
   for (const body of ['xbot', 'male', 'female', 'tall', 'small', 'broad', 'slim']) {
     run(process.execPath, ['selftest.mjs', 'poses', `${out}/base/${body}`, body], worktree);
     run(process.execPath, ['selftest.mjs', 'poses', `${out}/current/${body}`, body]);
