@@ -373,7 +373,11 @@ export async function run() {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     await wait(800); n = 0;          // 等阻尼结束
     await wait(600); const idleRenders = n;
-    a.select(null); await wait(100); const afterChange = n;
+    n = 0; a.select(null);
+    // CI 软件渲染可能超过 100ms；等待真实重绘，超时仍按失败报告。
+    const deadline = performance.now() + 5000;
+    while (n === 0 && performance.now() < deadline) await wait(50);
+    const afterChange = n;
     st.render = orig;
     return { idleRenders, afterChange };
   });
