@@ -1,16 +1,11 @@
 /* ===== 底部时间轴面板===== */
 #timeline {
   /* 竞品时间轴：中性深灰底、暗灰轨道，避免大面积亮灰与绿色。 */
-  --surface-timeline: #212121;
   --track-camera-idle: #2a2a2a;
-  --track-row-active: #3b3b3b;
-  --dim: #cccccc;
-  --dim2: #777777;
-  --txt: #919191;
   --tl-animation: #45c9cf;
   --accent: #45c9cf;
   --green: #45c9cf;
-  flex: 0 0 auto; min-height: 180px;
+  flex: 0 0 auto;
   display: flex; flex-direction: column;
   background: var(--surface-timeline); border-top: 1px solid var(--line);
   user-select: none; position: absolute; left: 0; right: 0; bottom: 0; z-index: 20;
@@ -93,9 +88,6 @@
 .tl-caret { width: 14px; height: 14px; flex: none; display: flex; align-items: center; justify-content: center; color: var(--dim); transform: rotate(90deg); transition: transform .12s; }
 .tl-caret.folded { transform: rotate(0deg); }
 .tl-type { flex: none; display: flex; color: var(--dim); }
-.tl-op { flex: none; border: none; background: none; color: var(--dim2); cursor: pointer; display: none; padding: 2px; border-radius: 4px; }
-.tl-head:hover .tl-op { display: flex; }
-.tl-op:hover { color: var(--tl-playhead); }
 .tl-lane {
   position: relative; flex: none; cursor: default;
   width: calc(var(--dur) * var(--pps) * 1px + var(--gutter) + 24px);
@@ -189,11 +181,9 @@
 .anim-sec .sec-btn:hover { border-color: var(--line2); }
 .path-stats { margin: -6px 0 12px; }
 .path-speed { color: var(--dim2); }
-.path-run { margin-left: 6px; font-size: 11px; padding: 0 6px; border-radius: 8px; background: rgba(255,159,10,.18); color: #ffb340; }
 .anim-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
 .anim-btns .minibtn { margin: 0; padding: 7px 6px; font-size: 12px; white-space: nowrap; }
 .anim-btns .minibtn.danger:hover { color: #ff8a80; }
-.anim-sub { font-size: 12.5px; color: var(--txt); font-weight: 400; margin: 4px 0 10px; }
 
 /* 运镜段 */
 .anim-btns .minibtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -209,112 +199,85 @@
 .move-seg:not(:last-child) .move-seg-del { opacity: .35; }
 
 /* 首行冻结操作区与标尺共用时间原点；设置弹层向上展开。 */
-#timeline .tl-tools { position: absolute; top: 0; right: 0; width: 340px; z-index: 9; display: flex; align-items: center; justify-content: space-evenly; background: var(--panel); border-left: 1px solid var(--line); }
-#timeline .tl-export { border: 0; border-radius: 5px; padding: 5px 9px; cursor: pointer; }
+#timeline .tl-tools { top: 0; right: 0; z-index: 9; display: flex; align-items: center; justify-content: space-evenly; border-left: 1px solid var(--line); }
+#timeline .tl-export { cursor: pointer; }
 #timeline .tl-clock .tl-num { width: 57px; padding: 0; background: transparent; color: var(--dim); appearance: textfield; }
 #timeline .tl-num::-webkit-inner-spin-button { appearance: none; }
 #timeline .tl-more summary { list-style: none; cursor: pointer; }
-#timeline .tl-settings { position: fixed; left: 12px; display: flex; flex-wrap: wrap; width: 310px; padding: 12px; background: #242428; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 18px #0008; }
+#timeline .tl-settings { left: 12px; display: flex; flex-wrap: wrap; width: 310px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 18px #0008; }
 #timeline.collapsed .tl-settings { bottom: 40px; }
-#timeline .tl-presence { position: absolute; left: var(--gutter); width: calc(var(--dur) * var(--pps) * 1px); border-radius: 3px; }
 #timeline .tl-value { font-variant-numeric: tabular-nums; color: var(--dim); }
 #timeline button:disabled { opacity: .3; cursor: default; }
 
 #timeline .tl-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
 #timeline .tl-scroll::-webkit-scrollbar-track { background: #202020; }
-#timeline .tl-scroll::-webkit-scrollbar-thumb { background: #86909d; border: 2px solid #202020; border-radius: 6px; }
+#timeline .tl-scroll::-webkit-scrollbar-thumb { border: 2px solid #202020; border-radius: 6px; }
 
 /* 参考图按 2048 → 1920 换算；窄屏保持操作按钮可用。 */
-#timeline { height: var(--timeline-height, clamp(180px, 24vh, 240px)); min-height: 160px; --tl-row-h: 34px; --tl-playhead: #b3b6bc; }
-#timeline .tl-transport { height: 40px; gap: 0; padding: 0 4px; }
-#timeline .tl-btn { width: 32px; height: 32px; }
-#timeline .tl-btn.on { background: #444; }
-#timeline .tl-clock { display: flex; align-items: center; gap: 1px; margin: 0 4px 0 1px; height: 28px; border-radius: 7px; overflow: hidden; }
-#timeline .tl-time, #timeline .tl-clock .tl-num, #timeline .tl-unit { background: #3b3b3b; height: 28px; line-height: 28px; color: #eee; text-align: center; font-size: 12px; border-radius: 0; }
-#timeline .tl-time, #timeline .tl-clock .tl-num { width: 47px; }
-#timeline .tl-unit { width: 25px; }
-#timeline .tl-track-action { border: 0; font-size: 11px; background: transparent; white-space: nowrap; height: 32px; cursor: pointer; padding: 0 2px; }
-#timeline .tl-tools { height: 41px; }
-#timeline .tl-zoom { accent-color: #eee; width: 80px; }
-#timeline .tl-export { background: #f4f4f4; color: #202020; min-height: 32px; }
-#timeline .tl-settings { bottom: calc(27.9513889vh + 4px); }
-#timeline .tl-head .tl-name { background: #3b3b3b; font-size: 13px; }
-#timeline .tl-row.sel .tl-name { background: var(--track-row-active); }
-#timeline .tl-row.sel .tl-lane { background: var(--surface-timeline); }
-#timeline .tl-presence { top: 0; bottom: 0; background: #2a2a2a; opacity: 1; border-radius: 0; }
-#timeline .tl-head.camera .tl-presence { background: var(--track-camera-idle); }
-#timeline .tl-head.sel .tl-presence { outline: none; }
+#timeline { height: var(--timeline-height, clamp(180px, 24vh, 240px)); min-height: 160px; --tl-playhead: #b3b6bc; }
+#timeline .tl-transport { gap: 0; }
+#timeline .tl-clock { display: flex; align-items: center; gap: 1px; margin: 0 4px 0 1px; overflow: hidden; }
+#timeline .tl-time, #timeline .tl-clock .tl-num, #timeline .tl-unit { text-align: center; border-radius: 0; }
+#timeline .tl-track-action { border: 0; background: transparent; white-space: nowrap; cursor: pointer; padding: 0 2px; }
+#timeline .tl-zoom { accent-color: #eee; }
 #timeline .tl-key { background: #223337; border-color: #40b9c7; }
 #timeline .tl-key.sel { background: #5de3ec; border-color: #e4ffff; }
-#timeline .tl-track .tl-name { padding-left: 40px; gap: 4px; }
-
-#timeline .tl-track .tl-label { flex: 0 1 auto; min-width: 50px; }
+#timeline .tl-track .tl-name { gap: 4px; }
 #timeline .tl-value { margin-left: auto; font-size: 12px; }
-#timeline .tl-head .tl-addkey { margin-left: auto; border: 0; display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 400; }
+#timeline .tl-head .tl-addkey { margin-left: auto; border: 0; display: inline-flex; align-items: center; font-weight: 400; }
 #timeline .tl-addkey { min-height: 32px; border: 0; }
-#timeline .tl-track .tl-addkey { min-width: 32px; padding: 0; }
-#timeline .tl-caret { width: 32px; height: 32px; }
-#timeline .tl-more summary { min-height: 32px; min-width: 32px; display: flex; align-items: center; justify-content: center; padding: 0 3px; color: #888; }
+#timeline .tl-track .tl-addkey { padding: 0; }
+#timeline .tl-more summary { min-height: 32px; min-width: 32px; display: flex; align-items: center; justify-content: center; padding: 0 3px; }
 #timeline.collapsed { height: 0; min-height: 0; overflow: hidden; border: 0; visibility: hidden; }
 
 #timeline button.tl-caret { border: 0; background: transparent; cursor: pointer; padding: 0; }
 
 .tl-path-line { position: absolute; left: calc(var(--gutter) + var(--t0) * var(--pps) * 1px); width: calc((var(--t1) - var(--t0)) * var(--pps) * 1px); height: 1px; top: 50%; background: var(--accent); cursor: pointer; border: 0; }
 
-#timeline .tl-path-status { position: absolute; left: calc(var(--gutter) + 8px); top: 8px; color: #ddd; font-size: 11px; pointer-events: none; }
+#timeline .tl-path-status { position: absolute; left: calc(var(--gutter) + 8px); pointer-events: none; }
 
 /* 收起的主轨道用整块深灰呈现，路径状态在展开后查看。 */
-#timeline .tl-path-summary, #timeline .tl-path-status { display: none; }
+#timeline .tl-path-status { display: none; }
 #timeline .tl-row { border-bottom: 1px solid #303030; }
-#timeline .tl-head .tl-lane { background: #212121; }
-#timeline .tl-ph-line, #timeline .tl-ph-head::after { background: #626b77; }
-#timeline .tl-btn:hover { background: #303030; }
-#timeline .tl-btn.on { background: #3b3b3b; }
 #timeline .tl-play svg path { fill: none; }
-#timeline .tl-tools { gap: 12px; padding: 0 12px; }
-#timeline .tl-tools .tl-sel { height: 32px; border: 1px solid #3b3b3b; border-radius: 9px; background: #212121; color: #cccccc; padding: 0 9px; font-size: 13px; }
-#timeline .tl-export { border-radius: 9px; font-size: 13px; padding: 5px 12px; white-space: nowrap; }
-#timeline .tl-zoom { appearance: none; -webkit-appearance: none; flex: 0 0 80px; height: 4px; border: 0; border-radius: 2px; background: #777777; cursor: pointer; }
-#timeline .tl-zoom::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 14px; height: 14px; border: 0; border-radius: 50%; background: #dedede; }
-#timeline .tl-zoom::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: #dedede; }
-#timeline .tl-track-action { font-size: 12px; }
+#timeline .tl-tools { padding: 0 12px; }
+#timeline .tl-tools .tl-sel { padding: 0 9px; }
+#timeline .tl-export { white-space: nowrap; }
+#timeline .tl-zoom { appearance: none; -webkit-appearance: none; flex: 0 0 80px; border: 0; border-radius: 2px; cursor: pointer; }
+#timeline .tl-zoom::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; border: 0; border-radius: 50%; }
+#timeline .tl-zoom::-moz-range-thumb { border: 0; border-radius: 50%; }
 #timeline .tl-settings { background: #212121; }
 
 /* 时间轴：工具与标尺分行，静态状态和路径区间分色。 */
-#timeline { --surface-timeline: #191a1c; --track-row-active: #252629; --dim: #575a60; --dim2: #373a3f; --txt: #9699a0; border-top-color: #ffffff0d; }
-#timeline .tl-toolbar { position: relative; z-index: 10; display: flex; align-items: center; justify-content: space-between; flex: 0 0 36px; background: #202123; border-bottom: 1px solid #ffffff07; }
+#timeline { border-top-color: #ffffff0d; }
+#timeline .tl-toolbar { position: relative; z-index: 10; display: flex; align-items: center; justify-content: space-between; flex: 0 0 36px; border-bottom: 1px solid #ffffff07; }
 #timeline .tl-transport { height: 36px; border: 0; padding: 0 8px; flex: 0 1 auto; }
 #timeline .tl-transport .tl-btn:hover { color: var(--icon-hover); background: #ffffff10; }
 #timeline .tl-transport .tl-btn.on { color: var(--icon-hover); background: #ffffff14; }
 #timeline .tl-tools { position: static; width: auto; height: 36px; background: transparent; border: 0; flex: none; gap: 10px; padding-inline: 10px; }
-#timeline .tl-ruler-row, #timeline .tl-corner { background: #1c1d1f; border-color: #ffffff07; }
-#timeline .tl-column-title { display: flex; height: 100%; align-items: center; padding-left: 16px; color: #62656b; font-size: 10px; letter-spacing: .5px; }
-#timeline .tl-head .tl-name { background: #1c1d1f; font-size: 11px; font-weight: 400; border-right-color: #ffffff08; gap: 5px; }
-#timeline .tl-track .tl-name { background: #191a1c; }
+#timeline .tl-ruler-row, #timeline .tl-corner { border-color: #ffffff07; }
+#timeline .tl-column-title { display: flex; height: 100%; align-items: center; padding-left: 16px; }
+#timeline .tl-head .tl-name { font-weight: 400; border-right-color: #ffffff08; }
 #timeline .tl-row.sel .tl-name { background: #25282c; box-shadow: none; color: #e1e2e5; }
 #timeline .tl-head .tl-lane, #timeline .tl-row.sel .tl-lane { background: #191a1c; background-image: linear-gradient(90deg, #ffffff04 1px, transparent 1px); background-size: calc(var(--pps) * 1px) 100%; background-position: var(--gutter) 0; }
-#timeline .tl-row { border-color: #2b2f34; }
-#timeline .tl-presence, #timeline .tl-head.camera .tl-presence { top: 5px; bottom: 5px; background: #25292e; border: 1px solid #30363c; border-radius: 4px; }
-#timeline .tl-path-summary { display: block; position: absolute; left: calc(var(--gutter) + var(--t0) * var(--pps) * 1px); width: calc(var(--dt) * var(--pps) * 1px); top: 5px; bottom: 5px; border: 1px solid #43858b; border-radius: 4px; background: #25464b; }
 #timeline .tl-path-status { display: block; top: 10px; color: #7d8792; font-size: 10px; }
 #timeline .has-path .tl-path-status { color: #a0d9dc; background: #25464b; padding: 0 5px; border-radius: 3px; }
 #timeline .tl-head .tl-addkey { flex: 0 0 72px; padding: 0 3px; gap: 5px; font-size: 10px; justify-content: center; }
 #timeline .tl-head .tl-addkey span { opacity: 1; }
 #timeline .tl-head .tl-addkey:hover { background: #ffffff05; }
-#timeline .tl-row-delete { display: flex; flex: 0 0 24px; width: 24px; height: 26px; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
+#timeline .tl-row-delete { display: flex; flex: 0 0 24px; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
 #timeline .tl-row-delete:hover:not(:disabled) { background: #ffffff05; color: #d2a0a0; }
 #timeline .tl-time, #timeline .tl-clock .tl-num, #timeline .tl-unit { background: transparent; color: #898c93; font-size: 11px; height: 26px; line-height: 26px; }
 #timeline .tl-time, #timeline .tl-clock .tl-num { width: 42px; }
 #timeline .tl-unit { width: 12px; }
 #timeline .tl-time { color: #d8dadd; }
-#timeline .tl-clock { border: 0; border-radius: 0; margin-right: 12px; height: 26px; }
+#timeline .tl-clock { margin-right: 12px; height: 26px; }
 #timeline .tl-time-separator { color: #65717d; padding: 0 3px; }
 #timeline .tl-btn { width: 32px; height: 32px; color: var(--icon-color); border-radius: 5px; }
 #timeline .tl-btn:hover { background: #ffffff06; color: #e1e2e5; }
 #timeline .tl-btn.on { background: #ffffff06; color: #d1dbdf; }
-#timeline .tl-tools .tl-sel { height: 24px; border: 0; border-radius: 4px; background: transparent; color: #8e9198; font-size: 10px; }
-#timeline .tl-export { min-height: 24px; padding: 3px 10px; border: 1px solid #ffffff13; background: #ffffff03; color: #b4b7bc; border-radius: 5px; font-size: 10px; }
-#timeline .tl-export:hover { background: #ffffff09; color: #e3e4e6; }
+#timeline .tl-tools .tl-sel { height: 24px; border: 0; border-radius: 4px; background: transparent; }
+#timeline .tl-export { min-height: 24px; border-radius: 5px; }
 #timeline .tl-scroll::-webkit-scrollbar-thumb { background: #49535e; border-color: #202327; }
 #timeline .tl-tools .tl-addkey { color: #83868d; font-size: 10px; }
 #timeline .tl-tools .tl-addkey svg { color: var(--icon-color); }
@@ -324,7 +287,6 @@
 #timeline .tl-zoom { flex-basis: 60px; width: 60px; height: 2px; background: #46484d; }
 #timeline .tl-zoom::-webkit-slider-thumb { width: 8px; height: 8px; background: #a6a8af; }
 #timeline .tl-zoom::-moz-range-thumb { width: 8px; height: 8px; background: #a6a8af; }
-#timeline .tl-caret { width: 24px; height: 26px; }
 #timeline .tl-type, #timeline .tl-more summary { color: var(--icon-color); }
 #timeline .tl-ph-line, #timeline .tl-ph-head::after { background: #999da6; opacity: .65; }
 #timeline .tl-settings { position: absolute; bottom: auto; top: calc(100% + 4px); }
@@ -336,27 +298,23 @@
 .path-timing-hint.fast { background: #302b22; border-color: #5b4b30; color: #d4ba87; }
 .path-timing-hint .minibtn { margin: 2px 0 0; color: #e6ce9e; border: 1px solid #6a5738; }
 /* 轨迹主片段与路径节点：青色区间、矩形边界手柄、菱形节点。 */
-#timeline .has-path .tl-presence { background: #233b40; border-color: #2d494e; }
 #timeline .has-path.sel .tl-name { background: #25282c; }
 #timeline .has-path .tl-addkey { color: #9eafb4; }
 #timeline .tl-path-clip { top: 7px; bottom: 7px; border: 1px solid #73999e45; border-radius: 5px; background: #2d4044; box-shadow: none; }
 #timeline .tl-path-clip:hover { background: #354c50; border-color: #87b3b775; }
-#timeline .tl-path-clip .tl-bar-text { color: #c4d6d7; opacity: .9; font-size: 10px; }
 /* 两端保留宽命中区，用细握柄替代实心方块。 */
 #timeline .tl-path-clip .tl-bar-end { top: 0; bottom: 0; height: auto; width: 12px; transform: none; border: 0; border-radius: 4px; background: transparent; }
-#timeline .tl-path-clip .tl-bar-end::after { content: ''; position: absolute; width: 2px; top: 5px; bottom: 5px; left: 5px; border-radius: 1px; background: #a6c3c8; opacity: .45; transition: opacity .15s; }
+#timeline .tl-path-clip .tl-bar-end::after { content: ''; position: absolute; border-radius: 1px; transition: opacity .15s; }
 #timeline .tl-path-clip:hover .tl-bar-end::after { opacity: .9; }
 #timeline .tl-path-clip .tl-bar-end:hover { background: #b8e4e914; }
 #timeline .tl-path-clip .tl-bar-end.start { left: 0; }
 #timeline .tl-path-clip .tl-bar-end.end { left: auto; right: 0; }
-#timeline .tl-path-line { background: #368b98; }
 #timeline .tl-path-node { position: absolute; left: calc(var(--gutter) + var(--t) * var(--pps) * 1px); top: 50%; width: 18px; height: 22px; padding: 0; border: 0; background: transparent; transform: translate(-50%, -50%); cursor: pointer; z-index: 2; }
 #timeline .tl-path-node::before { content: ''; position: absolute; width: 7px; height: 7px; top: 7px; left: 5px; border: 1px solid #45b9cb; background: #203338; transform: rotate(45deg); }
 #timeline .tl-path-node:hover::before, #timeline .tl-path-node:focus-visible::before, #timeline .tl-path-node.is-current::before { background: #68d9e5; border-color: #c8f9ff; }
 #timeline .tl-path-node.is-stop::before { background: #d2ae63; border-color: #f1d49b; }
 #timeline .tl-path-node:focus-visible { outline: 1px solid #70cedb; border-radius: 3px; }
 #timeline .tl-track .tl-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-#timeline .tl-path-edit { flex: 0 0 22px; min-width: 22px; }
 #timeline .tl-key-line { position: absolute; top: 50%; height: 1px; background: #34666e; left: calc(var(--gutter) + var(--t0) * var(--pps) * 1px); width: calc((var(--t1) - var(--t0)) * var(--pps) * 1px); pointer-events: none; }
 
 /* 上沿拖动区：扩大命中范围，悬浮时才显现定位线和握柄。 */
@@ -365,7 +323,6 @@
 .tl-resize-handle::after { content: ''; position: absolute; top: 4px; left: calc(50% - 19px); width: 38px; height: 3px; border-radius: 2px; opacity: 0; background: #a3bdc5; box-shadow: 0 0 0 3px #20262b; transition: opacity .16s; }
 .tl-resize-handle:hover::before, .tl-resize-handle:hover::after, .tl-resize-handle:focus-visible::before, .tl-resize-handle:focus-visible::after, #timeline.resizing .tl-resize-handle::before, #timeline.resizing .tl-resize-handle::after { opacity: 1; }
 body.resizing-timeline, body.resizing-timeline * { cursor: ns-resize !important; user-select: none !important; }
-#timeline .no-path .tl-presence { display: none; }
 #timeline .no-path .tl-path-status { color: #59636d; letter-spacing: .4px; transition: color .18s; }
 #timeline .no-path:hover .tl-path-status { color: #7d8994; }
 #timeline .no-path .tl-addkey { color: #73818d; }
@@ -373,7 +330,7 @@ body.resizing-timeline, body.resizing-timeline * { cursor: ns-resize !important;
 #timeline .tl-row { border-color: #ffffff06; }
 #timeline .tl-head:not(.sel) .tl-name { box-shadow: none; }
 #timeline .tl-toolbar { border-bottom-color: #ffffff08; }
-#timeline .tl-clock { border: 0; border-radius: 0; }
+#timeline .tl-clock { border: 0; }
 #timeline .tl-btn, #timeline .tl-row-delete { transition: color .15s, background .15s; }
 
 /* 对象与属性用缩进分层，选中背景横跨名称列和轨道，减轻左右割裂。 */
@@ -386,7 +343,6 @@ body.resizing-timeline, body.resizing-timeline * { cursor: ns-resize !important;
 #timeline .tl-head .tl-addkey { border-radius: 5px; }
 #timeline .tl-row-delete:disabled { opacity: .2; }
 #timeline .tl-path-line { background: #527d85; }
-#timeline .tl-column-title { color: #858c96; }
 
 /* 剪辑轨道：名称优先，灰阶区间，浅蓝色文字标识轨迹入口。 */
 #timeline { --surface-timeline: #222222; --track-row-active: #383838; --tl-row-h: 38px; --dim: #b6b6b6; --dim2: #777777; --txt: #dedede; }

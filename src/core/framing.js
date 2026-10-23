@@ -12,10 +12,12 @@ export const FRAMING = Object.freeze({
   minimumDistance: 1.5,
 });
 
-/** 新场景共用一份构图；手动对准主体仍使用下方 fitBounds。 */
+/** 新场景的导演观察视角独立校准；拍摄机位保持原构图。 */
 export function startupFraming() {
-  const view = () => ({ position: new THREE.Vector3(0, 2.2, 10), target: new THREE.Vector3(0, 1.2, 0), fov: 50 });
-  return { director: view(), shot: view() };
+  return {
+    director: { position: new THREE.Vector3(0, 2.2, 7.5), target: new THREE.Vector3(0, 0.45, 0), fov: 50 },
+    shot: { position: new THREE.Vector3(0, 2.2, 10), target: new THREE.Vector3(0, 1.2, 0), fov: 50 },
+  };
 }
 
 /**

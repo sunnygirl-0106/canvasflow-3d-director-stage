@@ -4,7 +4,8 @@ import { nameWidth, GUTTER } from './layout.js';
 import { Transport } from './Transport.js';
 import { Ruler } from './Ruler.js';
 import { TrackRows, keyId, PROP_LABEL } from './TrackRows.js';
-import { dragKeys, dragBar, popupMenu } from './keyDrag.js';
+import { dragKeys, dragBar } from './keyDrag.js';
+import { popupMenu } from '../popupMenu.js';
 import { toggleKey, propState } from './animState.js';
 import { onKey, KEY_PRIORITY } from '../../util/keys.js';
 

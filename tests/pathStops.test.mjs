@@ -47,6 +47,37 @@ test('fitStops：顶点数变了去掉、越界去掉、时长变了按比例缩
   assert.deepEqual(Object.keys(fitStops(null, P())), Object.keys(P())); // 无停顿：字段与旧文档相同
 });
 
+test('fitStops：闭合改为开放时成对移除末点停顿，不修改输入', () => {
+  const old = P({ closed: true, stops: [1, 4], stopTimes: [2, 6] });
+  const before = structuredClone(old);
+  const fitted = fitStops(old, { ...old, closed: false, duration: 4 });
+  assert.deepEqual(fitted.stops, [1]);
+  assert.deepEqual(fitted.stopTimes, [1]);
+  fitted.stops.push(2);
+  fitted.stopTimes.push(3);
+  assert.deepEqual(old, before);
+});
+
+test('fitStops：显式停顿可覆盖顶点数变化，显式时刻不随时长缩放', () => {
+  const old = P({ stops: [1, 3], stopTimes: [2, 6] });
+  const patch = { points: PTS.slice(0, 4), duration: 4, stops: [2], stopTimes: [3] };
+  const before = structuredClone(patch);
+  const fitted = fitStops(old, { ...old, ...patch }, patch);
+  assert.deepEqual(fitted.stops, [2]);
+  assert.deepEqual(fitted.stopTimes, [3]);
+  fitted.stops[0] = 1;
+  fitted.stopTimes[0] = 2;
+  assert.deepEqual(patch, before);
+});
+
+test('fitStops：无效时刻只清除 stopTimes，保留有效停顿索引', () => {
+  for (const stopTimes of [[2], [0, 6], [2, 8], [6, 2], [2, 2], [NaN, 6], [2, Infinity]]) {
+    const fitted = fitStops(null, P({ stops: [1, 3], stopTimes }));
+    assert.deepEqual(fitted.stops, [1, 3]);
+    assert.equal('stopTimes' in fitted, false);
+  }
+});
+
 test('插入 / 删除 / 反向 / 勾选停顿后的索引与时刻', () => {
   const p = P({ stops: [1, 3], stopTimes: [2, 6] });
   assert.deepEqual(stopsAfterInsert(p, 2).stops, [1, 4]);

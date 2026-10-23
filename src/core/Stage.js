@@ -9,8 +9,8 @@ const VIEWPORT_EVENTS = ['pointermove', 'wheel'];
 
 // 将长网格线按格距分段：部分 WebGL 后端会丢失跨过观察相机近平面的整条线。
 // 仍合并为一个 LineSegments，不增加网格的 draw call。
-function groundGrid() {
-  const divisions = 120; // 120m 范围，每格 1m，与角色米制身高对应。
+function groundGrid(spacing) {
+  const divisions = 120 / spacing; // 范围固定 120m，只改变参考线间距。
   const grid = new THREE.GridHelper(120, divisions, 0x536878, 0x354956);
   const source = grid.geometry;
   const p = source.getAttribute('position'), c = source.getAttribute('color');
@@ -118,12 +118,32 @@ export class Stage {
     this.ground.receiveShadow = true;
     this.groundGroup.add(this.ground);
 
-    // 1m 蓝灰网格：提供尺度参照，不改变实体、机位或整个场景的比例。
-    this.grid = groundGrid();
+    // 导演视图使用 2m 网格；机位预览、截图和视频保留原有 1m 网格。
+    this.grid = groundGrid(2);
     this.grid.material.transparent = true;
     this.grid.material.opacity = 0.6;
     this.grid.position.y = 0.002;
     this.groundGroup.add(this.grid);
+
+    const directorGeometry = this.grid.geometry, directorMaterial = this.grid.material;
+    // 按观察深度渐隐，减少地平线附近的线条堆叠；不依赖全景背景是否关闭环境雾。
+    directorMaterial.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <fog_fragment>', `
+        #include <fog_fragment>
+        #ifdef USE_FOG
+          gl_FragColor.a *= 1.0 - smoothstep(12.0, 40.0, vFogDepth);
+        #endif
+      `);
+    };
+    const shotGrid = groundGrid(1);
+    shotGrid.material.transparent = true;
+    shotGrid.material.opacity = 0.6;
+    // scene 回调覆盖所有渲染入口（包括离屏视频），避免改变拍摄画面。
+    this.scene.onBeforeRender = (_renderer, _scene, camera) => {
+      const director = camera === this.camera;
+      this.grid.geometry = director ? directorGeometry : shotGrid.geometry;
+      this.grid.material = director ? directorMaterial : shotGrid.material;
+    };
 
     // 主轴：X 红、Z 蓝（淡）
     const axisMat = (c) => new THREE.LineBasicMaterial({ color: c, transparent: true, opacity: 0.5 });

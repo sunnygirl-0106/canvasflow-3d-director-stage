@@ -8,7 +8,6 @@ export class DockMenu {
   /** @param {HTMLElement} container Dock 容器（#dock），作为弹层的定位父级。 */
   constructor(container) {
     this.container = container;
-    this.items = [];
     this.openItem = null;
     this._docClick = (e) => {
       if (!this.openItem) return;
@@ -36,7 +35,6 @@ export class DockMenu {
       close: () => { if (this.openItem === item) this.close(); },
       toggle: () => (this.openItem === item ? this.close() : this._open(item)),
     };
-    this.items.push(item);
     return item;
   }
 

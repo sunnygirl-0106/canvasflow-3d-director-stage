@@ -6,13 +6,13 @@ import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { Path } from '../anim/Path.js';
 
-const ACCENT = 0x3b82f6;
+const ACCENT = 0x60a5fa;
 const LIFT = 0.01;            // 贴地抬高 1 cm，防 z-fighting
 const SEG_PER_M = 64;         // 曲线采样：每米 64 段，最少 64、最多 2000 段
 const MAX_SEG = 2000;
 const ARROW_EVERY = 1;        // 方向箭头间隔（米）
 const VERTEX_PX = 5;          // 顶点球屏幕半径（px，≈ 10px 直径）
-const MARKER_PX = 11;         // 起止标记屏幕半径（px）
+const MARKER_PX = 8;         // 起止标记屏幕半径（px）
 const DOT_PX = 4;             // 播放亮点屏幕半径（px）
 const HIT_VERTEX_PX = 9;      // 命中测试：顶点
 const HIT_LINE_PX = 6;        // 命中测试：曲线
@@ -49,10 +49,10 @@ export class PathOverlay {
     this._sphereGeo = new THREE.SphereGeometry(1, 16, 12);
     this._triGeo = flatShape([[0, 1.2], [-0.85, -0.7], [0.85, -0.7]]);
     this._squareGeo = flatShape([[-0.75, -0.75], [0.75, -0.75], [0.75, 0.75], [-0.75, 0.75]]);
-    this._arrowGeo = flatShape([[0, 0.09], [-0.065, -0.05], [0, -0.02], [0.065, -0.05]]);
+    this._arrowGeo = flatShape([[0, 1.2], [-0.85, -0.7], [0, -0.3], [0.85, -0.7]]);
     this._mats = {
       vertex: handleMat(COLOR.vertex), hover: handleMat(COLOR.hover), selected: handleMat(COLOR.selected),
-      marker: handleMat(ACCENT, 0.95), arrow: handleMat(ACCENT, 0.85), dot: handleMat(COLOR.dot),
+      marker: depthMarkerMat(ACCENT), markerMuted: depthMarkerMat(ACCENT, 0.8), dot: handleMat(COLOR.dot),
     };
     this._lineMats = new Set();
 
@@ -157,19 +157,19 @@ export class PathOverlay {
         m.renderOrder = 13; m.userData.vertex = i; item.vertices.push(m); item.group.add(m);
       });
       item.vertices.forEach((m, i) => { m.position.fromArray(points[i]); m.position.y += LIFT; m.material = this._vertexMat(json.id, i); });
-      if (item.path) {
-        const marks = [{ s: 0, geo: this._triGeo, px: MARKER_PX }];
-        if (!json.closed) marks.push({ s: item.path.length, geo: this._squareGeo, px: MARKER_PX });
-        if (json.orient !== 'keep') for (let s = ARROW_EVERY; s < item.path.length - ARROW_EVERY * .3; s += ARROW_EVERY) marks.push({ s, geo: this._arrowGeo });
-        item.marks ||= [];
-        while (item.marks.length > marks.length) item.group.remove(item.marks.pop());
-        marks.forEach(({ s, geo, px }, i) => {
-          let m = item.marks[i];
-          if (!m) { m = px ? this._screenMesh(geo, this._mats.marker, px) : new THREE.Mesh(geo, this._mats.arrow); m.renderOrder = 11; item.marks.push(m); item.group.add(m); }
-          item.path.positionAt(s, m.position); m.position.y += LIFT;
-          if (item.path.tangentAt(s, _w)) m.rotation.y = Math.atan2(_w.x, _w.z);
-        });
-      }
+    }
+    if (item.path) {
+      const marks = [{ s: 0, geo: this._triGeo, px: MARKER_PX }];
+      if (!json.closed) marks.push({ s: item.path.length, geo: this._squareGeo, px: MARKER_PX });
+      if (json.orient !== 'keep') for (let s = ARROW_EVERY; s < item.path.length - ARROW_EVERY * .3; s += ARROW_EVERY) marks.push({ s, geo: this._arrowGeo, px: 7 });
+      item.marks ||= [];
+      while (item.marks.length > marks.length) item.group.remove(item.marks.pop());
+      marks.forEach(({ s, geo, px }, i) => {
+        let m = item.marks[i];
+        if (!m) { m = this._screenMesh(geo, item.selected ? this._mats.marker : this._mats.markerMuted, px, true); m.renderOrder = 11; item.marks.push(m); item.group.add(m); }
+        item.path.positionAt(s, m.position); m.position.y += LIFT;
+        if (item.path.tangentAt(s, _w)) m.rotation.y = Math.atan2(_w.x, _w.z);
+      });
     }
   }
 
@@ -197,13 +197,24 @@ export class PathOverlay {
     o.material.dispose();
   }
 
-  _line(samples, selected, { color = ACCENT, opacity = selected ? 1 : 0.5, segments = false } = {}) {
+  _line(samples, selected, { color = ACCENT, opacity = selected ? 1 : 0.8, segments = false } = {}) {
     const geo = segments ? new LineSegmentsGeometry() : new LineGeometry();
     geo.setPositions(samples);
     const mat = new LineMaterial({
-      color, linewidth: selected ? 2 : 1, transparent: true, opacity,
+      color, linewidth: selected ? 1 : 0.75, transparent: true, opacity, fog: false, toneMapped: false,
       depthWrite: false,
     });
+    // 在 GPU 上按每段两端的真实观察距离计算，跨段连续且随相机实时更新。
+    // 选中线宽 1.8–6 CSS px，未选中 1.35–4.5 px；拾取仍使用独立 HIT_LINE_PX。
+    mat.vertexShader = 'varying float vPathNear;\n' + mat.vertexShader.replace('offset *= linewidth;', `
+      float distanceToEye = length((position.y < 0.5 ? start : end).xyz);
+      vPathNear = 1.0 / (1.0 + pow(distanceToEye / 8.0, 2.0));
+      offset *= linewidth * mix(1.8, 6.0, vPathNear);
+    `);
+    mat.fragmentShader = 'varying float vPathNear;\n' + mat.fragmentShader.replace(
+      'vec4 diffuseColor = vec4( diffuse, alpha );',
+      'vec4 diffuseColor = vec4(diffuse * mix(0.5, 1.0, vPathNear), alpha);',
+    );
     this._lineMats.add(mat);
     this._syncResolution(mat);
     const line = segments ? new LineSegments2(geo, mat) : new Line2(geo, mat);
@@ -220,7 +231,7 @@ export class PathOverlay {
   }
 
   /** 固定屏幕尺寸的网格：渲染前按相机距离换算局部缩放。 */
-  _screenMesh(geo, mat, px) {
+  _screenMesh(geo, mat, px, depth = false) {
     const m = new THREE.Mesh(geo, mat);
     m.frustumCulled = false;
     m.onBeforeRender = (renderer, scene, camera) => {
@@ -229,7 +240,8 @@ export class PathOverlay {
       const h = renderer.getSize(_v).y || 1;
       const d = camera.isPerspectiveCamera ? _w.distanceTo(camera.getWorldPosition(_s)) : 1;
       const worldPerPx = camera.isPerspectiveCamera ? (2 * d * Math.tan((camera.fov * Math.PI) / 360)) / h : 0.01;
-      const k = (px * worldPerPx) / (m.parent.getWorldScale(_s).y || 1);
+      const size = depth ? 0.6 + 0.6 / (1 + (d / 8) ** 2) : 1;
+      const k = (px * size * worldPerPx) / (m.parent.getWorldScale(_s).y || 1);
       m.scale.setScalar(k);
       m.updateMatrixWorld(true);
       m.modelViewMatrix.multiplyMatrices(camera.matrixWorldInverse, m.matrixWorld);
@@ -434,8 +446,24 @@ export class PathOverlay {
 
 function handleMat(color, opacity = 1) {
   return new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity, depthTest: false, depthWrite: false, side: THREE.DoubleSide, fog: false,
+    color, transparent: true, opacity, depthTest: false, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false,
   });
+}
+
+/** 起点、终点与方向箭头共享距离亮度；编辑节点保持固定屏幕大小。 */
+function depthMarkerMat(color, opacity = 1) {
+  const mat = handleMat(color, opacity);
+  mat.onBeforeCompile = shader => {
+    shader.vertexShader = 'varying float vPathNear;\n' + shader.vertexShader.replace('#include <project_vertex>', `
+      #include <project_vertex>
+      vPathNear = 1.0 / (1.0 + pow(length(mvPosition.xyz) / 8.0, 2.0));
+    `);
+    shader.fragmentShader = 'varying float vPathNear;\n' + shader.fragmentShader.replace('#include <color_fragment>', `
+      #include <color_fragment>
+      diffuseColor.rgb *= mix(0.5, 1.0, vPathNear);
+    `);
+  };
+  return mat;
 }
 
 /** XZ 平面上的多边形（朝 +Z 为"前"），单位尺寸。 */

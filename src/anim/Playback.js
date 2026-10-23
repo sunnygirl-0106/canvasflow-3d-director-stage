@@ -6,10 +6,11 @@ import { Emitter } from '../util/Emitter.js';
  * 事件：'tick'(time) —— 时间变化；'state'('playing' | 'paused' | 'idle')。
  */
 export class Playback extends Emitter {
-  constructor(timeline, { invalidate = () => {} } = {}) {
+  constructor(timeline, { invalidate = () => {}, beforePlay = () => true } = {}) {
     super();
     this.timeline = timeline;
     this.invalidate = invalidate;
+    this.beforePlay = beforePlay;
     this.time = 0;
     this.playing = false;
     this.loop = false;
@@ -29,13 +30,15 @@ export class Playback extends Emitter {
   }
 
   play() {
-    if (this.playing) return;
+    if (this.playing) return true;
+    if (!this.beforePlay()) return false;
     const prev = this.state;
     if (this.time >= this.timeline.duration) this.time = 0; // 已在末尾：从头播放
     this.playing = true;
     this._last = performance.now();
     this._apply();
     this._setState(prev);
+    return true;
   }
 
   pause() {

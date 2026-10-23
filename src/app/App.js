@@ -10,7 +10,7 @@ import { DocumentController } from './DocumentController.js';
 import { EntityActions } from './EntityActions.js';
 import { updateDraft } from '../doc/Store.js';
 import { Emitter } from '../util/Emitter.js';
-import { toast } from '../util/dom.js';
+import { el, toast } from '../util/dom.js';
 import { worldBox } from '../util/measure.js';
 import { ShotManager } from './ShotManager.js';
 import { Panorama } from './Panorama.js';
@@ -68,7 +68,7 @@ export class App extends Emitter {
     this.store = this.documents.store;
     this.entityActions = new EntityActions(this);
     this.timeline = new Timeline(this);
-    this.playback = new Playback(this.timeline, { invalidate: () => stage.invalidate() });
+    this.playback = new Playback(this.timeline, { invalidate: () => stage.invalidate(), beforePlay: () => this._preparePlayback() });
     this.autoKey = false;               // 自动打键（会话偏好，由时间轴面板写入）
     this.loadingDocument = false;       // 加载期间为 true：history 据此屏蔽
     this.history = new History(this);
@@ -77,11 +77,13 @@ export class App extends Emitter {
     this.playback.on('state', (state) => {
       if (state === 'idle') this.endPreview();
       if (state === 'playing') this.pathTool?.cancel();
+      else { this.playbackCameraId = null; this._hidePlaybackHint(); }
       this.gizmo?.setVisible(this.gizmoShouldShow());
     });
     this.timeline.on('change', () => this._syncPov());
 
     const dom = stage.renderer.domElement;
+    this._bindPlaybackLock();
     this.gizmo = new TransformGizmo(stage.camera, dom, stage.scene, rig.controls, () => !this.cameraView);
     // gizmo：拖动中只改 root（实时显示）；松手时按时间轴状态归属（idle 改手动值 / active 打键或改 base，见 edited）
     this.gizmo.onObjectChange(() => { if (this.gizmo.attached === this.pathEditor?.proxy) { this.pathEditor.onGizmoChange(); return; } this._gizmoMoved = true; this.emit('transform'); });
@@ -321,11 +323,12 @@ export class App extends Emitter {
   }
 
   /**
-   * 机位视角始终使用用户指定的当前机位。主机位只决定导出，不接管播放视角。
+   * 播放期间固定使用启动时选定的播放机位；暂停后恢复普通机位查看。
    */
   _syncPov() {
     const tl = this.timeline;
-    const ent = this.cameraView ? this.findCamera(this.activeCameraId) : null;
+    if (this.playback.playing && !this.findCamera(this.playbackCameraId)) this.playback.stop();
+    const ent = this.cameraView ? this.findCamera(this.playback.playing ? this.playbackCameraId : this.activeCameraId) : null;
     const main = ent && tl.active && ent.id === tl.mainCameraId;
     if (ent && this.stage.activeCamera !== ent.cam) {
       ent.cam.aspect = this.viewportAspect();
@@ -345,6 +348,7 @@ export class App extends Emitter {
 
   /** 设置 POV 渲染相机（机位视角下立即生效）。 */
   setActiveCamera(id) {
+    if (this.playback.playing) { this.showPlaybackHint(); return; }
     const ent = this.findCamera(id);
     if (!ent) return;
     if (this.cameraView) this._usePovCamera(ent);
@@ -352,10 +356,26 @@ export class App extends Emitter {
     this.select(id);
   }
 
-  /** 播放保留当前视角；用户已进入机位视角时才隐藏拍摄辅助物。 */
-  startPreview({ play = true } = {}) {
+  /** 所有播放入口（包括直接 play / 继续 / 重播）都先准备机位视角。 */
+  _preparePlayback() {
+    const target = this.findCamera(this.activeCameraId) || this.findCamera(this.timeline.mainCameraId) || this.cameras[0];
+    if (!target) { toast('请先添加播放机位'); return false; }
     this.pathTool.cancel();
+    this.pathEditor.cancel();
+    this.playbackCameraId = target.id;
     this.directorDetached = true;
+    this.cameraView = true;
+    this.rig.controls.enabled = false;
+    this.setCameraHelpersVisible(false);
+    this._usePovCamera(target);
+    this.emit('view', true);
+    this.startPreview({ play: false });
+    return true;
+  }
+
+  startPreview({ play = true } = {}) {
+    if (play) return this.playback.play();
+    this.pathTool.cancel();
     if (this.cameraView && !this.preview) {
       this.preview = true;
       this.labelSprites.enable();
@@ -363,8 +383,44 @@ export class App extends Emitter {
     }
     this._applyFrame();
     this._syncPov();
-    if (play) this.playback.play();
     return true;
+  }
+
+  _bindPlaybackLock() {
+    const viewport = this.stage.viewport, canvas = this.stage.renderer.domElement;
+    this.playbackHint = el('div', { class: 'playback-lock-hint', role: 'status', hidden: true }, '播放中已锁定机位视角，暂停后可自由查看');
+    viewport.appendChild(this.playbackHint);
+    let drag = null;
+    viewport.addEventListener('pointerdown', e => {
+      if (!this.playback.playing || e.target !== canvas) return;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, shown: false };
+      e.preventDefault(); e.stopPropagation();
+    }, true);
+    viewport.addEventListener('pointermove', e => {
+      if (!this.playback.playing || !drag || drag.id !== e.pointerId) return;
+      if (!drag.shown && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 4) {
+        drag.shown = true; this.showPlaybackHint();
+      }
+      e.stopPropagation();
+    }, true);
+    const release = () => { drag = null; };
+    window.addEventListener('pointerup', release, true);
+    window.addEventListener('pointercancel', release, true);
+    viewport.addEventListener('wheel', e => {
+      if (!this.playback.playing || e.target !== canvas) return;
+      e.preventDefault(); e.stopPropagation(); this.showPlaybackHint();
+    }, { capture: true, passive: false });
+  }
+
+  showPlaybackHint() {
+    if (!this.playbackHint.hidden) return;
+    this.playbackHint.hidden = false;
+    this._playbackHintTimer = setTimeout(() => this._hidePlaybackHint(), 2200);
+  }
+
+  _hidePlaybackHint() {
+    clearTimeout(this._playbackHintTimer);
+    if (this.playbackHint) this.playbackHint.hidden = true;
   }
 
   endPreview() {
@@ -381,7 +437,7 @@ export class App extends Emitter {
   stopPreview() { this.playback.stop(); this.endPreview(); }
 
   setCameraView(on) {
-    const playing = this.playback.playing;
+    if (this.playback.playing) { this.showPlaybackHint(); return; }
     this.endPreview();
     if (on) {
       // 选定出画机位：当前选中相机 > 上次 active > 第一个相机
@@ -408,7 +464,6 @@ export class App extends Emitter {
       this._syncPov();
     }
     this.emit('view', this.cameraView);
-    if (playing) this.startPreview();
   }
 
   // ---- 场景级参数（ScenePanel）----
@@ -506,11 +561,12 @@ export class App extends Emitter {
     const ent = this.findCamera(this.timeline.mainCameraId);
     if (!ent || view.fov == null) return;
     ent.root.updateWorldMatrix(true, true);
-    this.defaultCameraId = ent.id;
     const position = ent.cam.getWorldPosition(new THREE.Vector3());
     const direction = ent.cam.getWorldDirection(new THREE.Vector3());
     const savedDirection = new THREE.Vector3().fromArray(view.target).sub(new THREE.Vector3().fromArray(view.pos)).normalize();
     if (position.distanceTo(this.stage.camera.position) > 1e-5 || direction.distanceTo(savedDirection) > 1e-5 || Math.abs(ent.fov - view.fov) > 1e-6) return;
+    // 仅同构图存档绑定机位；独立导演视角的 reset 应回到自己的 home。
+    this.defaultCameraId = ent.id;
     this.directorDetached = false;
     this.syncDirectorCamera();
   }
@@ -534,6 +590,7 @@ export class App extends Emitter {
   }
 
   resetView() {
+    if (this.playback.playing) { this.showPlaybackHint(); return; }
     if (this.cameraView) this.setCameraView(false);
     if (this.findCamera(this.defaultCameraId)) {
       this.directorDetached = false;
@@ -592,7 +649,7 @@ export class App extends Emitter {
   /** 推进播放与相机阻尼；返回画面是否仍在动。 */
   tick() {
     const playing = this.playback.update();
-    return this.rig.update() || playing;
+    return (this.rig.controls.enabled && this.rig.update()) || playing;
   }
 
   /** 渲染前同步：视锥、选中环、名牌。 */

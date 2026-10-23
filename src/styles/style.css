@@ -210,7 +210,7 @@ main > .side, #sideRail { height: calc(100% - var(--timeline-visible-height)); }
 
 /* ===== bottom dock ===== */
 #dock {
-  display: flex; align-items: center; border: 1px solid var(--line2); z-index: 8;
+  display: flex; align-items: center; z-index: 8;
 }
 .dockbtn {
   position: relative; width: 40px; height: 38px; border: none; background: none;
@@ -600,9 +600,7 @@ body.exporting #viewport { pointer-events: none; }
 
 /* ===== AI 选项、设置与会话 ===== */
 .ai-head { display: flex; align-items: center; gap: 4px; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--line); }
-.ai-title { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
-.ai-title svg, .ai-icbtn svg, .ai-attach svg { stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.ai-title svg { color: var(--dim); }
+.ai-icbtn svg, .ai-attach svg { stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .ai-icbtn { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--icon-color); cursor: pointer; }
 .ai-icbtn:hover, .ai-icbtn.on { background: var(--panel2); color: #fff; }
 
@@ -663,9 +661,6 @@ body.exporting #viewport { pointer-events: none; }
 .ai-text { width: 100%; resize: none; background: var(--panel2); border: 1px solid transparent; border-radius: 9px; color: var(--txt); font: inherit; font-size: 13px; line-height: 1.55; padding: 8px 10px; outline: none; }
 .ai-text:focus { border-color: var(--line2); }
 .ai-text:disabled { opacity: .55; }
-.ai-sendrow { display: flex; align-items: center; gap: 8px; }
-.ai-busy { flex: 1; font-size: 12px; color: var(--dim); }
-.ai-sendrow .minibtn { width: auto; margin: 0; padding: 7px 18px; }
 
 .startup { position: fixed; inset: 0; z-index: 1000; background: #141418ee; display: flex; align-items: center; justify-content: center; gap: 20px; color: white; }
 
@@ -680,7 +675,7 @@ header .logo { font-size: 15px; white-space: nowrap; }
 #sceneActions .dockbtn { width: 32px; height: 32px; }
 #foldLeft { flex: none; }
 .side.right { width: var(--side-w); flex-basis: var(--side-w); }
-#sideRail { flex: 0 0 var(--rail-w); width: var(--rail-w); background: var(--surface-sidebar); border-right: 1px solid var(--line); padding-top: 65px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+#sideRail { flex: 0 0 var(--rail-w); width: var(--rail-w); background: var(--surface-sidebar); border-right: 1px solid var(--line); padding-top: 65px; display: flex; flex-direction: column; align-items: center; }
 #sideRail .dockbtn { width: 36px; height: 36px; }
 #viewtabs { position: absolute; top: 9px; left: 50%; transform: translateX(-50%); z-index: 8; border: 1px solid var(--line); border-radius: 15px; background: var(--surface-panel); }
 #viewtabs button { padding: 8px 18px; border-radius: 12px; white-space: nowrap; }
@@ -688,10 +683,9 @@ header .logo { font-size: 15px; white-space: nowrap; }
 .panel-fold { position: absolute; right: 0; top: 140px; z-index: 10; width: 24px; height: 40px; border: 1px solid var(--line); background: var(--panel); color: var(--icon-color); cursor: pointer; }
 #navg { top: 18px; right: 22px; }
 #navg .lab { background: var(--surface-search); border-radius: 6px; padding: 3px 6px; }
-#stageTools { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); display: flex; align-items: flex-end; gap: 8.4375px; z-index: 12; }
-#dock { position: relative; left: auto; bottom: auto; transform: none; flex: 0 0 140.625px; width: 140.625px; height: 51.5625px; padding: 5px 7px; gap: 3px; border-radius: 28px; background: var(--surface-dock); box-shadow: none; }
-#dock .dockbtn { width: 40px; height: 40px; flex: none; border-radius: 13px; }
-#dock .dockbtn svg { width: 23px; height: 23px; }
+#stageTools { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: flex-end; z-index: 12; }
+#dock { position: relative; left: auto; bottom: auto; transform: none; }
+#dock .dockbtn { flex: none; }
 .dockmenu { z-index: 80; }
 .label3d, .label3d.cam { background: transparent; color: #fff; box-shadow: none; text-shadow: 0 1px 3px #0009; padding-left: 2px; padding-right: 2px; line-height: 1.25; }
 .label3d.cam { color: #c8d0d8; }
@@ -726,7 +720,7 @@ button:focus-visible, summary:focus-visible { outline: 2px solid #5ed9e1; outlin
 .ai-presets-trigger:hover .ai-presets-icon { transform: translateY(-1px); }
 .ai-presets-trigger:disabled { opacity: .35; cursor: default; }
 
-.ai-preset-tray { position: absolute; bottom: calc(100% + 8px); right: 0; width: min(420px, calc(100vw - 32px)); max-height: 220px; overflow: auto; padding: 12px; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px #0005; }
+.ai-preset-tray { position: absolute; bottom: calc(100% + 8px); right: 0; width: min(420px, calc(100vw - 32px)); max-height: 220px; overflow: auto; padding: 12px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 14px; }
 .ai-preset-heading, .ai-preset-confirm { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .ai-preset-tray .ai-preset-grid { max-height: 134px; margin-top: 0; overflow: auto; }
 .ai-preset-tray button { cursor: pointer; }
@@ -800,3 +794,12 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px
 .path-edit-bar kbd { margin-left: 5px; font: inherit; font-size: 10px; opacity: .6; }
 .path-edit-bar button:focus-visible { outline: 2px solid #a9c8ff; outline-offset: 2px; }
 @media (max-width: 1100px) { .path-edit-help { display: none; } }
+
+/* 只覆盖视口，不遮挡时间轴或消费鼠标事件。 */
+.playback-lock-hint {
+  position: absolute; left: 50%; top: 64px; transform: translateX(-50%);
+  z-index: 30; padding: 9px 14px; border: 1px solid #56759b;
+  border-radius: 8px; background: #182332ed; color: #e1edff;
+  font-size: 12px; white-space: nowrap; pointer-events: none;
+  box-shadow: 0 4px 16px #0004;
+}

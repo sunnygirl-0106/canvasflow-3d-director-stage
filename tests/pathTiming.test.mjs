@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fitPathToDuration } from '../src/anim/pathGen.js';
-import { setPath, addCharacter } from '../src/doc/edit.js';
+import { setPath, addCharacter, addCrowd } from '../src/doc/edit.js';
 import { createEmptyDocument } from '../src/doc/schema.js';
-import { fakeApp, addProp, closeVec } from './helpers.mjs';
+import { fakeApp, addProp, addCamera, closeVec } from './helpers.mjs';
 import { Path, WALK_RAMP } from '../src/anim/Path.js';
 
 const points = [[0, 0, 0], [20, 0, 0], [40, 0, 0]];
@@ -66,3 +66,32 @@ test('非UI公共API保留步速估算；显式时长仍优先', () => {
   assert.ok(Math.abs(path.duration - 1.7) < 0.01);
   assert.equal(setPath(doc, ent.id, points, { set: { duration: 6 } }).path.duration, 6);
 });
+
+for (const [type, speed, initialDuration, redrawnDuration] of [
+  ['character', 'linear', 2.1, 2.1],
+  ['group', 'linear', 2.1, 2.1],
+  ['camera', 'smooth', 2.5, 5],
+  ['prop', 'smooth', 2.9, 5.4],
+]) {
+  test(`setPath ${type}：新建与重画的时长、速度及显式覆盖优先级`, () => {
+    const doc = createEmptyDocument();
+    let ent;
+    if (type === 'character') ent = addCharacter(doc, { name: '角色', body: 'male' });
+    else if (type === 'group') ent = addCrowd(doc, { rows: 1, cols: 1, memberName: () => '成员' }).group;
+    else {
+      ent = (type === 'camera' ? addCamera(fakeApp()) : addProp(fakeApp())).toJSON();
+      doc.entities.push(ent);
+    }
+
+    const first = setPath(doc, ent.id, [[0, 0, 0], [3, 0, 0]], { start: 1 }).path;
+    assert.deepEqual([first.speed, first.duration], [speed, initialDuration]);
+    const longer = [[0, 0, 0], [6, 0, 0]];
+    const redrawn = setPath(doc, ent.id, longer, { start: 2 }).path;
+    assert.deepEqual([redrawn.id, redrawn.start, redrawn.duration], [first.id, 1, redrawnDuration]);
+
+    const override = setPath(doc, ent.id, longer, { set: { start: 2, duration: 6, speed: 'smooth' } }).path;
+    assert.deepEqual([override.start, override.duration, override.speed], [2, 6, speed]);
+    const linear = setPath(doc, ent.id, longer, { set: { speed: 'linear' } }).path;
+    assert.deepEqual([linear.speed, linear.duration], ['linear', type === 'character' || type === 'group' ? 6 : 5]);
+  });
+}

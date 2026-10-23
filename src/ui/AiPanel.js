@@ -1,4 +1,4 @@
-import { el, clear, toast, confirmToast } from '../util/dom.js';
+import { el, clear, toast } from '../util/dom.js';
 import { icon } from './icons.js';
 import { MODES, MODE_LABEL } from '../ai/ops.js';
 import { OpenAICompatProvider, loadSettings, saveSettings } from '../ai/provider.js';
@@ -374,7 +374,7 @@ export class AiPanel {
     return true;
   }
 
-  /** 发送：生成模式且场景非空先确认清空；识图模式必须有图。 */
+  /** 发送：直接生成，成功加载后才替换场景；识图模式必须有图。 */
   send() {
     if (this.agent.busy) return;
     const input = this.textarea.value.trim();
@@ -382,9 +382,7 @@ export class AiPanel {
     if (!this.agent.provider?.configured) { this.showSettings = true; this.open = true; this.render(); toast('请先在设置里填写模型接口'); return; }
     if (mode === 'image' && !this.image) { toast('请先附一张参考图'); return; }
     if (mode !== 'image' && !input) { this.textarea.focus(); return; }
-    const go = () => this._run({ input, mode, image: mode === 'image' ? this.image : null });
-    if (mode === 'generate' && this.app.entities.length) confirmToast('生成新场景将清空当前场景（可 ⌘Z 撤销）', '清空并生成', go);
-    else go();
+    this._run({ input, mode, image: mode === 'image' ? this.image : null });
   }
 
   async _run(req) {

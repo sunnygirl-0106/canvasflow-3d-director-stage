@@ -48,11 +48,13 @@ export async function run() {
     calibration.push({ viewport: [width, height], ...state });
     ok(`${width}×${height} 保留一男一女、颜色和左右站位`, state.actors.length === 2
       && state.actors[0].body === 'male' && state.actors[1].body === 'female'
-      && state.actors[0].color === '#468de5' && state.actors[1].color === '#e35e61'
+      && state.actors[0].color === '#57a2ff' && state.actors[1].color === '#ff6b7a'
       && state.actors[0].pos.join() === '-0.7,0,0' && state.actors[1].pos.join() === '0.7,0,0');
-    ok(`${width}×${height} 复验构图：共用机位参数，注视高度1.2m、5.71°下俯，首屏无手柄`,
-      state.actors.every(e => e.height > .15 && e.height < .22 && e.feet > .61 && e.feet < .65)
-      && Math.abs(state.yaw) < 1e-8 && state.pitch > 5.7 && state.pitch < 5.8 && !state.gizmo
+    ok(`${width}×${height} 导演视角独立校准：人物23–25%、13.13°下俯，拍摄参数不变`,
+      state.actors.every(e => e.height > .22 && e.height < .26 && e.feet > .55 && e.feet < .58)
+      && Math.abs(state.yaw) < 1e-8 && state.pitch > 13.1 && state.pitch < 13.2
+      && state.director.every((v, i) => Math.abs(v - [0, 2.2, 7.5][i]) < 1e-6)
+      && state.target.join() === '0,0.45,0' && !state.gizmo
       && state.shot.lookAt.join() === '0,1.2,0'
       && state.shot.transform.pos.join() === '0,2.2,10' && state.shot.fov === 50 && state.selected && state.collapsed && !state.playing,
       JSON.stringify(state.actors.map(e => ({ height: e.height, feet: e.feet }))));
@@ -62,13 +64,15 @@ export async function run() {
 
   const raster = await page.evaluate(() => {
     const a = window.__app, s = a.stage, c = a.cameras[0], V = s.camera.position.constructor;
-    // 同构图时视锥位于画布边缘；独立移动观察点验证侧线的真实渲染。
-    a.directorDetached = true; s.camera.position.x += 1; a.rig.controls.update(); a.beforeRender();
+    // 独立移动观察点，验证视锥侧线的真实渲染。
+    a.directorDetached = true;
+    a.rig.applyView(new V(1, 2.2, 10), new V(0, 1.2, 0), 50); a.beforeRender();
     const project = p => {
       p.project(s.camera);
       return [(p.x + 1) / 2 * s.renderer.domElement.width, (1 - p.y) / 2 * s.renderer.domElement.height];
     };
     const gridPoint = project(new V(2, .002, 3));
+    const farGridPoint = project(new V(2, .002, -38));
     const p = c.helper.geometry.getAttribute('position');
     // 从真实可见侧边采样，保持原有亮度差阈值。
     const sidePoints = [];
@@ -82,12 +86,14 @@ export async function run() {
     s.grid.visible = false; const noGrid = snapshot(); s.grid.visible = true;
     c._frustumSides.visible = false; const noSides = snapshot(); c._frustumSides.visible = true;
     s.invalidate();
-    return { on, noGrid, noSides, gridPoint, sidePoints };
+    return { on, noGrid, noSides, gridPoint, farGridPoint, sidePoints };
   });
   const on = decode(raster.on);
   const grid = lineContrast(on, decode(raster.noGrid), raster.gridPoint);
   const sides = Math.max(0, ...raster.sidePoints.map(p => lineContrast(on, decode(raster.noSides), p)));
   ok('正面视角的纵向网格线实际可见', grid > 3, `像素亮度差 ${grid.toFixed(1)}`);
+  const farGrid = lineContrast(on, decode(raster.noGrid), raster.farGridPoint);
+  ok('远处网格完全渐隐，不在地平线堆叠', farGrid < 1, `像素亮度差 ${farGrid.toFixed(1)}`);
   ok('跨近平面的视锥侧边实际可见', sides > 3, `像素亮度差 ${sides.toFixed(1)}`);
 
   const reset = await page.evaluate(async () => {
@@ -107,4 +113,26 @@ export async function run() {
   });
   ok('重置和存档恢复保留构图；机位视角隐藏辅助物；FOV面板与真实机位一致',
     reset.matches && reset.roundtrip && reset.clean && Number(reset.slider) === reset.fov, JSON.stringify(reset));
+
+  const saved = await page.evaluate(async () => {
+    const a = window.__app, s = a.stage;
+    const doc = a.exportDocument(), camera = JSON.stringify(doc.entities.find(e => e.type === 'camera'));
+    const view = { pos: [4, 4, 9], target: [1, .8, -2], fov: 66 };
+    doc.meta.editorView = view;
+    await a.loadDocument(doc, { applyView: true });
+    const matches = () => s.camera.position.distanceTo(s.camera.position.clone().fromArray(view.pos)) < 1e-5
+      && a.rig.controls.target.distanceTo(a.rig.controls.target.clone().fromArray(view.target)) < 1e-5;
+    const restored = matches() && s.camera.fov === 66;
+    const exported = a.exportDocument().meta.editorView;
+    s.camera.position.addScalar(3); s.camera.fov = 80; a.resetView();
+    const resetSaved = matches() && s.camera.fov === 66;
+    delete doc.meta.editorView.fov;
+    await a.loadDocument(doc, { applyView: true });
+    const legacy = matches() && s.camera.fov === 40;
+    return { restored, exported, resetSaved, legacy,
+      shotUnchanged: camera === JSON.stringify(a.exportDocument().entities.find(e => e.type === 'camera')) };
+  });
+  ok('自定义存档视角和FOV往返、重置均保留；缺FOV的旧文件仍使用40°；不改拍摄机位',
+    saved.restored && saved.resetSaved && saved.legacy && saved.shotUnchanged
+      && saved.exported.pos.join() === '4,4,9' && saved.exported.fov === 66, JSON.stringify(saved));
 }

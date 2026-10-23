@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { page, ok } from '../harness.mjs';
-import { settle, scr, toastClick, dragPath } from '../helpers.mjs';
+import { settle, scr, dragPath } from '../helpers.mjs';
 const OUT = 'test-output/round4';
 export async function run() {
   fs.mkdirSync(OUT, {recursive:true});
@@ -63,7 +63,6 @@ export async function run() {
     await page.click(`.tl-head[data-ent="${ids[1]}"] .tl-addkey`);
     await page.evaluate(label=>[...document.querySelectorAll('.ctx-item')].find(e=>e.textContent===label).click(),label);
     const prior = await page.evaluate(()=>JSON.stringify(window.__app.timeline.toJSON()));
-    await toastClick('替换');
     ok(`${label}锁定点击行对象`,await page.evaluate(id=>window.__app.pathTool.ent?.id===id,ids[1]));
     if(mode==='freehand') await dragPath([await scr([.7,0,0]),await scr([1.3,0,-.5]),await scr([1.8,0,-1])],{steps:12});
     else { await page.mouse.click(...await scr(mode==='circle'?[1.7,0,0]:[2,0,-1.5]));if(mode==='points')await page.keyboard.press('Enter'); }

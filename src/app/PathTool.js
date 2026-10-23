@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { el, toast, toastError, confirmToast, isTyping, CLICK_PX } from '../util/dom.js';
+import { el, toast, toastError, isTyping, CLICK_PX } from '../util/dom.js';
 import { Emitter } from '../util/Emitter.js';
 import { safePathPlanePoint } from '../core/pathPicking.js';
 import { worldBox } from '../util/measure.js';
@@ -75,7 +75,7 @@ export class PathTool extends Emitter {
 
   // ---- 入口 ----
   /**
-   * 从 Dock / Inspector 发起：先处理冲突（已有路径 → 替换？已有 pos 轨道 → 删除？），确认后进入绘制态。
+   * 从 Dock / Inspector 直接进入绘制态。
    * 冲突的删除 / 替换在绘制完成时才执行，中途 Esc 文档不变。
    */
   request(mode, targetId = this.app.selected?.id) {
@@ -86,19 +86,13 @@ export class PathTool extends Emitter {
     app.playback.pause();
     app.endPreview();
     app.select(ent.id);
-    const anim = app.timeline.toJSON();
-    const go = () => this.begin(mode, ent);
-    if (anim.paths.some((p) => p.target === ent.id)) {
-      confirmToast('重新绘制将替换现有路径', '替换', go);
-    } else if (anim.timeline.tracks.some((t) => t.target === ent.id && t.property === 'pos')) {
-      confirmToast('该对象已有位置关键帧，创建路径将删除它们', '删除并继续', go);
-    } else go();
+    this.begin(mode, ent);
   }
 
   begin(mode, ent) {
     const { app } = this;
     if (this.mode) this._end();
-    if (ent !== app.selected) return; // 确认期间换了选中
+    if (ent !== app.selected) return;
     this.mode = mode;
     this.ent = ent;
     this.start = this.startPoint(ent);

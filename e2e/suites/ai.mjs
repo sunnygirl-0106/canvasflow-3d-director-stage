@@ -44,7 +44,7 @@ export async function run() {
   await settle(200);
   await aiPanelShot(`${OUT}/panel_empty.png`);
 
-  // 预制场景仅填入草稿；真正发送仍遵守生成确认与忙碌状态。
+  // 预制场景仅填入草稿；发送直接开始生成，取消保留原场景。
   await page.evaluate(() => {
     window.__presetBefore = { doc: window.__app.store.document, hist: window.__app.history.index };
   });
@@ -59,10 +59,13 @@ export async function run() {
       && a.store.document === window.__presetBefore.doc && a.history.index === window.__presetBefore.hist && window.__aiMock.calls.length === 0;
   });
   ok('8 个预制场景：真实点击仅填入提示词并切生成模式，不调用模型或改文档', preset);
+  await page.evaluate(() => { window.__aiMock.delayMs = 1000; });
   await page.click('.ai-send');
-  const confirmation = await page.evaluate(() => document.querySelector('#toast').textContent.includes('清空并生成') && window.__aiMock.calls.length === 0);
-  await page.click('#toast .toast-action.secondary');
-  ok('预制场景发送保留清空确认，取消不改变现有场景', confirmation && await page.evaluate(() => window.__app.store.document === window.__presetBefore.doc && window.__aiMock.calls.length === 0));
+  const started = await page.evaluate(() => window.__app.ai.busy && !document.querySelector('#toast.show .toast-action') && window.__app.store.document === window.__presetBefore.doc);
+  await page.evaluate(() => window.__app.ai.cancel());
+  await page.waitForFunction(() => !window.__app.ai.busy);
+  ok('预制场景发送无清空确认，取消生成保留原场景', started && await page.evaluate(() => window.__app.store.document === window.__presetBefore.doc));
+  await page.evaluate(() => { window.__aiMock.delayMs = 30; window.__aiMock.calls = []; });
   await page.evaluate(() => window.__aiPanel.openPresets());
   const controls = await page.evaluate(() => {
     const p = window.__aiPanel;

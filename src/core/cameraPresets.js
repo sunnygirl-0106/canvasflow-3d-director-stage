@@ -117,15 +117,3 @@ export const CAMERA_PRESETS = [
     }),
   },
 ];
-
-// 按 group 归组，供 Dock 菜单分组渲染。
-export function groupedPresets() {
-  const groups = [];
-  const byKey = new Map();
-  for (const p of CAMERA_PRESETS) {
-    let g = byKey.get(p.group);
-    if (!g) { g = { name: p.group, items: [] }; byKey.set(p.group, g); groups.push(g); }
-    g.items.push(p);
-  }
-  return groups;
-}

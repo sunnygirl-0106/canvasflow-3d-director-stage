@@ -12,7 +12,7 @@ import { Pose } from '../rig/Pose.js';
 import { buildBoneMap, norm } from '../util/boneUtil.js';
 import { worldBox } from '../util/measure.js';
 import { round6 } from '../util/math.js';
-import { bodySpec, CHARACTER_COLOR } from '../config.js';
+import { bodySpec, CHARACTER_COLOR, CHARACTER_COLORS } from '../config.js';
 
 const DEFAULT_HEIGHT = 1.7;
 const DEFAULT_PROFILE = 'xbot'; // spec 未指定档案时（Mixamo 命名）
@@ -81,8 +81,8 @@ export class Character extends Entity {
     this.model = model;
     root.add(model);
 
-    // 统一素体材质（单色，扁平绿色素体观感）；SkinnedMesh 仍自动蒙皮。
-    this.color = CHARACTER_COLOR;
+    // 统一素体材质（按体型设置默认单色）；SkinnedMesh 仍自动蒙皮。
+    this.color = CHARACTER_COLORS[this.body] ?? CHARACTER_COLOR;
     this._mats = [];
     model.traverse((o) => {
       if (o.isMesh) {

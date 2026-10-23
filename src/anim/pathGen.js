@@ -102,18 +102,30 @@ export function fitStops(old, next, patch = {}) {
   const out = { ...next };
   let stops = 'stops' in patch ? patch.stops : out.stops;
   let times = 'stopTimes' in patch ? patch.stopTimes : out.stopTimes;
-  if (old && !('stops' in patch) && patch.points && patch.points.length !== old.points.length) stops = times = undefined;
-  if (stops?.length) {
-    const last = out.closed ? out.points.length - 1 : out.points.length - 2;
-    const keep = stops.map((i) => i >= 1 && i <= last);
-    if (keep.some((k) => !k)) {
-      stops = stops.filter((_, j) => keep[j]);
-      if (times?.length === keep.length) times = times.filter((_, j) => keep[j]);
-    }
-    if (times?.length && old && !('stopTimes' in patch) && out.duration !== old.duration) times = times.map((t) => round4(t * out.duration / old.duration));
-    if (times && (times.length !== stops.length || times.some((t, j) => !(t > 0 && t < out.duration && (j === 0 || t > times[j - 1]))))) times = undefined;
+  delete out.stops;
+  delete out.stopTimes;
+
+  // 未显式更新停顿时，顶点数变化会使旧索引失效。
+  if (old && !('stops' in patch) && patch.points && patch.points.length !== old.points.length) return out;
+  if (!stops?.length) return out;
+
+  const lastStopIndex = out.closed ? out.points.length - 1 : out.points.length - 2;
+  const keep = stops.map((index) => index >= 1 && index <= lastStopIndex);
+  if (keep.some((valid) => !valid)) {
+    stops = stops.filter((_, index) => keep[index]);
+    if (times?.length === keep.length) times = times.filter((_, index) => keep[index]);
   }
-  delete out.stops; delete out.stopTimes;
+
+  if (times?.length && old && !('stopTimes' in patch) && out.duration !== old.duration) {
+    times = times.map((t) => round4(t * out.duration / old.duration));
+  }
+  if (times) {
+    const validTimes = times.length === stops.length && times.every((t, index) => (
+      t > 0 && t < out.duration && (index === 0 || t > times[index - 1])
+    ));
+    if (!validTimes) times = undefined;
+  }
+
   if (stops?.length) {
     out.stops = stops.slice();
     if (times?.length) out.stopTimes = times.slice();

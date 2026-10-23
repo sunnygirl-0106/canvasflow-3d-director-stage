@@ -78,11 +78,12 @@ const renderPov = () => {
   const main = app.mainPreview;
   const label = $('povLabel');
   label.hidden = !camera;
-  label.classList.toggle('main', main);
-  label.textContent = camera ? (main ? `▶ 主机位 · ${camera.name}` : camera.name) : '';
+  label.classList.toggle('main', main || app.playback.playing);
+  label.textContent = camera ? (app.playback.playing ? `播放中 · ${camera.name}` : main ? `▶ 主机位 · ${camera.name}` : camera.name) : '';
   $('povHint').hidden = !app.povUnset;
 };
 app.on('pov', renderPov);
+app.playback.on('state', renderPov);
 app.on('entities', renderPov); // 改名
 $('closeBtn').innerHTML = icon('close', 18);
 $('foldLeft').innerHTML = icon('chevron', 18);

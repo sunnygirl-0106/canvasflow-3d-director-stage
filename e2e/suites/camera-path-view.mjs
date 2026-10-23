@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { page, ok } from '../harness.mjs';
-import { settle, pickInOutliner, toastClick, dragPath, scr } from '../helpers.mjs';
+import { settle, pickInOutliner, dragPath, scr } from '../helpers.mjs';
 
 const OUT = 'test-output/camera-path-view';
 const modes = [['circle', '圆环路径'], ['line', '直线路径'], ['rectangle', '矩形路径'], ['freehand', '铅笔路径'], ['points', '钢笔路径']];
@@ -58,9 +58,9 @@ export async function run() {
     await choose(label); await draw(mode);
     let created = await page.evaluate(id => window.__app.timeline.toJSON().paths.find(p => p.target === id), camera.id);
     ok(`${label}：完成后关联当前机位，保持高度和朝向，退出绘制状态`, created?.points.length >= 2 && created.points.every(p => p[1] === camera.transform.pos[1]) && created.orient === 'keep' && await page.evaluate(id => !window.__app.pathTool.busy && window.__app.selectedId === id && !window.__app.cameraView, camera.id), JSON.stringify(created && { points: created.points.length, duration: created.duration }));
-    await choose(label); await toastClick('替换'); await page.keyboard.press('Escape');
-    ok(`${label}：替换确认后取消仍保留旧路径`, await page.evaluate(p => JSON.stringify(window.__app.timeline.toJSON().paths.find(x => x.target === p.target)) === JSON.stringify(p), created));
-    await choose(label); await toastClick('替换'); await draw(mode);
+    await choose(label); await page.keyboard.press('Escape');
+    ok(`${label}：直接重绘后取消仍保留旧路径`, await page.evaluate(p => JSON.stringify(window.__app.timeline.toJSON().paths.find(x => x.target === p.target)) === JSON.stringify(p), created));
+    await choose(label); await draw(mode);
     created = await page.evaluate(id => window.__app.timeline.toJSON().paths.find(p => p.target === id), camera.id);
     ok(`${label}：再次绘制可完成，机位仅保留一条路径`, created?.points.length >= 2 && await page.evaluate(id => window.__app.timeline.paths.filter(p => p.target === id).length === 1 && !window.__app.pathTool.busy, camera.id));
     ok(`${label}：时间轴可驱动机位运动，停止保持导演位置`, await page.evaluate(id => {
@@ -73,7 +73,7 @@ export async function run() {
   }
   ok('选择、创建和再次绘制均未移动导演观察位置', await page.evaluate(before => JSON.stringify(window.__app.stage.camera.matrixWorld.toArray()) === JSON.stringify(before), initialView));
 
-  // 手动环绕后点击播放：保留导演观察视角，机位独立沿路径运动。
+  // 手动环绕后播放进入机位，后台保留导演位置。
   await page.evaluate(() => window.__timelinePanel.setCollapsed(false));
   const camerasBeforeOrbit = await page.evaluate(() => JSON.stringify(window.__app.cameras.map(c => c.toJSON())));
   const orbit = await page.evaluate(() => {
@@ -93,17 +93,17 @@ export async function run() {
   ok('手动环绕已改变观察视角', JSON.stringify(beforePlay.view) !== JSON.stringify(initialView));
   ok('手动环绕不改写机位位置、朝向或镜头参数', await page.evaluate(before => JSON.stringify(window.__app.cameras.map(c => c.toJSON())) === before, camerasBeforeOrbit));
   await page.click('.tl-play'); await settle(450);
-  ok('导演视角播放中：可观察机位，隐藏运动轨迹，仍可操作观察视角', await page.evaluate(() => {
+  ok('导演视角开始播放：进入机位，隐藏轨迹并锁定观察', await page.evaluate(() => {
     const a = window.__app;
-    return !a.cameraView && a.playback.playing && !a.stage.activeCamera && !a.pathOverlay.visible && a.rig.controls.enabled && a.cameras.every(c => c.helper.visible);
+    return a.cameraView && a.playback.playing && a.stage.activeCamera === a.cameras[0].cam && !a.pathOverlay.visible && !a.rig.controls.enabled && a.cameras.every(c => !c.helper.visible);
   }));
   await page.click('.tl-play');
-  ok('手动观察后播放/暂停：导演位置不跟随机位，暂停恢复所选对象轨迹', await page.evaluate(before => {
+  ok('播放/暂停保留机位，后台导演位置与选择不变', await page.evaluate(before => {
     const a = window.__app;
-    return !a.cameraView && !a.playback.playing && a.playback.time > 0 && !a.stage.activeCamera && a.pathOverlay.visible && a._cleanDepth === 0 && a.selectedId === before.selected && a.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8) && a.cameras[0].root.position.distanceTo(a.stage.camera.position.clone().fromArray(before.pos)) > .01;
+    return a.cameraView && !a.playback.playing && a.playback.time > 0 && a.stage.activeCamera && !a.pathOverlay.visible && a._cleanDepth === 1 && a.selectedId === before.selected && a.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8) && a.cameras[0].root.position.distanceTo(a.stage.camera.position.clone().fromArray(before.pos)) > .01;
   }, beforePlay));
   await page.keyboard.press('Escape'); await page.keyboard.press('Space'); await settle(100); await page.keyboard.press('Space');
-  ok('导演视角停止/Space重播保持用户观察位置', await page.evaluate(before => !window.__app.cameraView && window.__app.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8), beforePlay));
+  ok('停止/Space重播进入机位，后台导演位置不变', await page.evaluate(before => window.__app.cameraView && window.__app.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8), beforePlay));
   await page.keyboard.press('Escape');
 
   const second = await page.evaluate(() => { const a = window.__app, c = a.addCamera('front_mid'); a.timeline.setMainCamera(c.id); return { id: c.id, name: c.name }; });
@@ -116,14 +116,14 @@ export async function run() {
   ok('机位视角停止仍保留用户选择', await page.evaluate(id => window.__app.cameraView && window.__app.povCameraId === id && window.__app.playback.time === 0, camera.id));
   await page.keyboard.press('Space'); await settle(100);
   await page.click('#viewtabs [data-v="director"]');
-  ok('播放中手动切回导演视角，播放继续且选择被保留', await page.evaluate(() => !window.__app.cameraView && window.__app.playback.playing && !window.__app.preview && window.__app._cleanDepth === 0));
+  ok('播放中导演入口锁定，继续机位播放', await page.evaluate(() => window.__app.cameraView && window.__app.playback.playing && window.__app.preview && window.__app._cleanDepth === 1));
   await page.keyboard.press('Escape'); await page.keyboard.press('Space'); await settle(100); await page.keyboard.press('Escape');
-  ok('切回导演视角后停止/重播不再自动进入机位视角', await page.evaluate(() => !window.__app.cameraView));
+  ok('停止/重播持续满足机位视角规则', await page.evaluate(() => window.__app.cameraView));
 
   await page.evaluate(() => window.__timelinePanel.setCollapsed(true));
   // 在用户主动选定的机位视角绘制，既保留视角，也显示投影草稿。
   await pickInOutliner(camera.name); await page.click('#viewtabs [data-v="camera"]');
-  await choose('钢笔路径'); await toastClick('替换');
+  await choose('钢笔路径');
   await page.mouse.click(...await scr([2, 0, 1]));
   ok('机位视角创建轨迹不切导演视角，草稿可见', await page.evaluate(() => window.__app.cameraView && window.__app.pathOverlay.visible && window.__app.pathTool.draft.length === 2));
   await page.mouse.click(...await scr([3, 0, 2]));

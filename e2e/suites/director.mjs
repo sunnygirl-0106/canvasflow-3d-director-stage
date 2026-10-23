@@ -26,13 +26,11 @@ export async function run() {
     await page.screenshot({ path: `${OUT}/director-${width}x${height}.png` });
   }
   fs.writeFileSync(`${OUT}/calibration.json`, JSON.stringify(calibration, null, 2));
-  // 第五轮最新构图与 defaultview 同合同：机位 [0,2.2,10] 看向 [0,1.2,0]，FOV 50。
-  // 旧的约43%来自调整注视高度前的画面，不再作为当前产品基线。
-  ok('复验统一构图：全身入镜、脚底约63%，保留最新机位参数', calibration.every(x =>
-    x.director.height >= .15 && x.director.height <= .22 && x.director.feet >= .61 && x.director.feet <= .65
+  ok('导演视角人物23–25%、脚底约56%；拍摄机位保持原构图', calibration.every(x =>
+    x.director.height >= .22 && x.director.height <= .26 && x.director.feet >= .55 && x.director.feet <= .58
     && x.camera.transform.pos.join() === '0,2.2,10' && x.camera.lookAt.join() === '0,1.2,0' && x.camera.fov === 50
-    && x.director.pos.every((v, i) => Math.abs(v - x.camera.transform.pos[i]) < 1e-6)
-    && x.director.target.every((v, i) => Math.abs(v - x.camera.lookAt[i]) < 1e-6)), JSON.stringify(calibration.map(x => x.director)));
+    && x.director.pos.every((v, i) => Math.abs(v - [0, 2.2, 7.5][i]) < 1e-6)
+    && x.director.target.every((v, i) => Math.abs(v - [0, .45, 0][i]) < 1e-6)), JSON.stringify(calibration.map(x => x.director)));
   await page.setViewport({width:1440,height:900}); await settle();
   const preview = await page.evaluate(() => {
     const a = window.__app;
@@ -86,7 +84,7 @@ export async function run() {
   await page.keyboard.press('Space'); await settle(100);
   ok('Space复用预览入口',await page.evaluate(()=>!!window.__app.preview&&window.__app.playback.playing));
   await page.click('#viewtabs [data-v="director"]');
-  ok('导演标签退出机位预览但继续播放，拖播放头不强制切机位',await page.evaluate(()=>{const a=window.__app;a.playback.seek(3);return !a.preview&&!a.cameraView&&a.playback.playing&&a._cleanDepth===0;}));
+  ok('播放中导演标签被锁定，拖播放头保持机位',await page.evaluate(()=>{const a=window.__app;a.playback.seek(3);return !!a.preview&&a.cameraView&&a.playback.playing&&a._cleanDepth===1;}));
   const lifecycle=await page.evaluate(async()=>{
     const a=window.__app;
     a.setCameraView(true);
@@ -101,10 +99,10 @@ export async function run() {
     const end=a.playback.time===10&&!a.playback.playing&&!!a.preview;
     const c2=a.addCamera('front_mid'); const main=a.timeline.mainCameraId;
     a.remove(main);const fallback=!a.playback.playing&&a.getRenderCamera()===c2.cam;
-    a.remove(c2.id);const empty=!a.preview&&!a.cameraView&&a.startPreview()&&a.playback.playing&&a._cleanDepth===0;
+    a.remove(c2.id);const empty=!a.preview&&!a.cameraView&&!a.startPreview()&&!a.playback.playing&&a._cleanDepth===0;
     return {restart,loop,end,fallback,empty};
   });
-  ok('末端重播/循环/自然结束/当前机位删除回退/无机位仍可在导演视角播放',Object.values(lifecycle).every(Boolean),JSON.stringify(lifecycle));
+  ok('末端重播/循环/自然结束/当前机位删除回退/无机位阻止播放',Object.values(lifecycle).every(Boolean),JSON.stringify(lifecycle));
   await page.evaluate(async doc=>{const a=window.__app;await a.loadDocument(doc,{applyView:true});a.select(doc.entities[0].id);a.history.reset();},d);
   const replaced = await page.evaluate(async doc => {
     const a = window.__app;

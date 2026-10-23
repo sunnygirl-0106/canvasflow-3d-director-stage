@@ -7,7 +7,7 @@
 // 不依赖 DOM / App / 场景对象，node 里可直接单测。
 import * as THREE from 'three';
 import { genId, hexColor } from '../entities/Entity.js';
-import { BODY_TYPES, CROWD_PALETTE, CHARACTER_COLOR, CHARACTER_PALETTE } from '../config.js';
+import { BODY_TYPES, CROWD_PALETTE, CHARACTER_COLOR, CHARACTER_COLORS, CHARACTER_PALETTE } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
 import { paceFor, defaultDuration, fitStops, fitPathToDuration } from '../anim/pathGen.js';
 import { rampFor } from '../anim/Path.js';
@@ -86,7 +86,7 @@ export function posePreset(body, preset) {
  * 新角色条目（不入文档）。
  * @param {{id:string, name:string, body:string, pos?:number[], rot?:number[], scale?:number[], color?:string, pose?:string|null, parent?:string|null}} o
  */
-export function characterJSON({ id, name, body, pos = [0, 0, 0], rot = [0, 0, 0], scale = [1, 1, 1], color = hexColor(CHARACTER_COLOR), pose = null, parent = null }) {
+export function characterJSON({ id, name, body, pos = [0, 0, 0], rot = [0, 0, 0], scale = [1, 1, 1], color = hexColor(CHARACTER_COLORS[body] ?? CHARACTER_COLOR), pose = null, parent = null }) {
   if (!BODY_TYPES[body]) throw new Error(`未知体型：${body}`);
   return {
     type: 'character', id, name, body, color, visible: true,
@@ -98,7 +98,7 @@ export function characterJSON({ id, name, body, pos = [0, 0, 0], rot = [0, 0, 0]
 /** 新建角色并加入文档（默认落点 = spawnPoint）。返回条目。 */
 export function addCharacter(doc, { name, body, pos, yaw = 0, color, pose = null }) {
   const characterCount = doc.entities.filter(e => e.type === 'character').length;
-  const defaultColor = CHARACTER_PALETTE[characterCount % CHARACTER_PALETTE.length];
+  const defaultColor = CHARACTER_COLORS[body] ?? CHARACTER_PALETTE[characterCount % CHARACTER_PALETTE.length];
   const json = characterJSON({
     id: newId(doc), name, body, pos: pos || spawnPoint(topLevelCount(doc)),
     rot: [0, yaw, 0], color: color ?? hexColor(defaultColor), pose,
@@ -237,17 +237,23 @@ export function pathStartPoint(type, pos, groundY) {
 /**
  * 写入实体的路径（一条）。已有路径 → 替换 points / closed，人物保留时长、其余按新长度重算，保留 start / speed / orient；
  * 否则删掉该实体的 pos 轨道并新建：角色 / 组默认匀速，其余缓入缓出；orient = tangent（机位 keep）。
- * opts.set 里给出的字段（start / duration / speed / orient）两种情况都覆盖。
+ * opts.set 里给出的字段两种情况都覆盖，但角色 / 组始终使用匀速。
  * @returns {{path:object, replaced:boolean}}
  */
 export function setPath(doc, target, points, { closed = false, start = 0, set = {} } = {}) {
   const ent = findEntity(doc, target);
   if (!ent) throw new Error(`实体不存在：${target}`);
   const old = doc.paths.find((p) => p.target === target);
-  const speed = ['character', 'group'].includes(ent.type) ? 'linear' : set.speed ?? old?.speed ?? PATH_DEFAULTS.speed(ent.type);
-  const duration = set.duration ?? (['character', 'group'].includes(ent.type)
-    ? old?.duration ?? defaultDuration(points, { speed: paceFor(ent.type), closed, interpolation: set.interpolation, ramp: 0 })
-    : defaultDuration(points, { speed: paceFor(ent.type), closed, interpolation: set.interpolation, ramp: speed === 'smooth' ? rampFor(ent.type) : 0 }));
+  const uniform = ['character', 'group'].includes(ent.type);
+  const speed = uniform ? 'linear' : set.speed ?? old?.speed ?? PATH_DEFAULTS.speed(ent.type);
+  // 显式时长优先；角色 / 组重画时沿用旧时长，其余情况按步速估算。
+  let duration = set.duration ?? (uniform ? old?.duration : undefined);
+  if (duration == null) {
+    duration = defaultDuration(points, {
+      speed: paceFor(ent.type), closed, interpolation: set.interpolation,
+      ramp: speed === 'smooth' ? rampFor(ent.type) : 0,
+    });
+  }
   let path;
   if (old) { // 重新绘制：旧停顿作废（set.stops 给出时用新的）
     path = fitStops(null, { ...old, interpolation: undefined, points: clone(points), closed, duration, stops: undefined, stopTimes: undefined, ...clone(set), speed });

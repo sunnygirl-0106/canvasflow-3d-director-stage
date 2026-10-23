@@ -1,4 +1,4 @@
-import { el } from '../util/dom.js';
+import { el, toast } from '../util/dom.js';
 import { DockMenu } from './dockMenu.js';
 import { HistoryModal } from './HistoryModal.js';
 import { CAMERA_PRESETS } from '../core/cameraPresets.js';
@@ -8,7 +8,6 @@ import { icon } from './icons.js';
 import { exportScene, pickAndImportScene } from '../app/SceneFile.js';
 import { hasWebCodecs, UNSUPPORTED_MSG } from '../app/exportSpec.js';
 import { onKey, KEY_PRIORITY } from '../util/keys.js';
-import { toast } from '../util/dom.js';
 
 const svg = (name, w = 21) => icon(name, w);
 
@@ -27,7 +26,6 @@ export class Dock {
     this.exportModal = exportModal;
     this.aiPanel = aiPanel;
     this.container = container;
-    this.modeBtns = {};
     this._assets = [];
     listCanvasAssets().then((a) => { this._assets = a; });
     this._history = new HistoryModal({
@@ -51,10 +49,8 @@ export class Dock {
     }, { priority: KEY_PRIORITY.popup - 1 });
   }
 
-  _btn(iconName, title, onClick, key) {
-    const b = el('button', { class: 'dockbtn', title, 'aria-label': title, html: svg(iconName), onclick: onClick });
-    if (key) this.modeBtns[key] = b;
-    return b;
+  _btn(iconName, title, onClick) {
+    return el('button', { class: 'dockbtn', title, 'aria-label': title, html: svg(iconName), onclick: onClick });
   }
 
   // 通用菜单项（可选打勾 / 快捷键提示 / 禁用）
@@ -71,7 +67,6 @@ export class Dock {
     const app = this.app;
     const c = this.container;
     c.innerHTML = '';
-    this.modeBtns = {};
 
     // 1 变换（移动/旋转/缩放）
     const tf = this._btn(this._modeIcon(app.transformMode), '移动（点击选择移动 / 旋转 / 缩放）', (e) => { e.stopPropagation(); this.transformMenu.toggle(); });
@@ -80,15 +75,12 @@ export class Dock {
 
     // 2 添加角色 / 模型
     const addBtn = this._btn('person', '添加角色 / 模型', (e) => { e.stopPropagation(); this._showPanel('characters'); });
-    this.addBtn = addBtn;
 
     // 3 全景图
     const pano = this._btn('panorama', '全景图（本地上传 / 历史记录）', (e) => { e.stopPropagation(); this._showPanel('panorama'); });
-    this.panoBtn = pano;
 
     // 4 添加机位
     const camAdd = this._btn('video', '添加机位（预设）', (e) => { e.stopPropagation(); this._showPanel('cameras'); });
-    this.camAddBtn = camAdd;
 
     // 6 截图
     const shot = this._btn('shot', '截图', () => app.shots.captureShot());
@@ -96,7 +88,6 @@ export class Dock {
 
     // 7 场景：撤销 / 重做 / 导出 / 导入 / 导出视频
     const scene = this._btn('scene', '场景（撤销 / 重做 / 导出 / 导入 / 导出视频）', (e) => { e.stopPropagation(); this.sceneMenu.toggle(); });
-    this.sceneBtn = scene;
 
     // 8 时间轴（展开 / 折叠底部面板）
     const tlp = this.timelinePanel;

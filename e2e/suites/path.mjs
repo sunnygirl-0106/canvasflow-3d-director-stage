@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { page, ok, twoCharacterFixture } from '../harness.mjs';
-import { pixelDiff, sleep, settle, pickInOutliner, scr, pathMenu, toastText, toastClick, animJSON, pathOf, cleanShot, dragPath, hdist } from '../helpers.mjs';
+import { pixelDiff, sleep, settle, pickInOutliner, scr, pathMenu, toastText, animJSON, pathOf, cleanShot, dragPath, hdist } from '../helpers.mjs';
 
 export async function run() {
   await twoCharacterFixture();
@@ -112,7 +112,7 @@ export async function run() {
   // ---- 4 环绕：圆柱以方块为中心（替换走到路径）----
   await pathMenu('环绕');
   const replaceToast = await toastText();
-  await toastClick('替换');
+
   await page.mouse.move(...await scr([1.6, 0.25, 2.6]));
   await settle();
   await page.screenshot({ path: `${OUT}/13_arc.png` });
@@ -137,7 +137,7 @@ export async function run() {
   await settle(150);
   const arc2 = await pathOf(ids.cyl);
   const arc2d = arc2.points.map((q) => hdist(q, boxC));
-  ok('验收4 环绕：已有路径时先确认替换', replaceToast.includes('重新绘制将替换现有路径'), replaceToast);
+  ok('验收4 环绕：直接绘制，无替换确认', !replaceToast.includes('重新绘制将替换现有路径'), replaceToast);
   ok('验收4 环绕方块：半径由当前位置得出，所有点到中心距离 = 半径 ± 1 cm',
     arc.n > 2 && arc.d.every((x) => Math.abs(x - arc.R) <= 0.01) && !arc.closed, `R=${arc.R.toFixed(3)} 点距=${arc.d.map((x) => x.toFixed(3)).join(',')}`);
   ok('验收4 Inspector 改扫过角度为 360 → closed=true，仍在圆上', setSweep && arc2.closed === true && arc2d.every((x) => Math.abs(x - arc.R) <= 0.01), `closed=${arc2.closed} n=${arc2.points.length}`);
@@ -241,12 +241,12 @@ export async function run() {
   const doc7 = JSON.stringify(await animJSON());
   await pathMenu('直线');
   const t7 = await toastText();
-  await toastClick('取消');
+  await page.keyboard.press('Escape');
   const mode7 = await page.evaluate(() => window.__app.pathTool.mode);
   const same7 = JSON.stringify(await animJSON()) === doc7;
   const H7 = await page.evaluate(() => window.__app.history.entries.length);
   await pathMenu('直线');
-  await toastClick('删除并继续');
+
   await page.mouse.click(...await scr([2.8, 0, 3.4]));
   await settle(200);
   await sleep(50);
@@ -254,15 +254,15 @@ export async function run() {
   await page.keyboard.down('Meta'); await page.keyboard.press('z'); await page.keyboard.up('Meta');
   await sleep(400);
   const undo7 = await page.evaluate((id) => { const j = window.__app.timeline.toJSON(); return { tracks: j.timeline.tracks.filter((t) => t.target === id).length, path: !!j.paths.find((p) => p.target === id) }; }, ids.box);
-  ok('验收7 有 pos 轨道点「路径」→ 确认 toast；取消 → 文档不变、不进绘制态', t7.includes('该对象已有位置关键帧') && same7 && mode7 === null, t7);
-  ok('验收7 确认 → pos 轨道删除且路径创建，为一次撤销（⌘Z 后轨道恢复、路径消失）',
+  ok('验收7 有 pos 轨道直接绘制；Esc 取消后文档不变', !t7.includes('该对象已有位置关键帧') && same7 && mode7 === null, t7);
+  ok('验收7 绘制完成 → pos 轨道删除且路径创建，为一次撤销（⌘Z 后轨道恢复、路径消失）',
     after7.tracks === 0 && after7.path && after7.H === H7 + 1 && undo7.tracks === 1 && !undo7.path, `after=${JSON.stringify(after7)} undo=${JSON.stringify(undo7)}`);
 
   // ---- 8（补）⌥ + 左键拖动仍可环绕 ----
   await pickInOutliner(ids.An);
   const doc8 = JSON.stringify(await animJSON());
   await pathMenu('点击落点');
-  await toastClick('替换'); // 已有路径：先确认替换（Esc 取消后文档不变）
+   // 已有路径：直接重绘，Esc 取消后文档不变
   const cv0 = await page.evaluate(() => window.__app.stage.camera.position.toArray());
   await page.keyboard.down('Alt');
   await dragPath([await scr([0, 0, -1.5]), await scr([1.5, 0, -1.5])], { steps: 10 });
@@ -310,7 +310,7 @@ export async function run() {
   await settle();
   await pickInOutliner(ids.Bn);
   await pathMenu('直线');
-  await toastClick('替换');
+
   const bStart = await page.evaluate((id) => window.__app.pathTool.startPoint(window.__app.findEntity(id)), ids.B);
   const bEnd = [bStart[0] - 6, 0, bStart[2] - 0.3];
   await page.mouse.click(...await scr(bEnd));

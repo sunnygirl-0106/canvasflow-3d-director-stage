@@ -6,7 +6,7 @@ export async function run() {
   const OUT = 'test-output/tl';
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
-  // 清掉会话偏好后重新加载：常见笔记本高度默认展开
+  // 清掉会话偏好后重新加载：默认收起
   await page.evaluate(() => { localStorage.removeItem('director-stage.timeline'); });
   await page.reload({ waitUntil: 'networkidle0' });
   await page.waitForFunction(() => window.__app?.history.enabled, { timeout: 30000 });
@@ -197,20 +197,33 @@ export async function run() {
   const playing = await page.evaluate(() => window.__app.playback.playing);
   await page.screenshot({ path: `${OUT}/04_playing.png` });
   // 播放中：同一同步块里读时刻并出图（画面与时刻严格对应）
-  const tPlay = await page.evaluate(() => window.__app.playback.time);
-  const shotPlay = await canvasShot(`${OUT}/7_playing.png`);
-  const tPlay2 = await page.evaluate(() => window.__app.playback.time);
+  const framePlay = await page.evaluate(() => {
+    const a = window.__app;
+    a.beforeRender(); a.stage.render();
+    return { time: a.playback.time, image: a.stage.renderer.domElement.toDataURL('image/png') };
+  });
+  const tPlay = framePlay.time, shotPlay = `${OUT}/7_playing.png`;
+  fs.writeFileSync(shotPlay, Buffer.from(framePlay.image.split(',')[1], 'base64'));
   await page.keyboard.press('Space');
   await page.evaluate((t) => window.__app.playback.seek(t), tPlay);
   const shotSeek = await canvasShot(`${OUT}/7_seek.png`);
   const dPlay = pixelDiff(shotPlay, shotSeek, `${OUT}/_diff_play.png`);
   ok('验收7 Space 开始播放，约 1s 时的画面 ≡ seek(该时刻)（< 0.5%）', idle && playing && tPlay > 0.6 && dPlay < 0.005,
-    `t=${tPlay.toFixed(3)}（读图后 ${tPlay2.toFixed(3)}） 差 ${(dPlay * 100).toFixed(3)}%`);
+    `t=${tPlay.toFixed(3)} 差 ${(dPlay * 100).toFixed(3)}%`);
   await page.keyboard.press('Escape');
+  await settle(150);
+  const stopped = await page.evaluate(() => {
+    const a = window.__app;
+    return { state: a.playback.state, time: a.playback.time, cameraView: a.cameraView, camera: a.povCameraId, preview: !!a.preview };
+  });
+  ok('验收7 Esc 停止归零、退出预览并保留当前机位视角',
+    stopped.state === 'idle' && stopped.time === 0 && stopped.cameraView && stopped.camera === ids.cam && !stopped.preview, JSON.stringify(stopped));
+  // 播放自动进入机位；停止后由用户切回导演视角，再在相同视角下验证手动场景恢复。
+  await clickSel('#viewtabs [data-v="director"]');
   await settle(150);
   const stopShot = await shootViewport(`${OUT}/7_after_esc.png`);
   const dStop = pixelDiff(idleShot, stopShot, `${OUT}/_diff_esc.png`);
-  ok('验收7 Esc 后场景 ≡ 进入前（0%）', dStop === 0 && await page.evaluate(() => !window.__app.timeline.active), `${(dStop * 100).toFixed(4)}%`);
+  ok('验收7 Esc 后切回导演视角，场景 ≡ 进入前（0%）', dStop === 0 && await page.evaluate(() => !window.__app.timeline.active && !window.__app.cameraView), `${(dStop * 100).toFixed(4)}%`);
 
   // ---- 8 快捷键 ----
   await page.keyboard.press('Home');
@@ -301,6 +314,7 @@ export async function run() {
   // ---- 收尾 1 · 播放中点进 Inspector 位置输入框 → 暂停；改完回车 → 键写在暂停时刻 ----
   await page.evaluate((id) => {
     const a = window.__app, tl = a.timeline;
+    a.addCamera('front_mid'); // 播放要求机位；前面的空轨道用例只创建了两个角色。
     const tr = tl.toJSON().timeline.tracks.find((t) => t.target === id && t.property === 'pos');
     const v0 = tr.keys[0].value;
     tl.setKey(tr.id, 4, [v0[0] + 2, v0[1], v0[2]]);
@@ -309,6 +323,7 @@ export async function run() {
     a.playback.play();
   }, bare.f);
   await sleep(500);
+  const beforeFocus = await page.evaluate(() => ({ state: window.__app.playback.state, t: window.__app.playback.time }));
   const posX = await page.evaluate(() => {
     const f = [...document.querySelectorAll('#inspector .field')].find((n) => n.querySelector('label')?.textContent.startsWith('位置'));
     const b = f.querySelector('.triple input').getBoundingClientRect();
@@ -328,19 +343,23 @@ export async function run() {
     return { keys: tr.keys.map((x) => +x.t.toFixed(3)), x: k?.value[0], state: a.playback.state };
   }, bare.f, focus8.t);
   ok('播放中点进位置输入框 → 暂停（state=paused）；改完回车 → 键写在暂停时刻、不自动恢复播放',
-    focus8.state === 'paused' && focus8.t > 0.2 && focus8.focus === 'INPUT' && Math.abs(typed8.x - 0.7) < 1e-9 && typed8.keys.length === 3 && typed8.state === 'paused',
-    `聚焦时 ${JSON.stringify(focus8)}；回车后 keys=${JSON.stringify(typed8.keys)} x=${typed8.x} state=${typed8.state}`);
+    beforeFocus.state === 'playing' && beforeFocus.t > 0.2 && focus8.t >= beforeFocus.t
+      && focus8.state === 'paused' && focus8.focus === 'INPUT' && Math.abs(typed8.x - 0.7) < 1e-9 && typed8.keys.length === 3 && typed8.state === 'paused',
+    `聚焦前 ${JSON.stringify(beforeFocus)}；聚焦时 ${JSON.stringify(focus8)}；回车后 keys=${JSON.stringify(typed8.keys)} x=${typed8.x} state=${typed8.state}`);
   await page.evaluate(() => { document.activeElement?.blur(); window.__app.playback.play(); });
   await sleep(200);
+  const beforeAxis = await page.evaluate(() => ({ state: window.__app.playback.state, t: window.__app.playback.time }));
   const axXY = await page.evaluate(() => {
     const f = [...document.querySelectorAll('#inspector .field')].find((n) => n.querySelector('label')?.textContent.startsWith('位置'));
     const b = f.querySelector('.ax').getBoundingClientRect();
     return [b.x + b.width / 2, b.y + b.height / 2];
   });
   await page.mouse.move(...axXY); await page.mouse.down();
-  const axState = await page.evaluate(() => window.__app.playback.state);
+  const axState = await page.evaluate(() => ({ state: window.__app.playback.state, t: window.__app.playback.time }));
   await page.mouse.up();
-  ok('播放中按下轴标签（拖动改值）同样先暂停', axState === 'paused', axState);
+  ok('播放中按下轴标签（拖动改值）同样先暂停',
+    beforeAxis.state === 'playing' && axState.state === 'paused' && axState.t >= beforeAxis.t,
+    `按下前 ${JSON.stringify(beforeAxis)}；按下后 ${JSON.stringify(axState)}`);
   await page.evaluate(() => window.__app.playback.stop());
 
   // ---- 9 折叠：视口高 +184px，刷新保持 ----
