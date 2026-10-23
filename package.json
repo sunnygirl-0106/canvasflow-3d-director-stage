@@ -16,10 +16,11 @@
     "test:unit": "node --test tests/*.test.mjs",
     "docs:ai": "node scripts/gen-ai-vocab.mjs",
     "test:e2e:all": "node selftest.mjs all",
-    "check": "npm run lint && npm run test:unit",
+    "check": "npm run lint && npm run test:types && npm run test:unit",
     "test:e2e:required": "node scripts/run-e2e.mjs required",
     "test:browser:install": "node scripts/install-test-browser.mjs",
-    "test:build": "node scripts/check-build.mjs && node scripts/test-build.mjs"
+    "test:build": "node scripts/check-build.mjs && node scripts/test-build.mjs",
+    "test:types": "node scripts/type-vocab.mjs --check && tsc --noEmit"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
@@ -30,6 +31,7 @@
     "pixelmatch": "^8.0.0",
     "pngjs": "^7.0.0",
     "puppeteer-core": "^25.2.0",
+    "typescript": "5.9.3",
     "vite": "^5.4.0"
   },
   "dependencies": {

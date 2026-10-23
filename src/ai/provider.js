@@ -1,3 +1,4 @@
+// @ts-check
 // 模型调用：本机配置走服务端代理，手动配置可直接调用兼容接口。
 // - OpenAICompatProvider：OpenAI 兼容的 /chat/completions（DeepSeek / 通义 / Kimi / OpenRouter / 本地 vLLM 等都能接）。
 // - MockProvider：按请求里的关键字返回预录回复；selftest 用它，验收不依赖网络。
@@ -5,17 +6,27 @@
 //
 // 设置（baseURL / apiKey / model）只存本机 localStorage，不进场景文档、不打日志、不进 selftest 产物。
 
+import { isObj } from '../util/math.js';
+
 export const SETTINGS_KEY = 'director-stage.ai';
 const DEFAULT_SETTINGS = { baseURL: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini' };
 
+/** @returns {import('../types/contracts.js').ProviderSettings} */
 export function loadSettings() {
   if (typeof __LOCAL_AI_MODEL__ !== 'undefined' && __LOCAL_AI_MODEL__) {
     return { baseURL: '/api/local-ai', apiKey: '', model: __LOCAL_AI_MODEL__, local: true };
   }
-  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; }
+  try {
+    /** @type {unknown} */
+    const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    const s = isObj(raw) ? raw : {};
+    return { baseURL: typeof s.baseURL === 'string' ? s.baseURL : DEFAULT_SETTINGS.baseURL,
+      apiKey: typeof s.apiKey === 'string' ? s.apiKey : '', model: typeof s.model === 'string' ? s.model : DEFAULT_SETTINGS.model };
+  }
   catch { return { ...DEFAULT_SETTINGS }; }
 }
 
+/** @param {import('../types/contracts.js').ProviderSettings} s */
 export function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ baseURL: s.baseURL, apiKey: s.apiKey, model: s.model })); }
   catch { /* 隐私模式等：只在本次会话生效 */ }
@@ -23,10 +34,12 @@ export function saveSettings(s) {
 
 /** 接口报错（文案给用户看；不含密钥）。 */
 export class ProviderError extends Error {
+  /** @param {string} message @param {number} [status] */
   constructor(message, status) { super(message); this.name = 'ProviderError'; this.status = status; }
 }
 
 /** 消息内容 → 纯文本（Mock 匹配 / 日志用；图片记成占位）。 */
+/** @param {import('../types/contracts.js').MessageContent | undefined} content */
 export function textOf(content) {
   if (typeof content === 'string') return content;
   return (content || []).map((p) => (p.type === 'text' ? p.text : '[图片]')).join('\n');
@@ -48,16 +61,19 @@ export class OpenAICompatProvider {
 
   get configured() { return !!(this.baseURL && (this.local || this.apiKey) && this.model); }
 
+  /** @param {import('../types/contracts.js').ChatMessage[]} messages
+   * @param {import('../types/contracts.js').ChatOptions} [options] @returns {Promise<string>} */
   async chat(messages, { signal } = {}) {
     if (!this.configured) throw new ProviderError('未配置模型接口：请在 AI 面板「设置」里填写 baseURL / apiKey / model');
+    /** @type {import('../types/contracts.js').ChatBody} */
     const body = { model: this.model, messages, temperature: this.temperature };
     if (this.jsonMode) body.response_format = { type: 'json_object' };
     let res;
     try {
       res = await this._post(body, signal);
     } catch (err) {
-      if (err.name === 'AbortError') throw err;
-      throw new ProviderError(`网络错误：${err.message || err}（检查 baseURL、网络或跨域设置）`);
+      if (err instanceof Error && err.name === 'AbortError') throw err;
+      throw new ProviderError(`网络错误：${err instanceof Error ? err.message : String(err)}（检查 baseURL、网络或跨域设置）`);
     }
     if (res.status === 400 && this.jsonMode) {
       if (/response_format|json_object/i.test(res.text)) { // 不支持 JSON 模式：去掉重试一次
@@ -69,18 +85,21 @@ export class OpenAICompatProvider {
       const text = res.text.slice(0, 300);
       throw new ProviderError(`接口返回 ${res.status}：${text || res.statusText}`, res.status);
     }
+    /** @type {unknown} */
     let data;
     try { data = JSON.parse(res.text); }
     catch { throw new ProviderError('接口返回格式不对：响应不是合法 JSON', res.status); }
-    const content = data?.choices?.[0]?.message?.content;
+    const choice = isObj(data) && Array.isArray(data.choices) ? data.choices[0] : null;
+    const content = isObj(choice) && isObj(choice.message) ? choice.message.content : undefined;
     if (typeof content !== 'string') throw new ProviderError('接口返回格式不对：没有 choices[0].message.content');
     return content;
   }
 
+  /** @param {import('../types/contracts.js').ChatBody} body @param {AbortSignal} [signal] */
   async _post(body, signal) {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(new Error('请求超时')), this.timeoutMs);
-    const onAbort = () => ctl.abort(signal.reason);
+    const onAbort = () => ctl.abort(signal?.reason);
     if (signal?.aborted) onAbort();
     else signal?.addEventListener('abort', onAbort, { once: true });
     try {
@@ -113,7 +132,7 @@ export class OpenAICompatProvider {
       ]);
       return { ok: /ok/i.test(text), ms: Math.round(performance.now() - t0), reply: text.slice(0, 80) };
     } catch (err) {
-      return { ok: false, ms: Math.round(performance.now() - t0), error: err.message || String(err) };
+      return { ok: false, ms: Math.round(performance.now() - t0), error: err instanceof Error ? err.message : String(err) };
     }
   }
 }
@@ -126,13 +145,18 @@ export class OpenAICompatProvider {
  * 没有命中 → 抛错。calls 记录每次请求的消息（selftest 断言重试消息里带错误原文）。
  */
 export class MockProvider {
+  /** @param {import('../types/contracts.js').MockFixture[]} [fixtures]
+   * @param {{delayMs?:number}} [options] */
   constructor(fixtures = [], { delayMs = 0 } = {}) {
     this.fixtures = fixtures.map((f) => ({ ...f, hits: 0 }));
     this.delayMs = delayMs;
+    /** @type {import('../types/contracts.js').ChatMessage[][]} */
     this.calls = [];
     this.configured = true;
   }
 
+  /** @param {import('../types/contracts.js').ChatMessage[]} messages
+   * @param {import('../types/contracts.js').ChatOptions} [options] @returns {Promise<string>} */
   async chat(messages, { signal } = {}) {
     this.calls.push(JSON.parse(JSON.stringify(messages)));
     if (this.delayMs) await new Promise((r) => setTimeout(r, this.delayMs));

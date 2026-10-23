@@ -79,3 +79,11 @@ test('无效 JSON 使用稳定的 ProviderError，不暴露解析器异常', asy
   const provider = await providerFor(t, (req, res) => res.end('<html>upstream error</html>'));
   await assert.rejects(provider.chat(messages), (err) => err instanceof ProviderError && /不是合法 JSON/.test(err.message));
 });
+
+test('本地设置按类型读取，损坏字段回退且不信任注入的 local 标记', async (t) => {
+  const { loadSettings } = await import('../src/ai/provider.js');
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  t.after(() => { if (descriptor) Object.defineProperty(globalThis, 'localStorage', descriptor); else delete globalThis.localStorage; });
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: () => '{"baseURL":3,"apiKey":null,"model":[],"local":true}' } });
+  assert.deepEqual(loadSettings(), { baseURL: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini' });
+});
