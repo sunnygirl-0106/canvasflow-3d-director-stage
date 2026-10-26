@@ -44,27 +44,34 @@ export async function run() {
   await settle(200);
   await aiPanelShot(`${OUT}/panel_empty.png`);
 
-  // 预制场景仅填入草稿；发送直接开始生成，取消保留原场景。
+  // 预制场景直接创建确定性文档；后续 AI 修改可取消，不损坏已加载场景。
   await page.evaluate(() => {
     window.__presetBefore = { doc: window.__app.store.document, hist: window.__app.history.index };
   });
   await page.evaluate(() => window.__aiPanel.toggle(false));
   await page.click('#scenePresets');
   await page.click('.ai-preset');
+  await page.waitForFunction(() => !window.__app.loadingDocument && !document.querySelector('.ai-preset-tray'));
   const preset = await page.evaluate(async () => {
     const { SCENE_PRESETS } = await import('/src/ai/presets.js');
     const p = window.__aiPanel, a = window.__app;
+    a.history.capture();
+    window.__loadedPreset = a.store.document;
     return !document.querySelector('.ai-preset-tray') && SCENE_PRESETS.length === 8
-      && p.mode === 'generate' && p.textarea.value === SCENE_PRESETS[0].prompt && document.activeElement === p.textarea
-      && a.store.document === window.__presetBefore.doc && a.history.index === window.__presetBefore.hist && window.__aiMock.calls.length === 0;
+      && p.mode === 'modify' && p.textarea.value === '' && document.activeElement === p.textarea
+      && a.store.document.meta.name === SCENE_PRESETS[0].title
+      && a.store.document.entities.filter(e => e.type === 'character').map(e => e.name).join() === '角色A,角色B'
+      && a.store.document.paths.length > 0 && !!a.store.document.timeline.mainCameraId
+      && a.store.document !== window.__presetBefore.doc && a.history.index === window.__presetBefore.hist + 1 && window.__aiMock.calls.length === 0;
   });
-  ok('8 个预制场景：真实点击仅填入提示词并切生成模式，不调用模型或改文档', preset);
+  ok('8 个预制场景：真实点击直接加载完整角色名、路径和主机位，一步提交且不调用模型', preset);
   await page.evaluate(() => { window.__aiMock.delayMs = 1000; });
+  await page.type('.ai-text', '两个阿明');
   await page.click('.ai-send');
-  const started = await page.evaluate(() => window.__app.ai.busy && !document.querySelector('#toast.show .toast-action') && window.__app.store.document === window.__presetBefore.doc);
+  const started = await page.evaluate(() => window.__app.ai.busy && !document.querySelector('#toast.show .toast-action') && window.__app.store.document === window.__loadedPreset);
   await page.evaluate(() => window.__app.ai.cancel());
   await page.waitForFunction(() => !window.__app.ai.busy);
-  ok('预制场景发送无清空确认，取消生成保留原场景', started && await page.evaluate(() => window.__app.store.document === window.__presetBefore.doc));
+  ok('预制场景后发送修改，取消保留已加载的场景', started && await page.evaluate(() => window.__app.store.document === window.__loadedPreset));
   await page.evaluate(() => { window.__aiMock.delayMs = 30; window.__aiMock.calls = []; });
   await page.evaluate(() => window.__aiPanel.openPresets());
   const controls = await page.evaluate(() => {

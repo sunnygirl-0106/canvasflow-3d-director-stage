@@ -19,7 +19,7 @@ export async function run() {
   const seed = await page.evaluate(()=>window.__app.exportDocument());
   ok('首帧到ready后均无可见/可拾取变换手柄', await page.evaluate(()=>window.startupHandles.length>0&&window.startupHandles.every(s=>!s.visible&&!s.enabled)));
   await snap('startup-no-gizmo');
-  ok('默认机身、标签、近端小框隐藏，导航保留', await page.evaluate(()=>{const a=window.__app,c=a.cameras[0];return !c.body.visible&&c.helper.geometry.drawRange.count===0&&c.labelEl.style.display==='none'&&!!document.querySelector('#navsvg circle');}));
+  ok('默认导演视角显示机身、标签、视锥和导航', await page.evaluate(()=>{const a=window.__app,c=a.cameras[0];return c.body.visible&&c.helper.visible&&c.helper.geometry.drawRange.count>0&&c.labelEl.style.display!=='none'&&!!document.querySelector('#navsvg circle');}));
   const projections=[];
   for (const [width,height] of [[1440,900],[1920,1080]]) {
     await page.setViewport({width,height}); await settle();
@@ -29,14 +29,14 @@ export async function run() {
         const a=window.__app,{worldBox}=await import('/src/util/measure.js');a.beforeRender();
         const cam=a.cameras[0].cam, director=a.stage.camera, V=director.position.constructor;
         const points=a.entities.filter(e=>e.type==='character').flatMap(e=>{const b=worldBox(e.root,{useBones:true}),c=b.getCenter(new V());return [c.clone().setY(b.min.y),c.clone().setY(b.max.y)];});
-        let delta=0;
-        for(const p of points){const d=p.clone().project(director),c=p.clone().project(cam);delta=Math.max(delta,Math.abs(d.x-c.x)*a.stage.viewport.clientWidth/2,Math.abs(d.y-c.y)*a.stage.viewport.clientHeight/2);}
         const stable=points.map(p=>p.clone().project(director).toArray());
-        a.setCameraView(true);a.beforeRender();a.setCameraView(false);window.__timelinePanel.setCollapsed(false);a.beforeRender();
-        return {delta,position:director.position.distanceTo(cam.getWorldPosition(new V())),fov:director.fov,aspect:director.aspect===cam.aspect,target:a.cameras[0].lookTarget.toArray(),stable:JSON.stringify(stable)===JSON.stringify(points.map(p=>p.clone().project(director).toArray())),gizmo:a.gizmo.visible};
+        a.setCameraView(true);a.beforeRender();
+        const clean=a.cameras.every(c=>!c.body.visible&&!c.helper.visible);
+        a.setCameraView(false);window.__timelinePanel.setCollapsed(false);a.beforeRender();
+        return {position:director.position.toArray(),target:a.rig.controls.target.toArray(),fov:director.fov,cameraPosition:cam.getWorldPosition(new V()).toArray(),cameraTarget:a.cameras[0].lookTarget.toArray(),clean,restored:a.cameras[0].body.visible&&a.cameras[0].helper.visible,stable:JSON.stringify(stable)===JSON.stringify(points.map(p=>p.clone().project(director).toArray())),gizmo:a.gizmo.visible};
       });
       projections.push({width,height,ratio,...result});
-      ok(`${width}×${height} ${ratio} 两视角投影≤1px、切换/时间轴不跳动`,result.delta<=1&&result.position<1e-6&&result.fov===50&&result.aspect&&result.target.join()==='0,1.2,0'&&result.stable&&!result.gizmo,JSON.stringify(result));
+      ok(`${width}×${height} ${ratio} 导演与机位独立、切换/时间轴不跳动且辅助元素恢复`,result.position.every((v,i)=>Math.abs(v-[2,3.2,13][i])<1e-6)&&result.target.join()==='0,0.8,3'&&result.fov===50&&result.cameraPosition.join()==='0,2.2,10'&&result.cameraTarget.join()==='0,1.2,0'&&result.clean&&result.restored&&result.stable&&!result.gizmo,JSON.stringify(result));
       if(ratio==='16:9') {
         await snap(`director-${width}x${height}`);
         await page.evaluate(()=>window.__app.setCameraView(true)); await snap(`camera-${width}x${height}`);
@@ -47,10 +47,12 @@ export async function run() {
   }
   await page.setViewport({width:1440,height:900});
   const sync=await page.evaluate(()=>{
-    const a=window.__app,c=a.cameras[0];c.lookTarget.y=-.9;c.aimAt(c.lookTarget);c.root.position.x=.3;c.setFov(55);a.edited(c);a.beforeRender();
-    return {fov:a.stage.camera.fov,position:a.stage.camera.position.distanceTo(c.root.position),direction:a.stage.camera.getWorldDirection(c.root.position.clone()).distanceTo(c.cam.getWorldDirection(c.root.position.clone()))};
+    const a=window.__app,c=a.cameras[0],director=a.stage.camera;
+    const position=director.position.clone(),direction=director.quaternion.clone(),target=a.rig.controls.target.clone();
+    c.lookTarget.y=-.9;c.aimAt(c.lookTarget);c.root.position.x=.3;c.setFov(55);a.edited(c);a.beforeRender();
+    return {fov:director.fov,position:director.position.distanceTo(position),direction:director.quaternion.angleTo(direction),target:a.rig.controls.target.distanceTo(target),cameraChanged:c.fov===55&&c.root.position.x===.3&&c.lookTarget.y===-.9};
   });
-  ok('未脱离时位置/朝向/FOV修改同步',sync.fov===55&&sync.position<1e-6&&sync.direction<1e-6);
+  ok('机位位置/朝向/FOV修改不覆盖独立导演视角',sync.fov===50&&sync.position<1e-6&&sync.direction<1e-6&&sync.target<1e-6&&sync.cameraChanged,JSON.stringify(sync));
   const cameraBefore=await page.evaluate(()=>JSON.stringify(window.__app.cameras[0].toJSON()));
   await page.mouse.move(800,210);await page.mouse.down();await page.mouse.move(900,260,{steps:15});await page.mouse.up();await settle(800);
   const detached=await page.evaluate(before=>{
@@ -58,17 +60,17 @@ export async function run() {
     c.lookTarget.y=-.71;c.aimAt(c.lookTarget);c.setFov(50);a.edited(c);a.beforeRender();
     return a.directorDetached&&unchanged&&p.distanceTo(a.stage.camera.position)<1e-8&&q.angleTo(a.stage.camera.quaternion)<1e-6;
   },cameraBefore);
-  ok('真实环绕脱离同步，不写机位；后续机位编辑不覆盖观察视角',detached);
+  ok('真实环绕不写机位；后续机位编辑不覆盖观察视角',detached);
   await page.click('#navg');await settle();
-  ok('reset恢复当前主机位并重新同步',await page.evaluate(()=>{const a=window.__app;a.beforeRender();return !a.directorDetached&&a.stage.camera.fov===50&&Math.abs(a.rig.controls.target.y+.71)<1e-5;}));
+  ok('reset恢复导演home，保留机位编辑',await page.evaluate(()=>{const a=window.__app;a.beforeRender();return a.directorDetached&&a.stage.camera.fov===50&&a.stage.camera.position.toArray().every((v,i)=>Math.abs(v-[2,3.2,13][i])<1e-6)&&a.rig.controls.target.toArray().join()==='0,0.8,3'&&a.cameras[0].root.position.x===.3&&a.cameras[0].lookTarget.y===-.71;}));
   const persistence=await page.evaluate(async seed=>{
-    const a=window.__app;const d=a.exportDocument();await a.loadDocument(d,{applyView:true});const current=a.stage.camera.fov===50&&a.exportDocument().meta.editorView.fov===50&&!a.directorDetached;
+    const a=window.__app;const d=a.exportDocument();await a.loadDocument(d,{applyView:true});const current=a.directorDetached&&JSON.stringify(a.exportDocument().meta.editorView)===JSON.stringify(d.meta.editorView)&&JSON.stringify(a.exportDocument().entities.filter(e=>e.type==='camera'))===JSON.stringify(d.entities.filter(e=>e.type==='camera'));
     const old=structuredClone(seed);delete old.meta.editorView.fov;const oldCam=JSON.stringify(old.entities.filter(e=>e.type==='camera'));
     await a.loadDocument(old,{applyView:true});const legacy=a.stage.camera.fov===40&&a.directorDetached&&JSON.stringify(a.exportDocument().entities.filter(e=>e.type==='camera'))===oldCam;
     a.stage.camera.fov=70;a.resetView();const home=a.stage.camera.fov===40;
     await a.loadDocument(seed,{applyView:true});return {current,legacy,home};
   },seed);
-  ok('FOV保存恢复50；旧字段缺失40；旧机位不改写；home带FOV',Object.values(persistence).every(Boolean),JSON.stringify(persistence));
+  ok('独立导演视角完整保存恢复；旧字段缺失40；机位不改写；home带FOV',Object.values(persistence).every(Boolean),JSON.stringify(persistence));
   await page.evaluate(()=>{const a=window.__app;a.select(a.entities[0].id,{activateTransform:false});a.withCleanRender(()=>a.stage.snapshot(a.cameras[0].cam,{width:160,height:90}));a.playback.seek(1);a.playback.stop();});
   await page.setViewport({width:1450,height:900});await settle();
   ok('恢复/截图结束/播放停止/resize不重新激活首屏手柄',await page.evaluate(()=>!window.__app.gizmo.visible&&!window.__app.gizmo.control.enabled));
