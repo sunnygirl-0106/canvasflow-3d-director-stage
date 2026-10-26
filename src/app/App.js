@@ -75,7 +75,7 @@ export class App extends Emitter {
     // 时间轴只驱动实体；导演相机从此保持用户的观察位置。
     this.timeline.on('active', () => { if (this.timeline.active) this.directorDetached = true; this._syncPov(); });
     this.playback.on('state', (state) => {
-      if (state === 'idle') this.endPreview();
+      if (state !== 'playing') this.endPreview();
       if (state === 'playing') this.pathTool?.cancel();
       else { this.playbackCameraId = null; this._hidePlaybackHint(); }
       this.gizmo?.setVisible(this.gizmoShouldShow());
@@ -84,6 +84,7 @@ export class App extends Emitter {
 
     const dom = stage.renderer.domElement;
     this._bindPlaybackLock();
+    this._bindDirectorZoom();
     this.gizmo = new TransformGizmo(stage.camera, dom, stage.scene, rig.controls, () => !this.cameraView);
     // gizmo：拖动中只改 root（实时显示）；松手时按时间轴状态归属（idle 改手动值 / active 打键或改 base，见 edited）
     this.gizmo.onObjectChange(() => { if (this.gizmo.attached === this.pathEditor?.proxy) { this.pathEditor.onGizmoChange(); return; } this._gizmoMoved = true; this.emit('transform'); });
@@ -98,7 +99,7 @@ export class App extends Emitter {
       }
     });
     this.gizmo.onChange(() => stage.invalidate());
-    this.selection = new Selection(stage.renderer, stage.camera, stage.scene, () => this.entities, (id) => this.select(id));
+    this.selection = new Selection(stage.renderer, stage.camera, stage.scene, () => this.entities, (id) => this.select(id, { user: true }));
     // OrbitControls 的 change 只有处于用户手势内才表示主动脱离；程序更新与视角切换不算。
     let orbitGesture = false;
     rig.controls.addEventListener('start', () => { orbitGesture = true; });
@@ -187,7 +188,11 @@ export class App extends Emitter {
   }
 
   // ---- 选择 ----
-  select(id, { activateTransform = true } = {}) {
+  select(id, { activateTransform = true, user = false, preservePathEditing = false } = {}) {
+    if (user) {
+      this.userSelectedId = id;
+      if (!preservePathEditing || id !== this.selectedId) this.pathOverlay?.setSelectedPath(null);
+    }
     if (id !== this.selectedId) this.pathEditor?.cancel();
     this.transformEditing = id != null && activateTransform;
     this.selectedId = id;
@@ -197,6 +202,7 @@ export class App extends Emitter {
 
   /** Shift 多选：在多选集合中切换某实体；主选取为最后一次加入项。 */
   toggleSelect(id) {
+    this.pathOverlay?.setSelectedPath(null);
     this.transformEditing = true;
     if (this.selectedIds.has(id)) {
       this.selectedIds.delete(id);
@@ -205,6 +211,7 @@ export class App extends Emitter {
       this.selectedIds.add(id);
       this.selectedId = id;
     }
+    this.userSelectedId = this.selectedId;
     this._reflectPrimary();
   }
 
@@ -323,12 +330,12 @@ export class App extends Emitter {
   }
 
   /**
-   * 播放期间固定使用启动时选定的播放机位；暂停后恢复普通机位查看。
+   * 播放出画独立于用户选择的编辑视角，退出临时预览后回导演观察。
    */
   _syncPov() {
     const tl = this.timeline;
     if (this.playback.playing && !this.findCamera(this.playbackCameraId)) this.playback.stop();
-    const ent = this.cameraView ? this.findCamera(this.playback.playing ? this.playbackCameraId : this.activeCameraId) : null;
+    const ent = this.preview ? this.findCamera(this.playbackCameraId) : this.cameraView ? this.findCamera(this.activeCameraId) : null;
     const main = ent && tl.active && ent.id === tl.mainCameraId;
     if (ent && this.stage.activeCamera !== ent.cam) {
       ent.cam.aspect = this.viewportAspect();
@@ -362,29 +369,25 @@ export class App extends Emitter {
     if (!target) { toast('请先添加播放机位'); return false; }
     this.pathTool.cancel();
     this.pathEditor.cancel();
+    // 清空未完成的环绕阻尼，再精确恢复当前导演观察状态；不更新 home 或文档。
+    const camera = this.stage.camera;
+    this._playbackDirector = { pos: camera.position.clone(), target: this.rig.controls.target.clone(),
+      quaternion: camera.quaternion.clone(), fov: camera.fov, zoom: camera.zoom };
+    this.rig.applyView(this._playbackDirector.pos, this._playbackDirector.target, camera.fov);
+    camera.position.copy(this._playbackDirector.pos);
+    camera.quaternion.copy(this._playbackDirector.quaternion);
     this.playbackCameraId = target.id;
     this.directorDetached = true;
-    this.cameraView = true;
     this.rig.controls.enabled = false;
-    this.setCameraHelpersVisible(false);
-    this._usePovCamera(target);
-    this.emit('view', true);
-    this.startPreview({ play: false });
-    return true;
-  }
-
-  startPreview({ play = true } = {}) {
-    if (play) return this.playback.play();
-    this.pathTool.cancel();
-    if (this.cameraView && !this.preview) {
-      this.preview = true;
-      this.labelSprites.enable();
-      this.beginCleanRender();
-    }
+    this.preview = true;
+    this.labelSprites.enable();
+    this.beginCleanRender();
     this._applyFrame();
     this._syncPov();
     return true;
   }
+
+  startPreview() { return this.playback.play(); }
 
   _bindPlaybackLock() {
     const viewport = this.stage.viewport, canvas = this.stage.renderer.domElement;
@@ -418,23 +421,78 @@ export class App extends Emitter {
     this._playbackHintTimer = setTimeout(() => this._hidePlaybackHint(), 2200);
   }
 
+  _bindDirectorZoom() {
+    const ray = new THREE.Raycaster(), pointer = new THREE.Vector2(), offset = new THREE.Vector3();
+    let lastHint = 0;
+    this.stage.viewport.addEventListener('wheel', e => {
+      if (this.playback.playing || this.cameraView || e.target !== this.stage.renderer.domElement) return;
+      e.preventDefault(); e.stopPropagation();
+      const controls = this.rig.controls;
+      const camera = this.stage.camera;
+      if (e.deltaY > 0) {
+        offset.copy(camera.position).sub(controls.target);
+        camera.position.copy(controls.target).addScaledVector(offset, Math.min(controls.maxDistance / offset.length(), Math.exp(e.deltaY * 0.0015)));
+        controls.update();
+        return;
+      }
+      if (e.deltaY === 0) return;
+      const rect = this.stage.renderer.domElement.getBoundingClientRect();
+      pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, 1 - (e.clientY - rect.top) / rect.height * 2);
+      ray.setFromCamera(pointer, camera);
+      const subjects = this.entities.filter(ent => ent.visible && (ent.type === 'character' || ent.type === 'group')).map(ent => ent.root);
+      const hit = ray.intersectObjects(subjects, true)[0];
+      const anchor = hit?.point || controls.target;
+      const distance = camera.position.distanceTo(anchor);
+      if (distance <= controls.minDistance + 0.005) {
+        if (performance.now() - lastHint > 1800) { toast('已到最近距离'); lastHint = performance.now(); }
+        return;
+      }
+      const next = Math.max(controls.minDistance, distance * Math.exp(e.deltaY * 0.0015));
+      const fraction = 1 - next / distance;
+      camera.position.lerp(anchor, fraction);
+      if (hit) controls.target.lerp(anchor, fraction);
+      controls.update();
+    }, { capture: true, passive: false });
+  }
+
   _hidePlaybackHint() {
     clearTimeout(this._playbackHintTimer);
     if (this.playbackHint) this.playbackHint.hidden = true;
   }
 
   endPreview() {
+    // pause 的 state 回调负责退出；不要在退出回调中再次 pause。
+    if (this.playback.playing) { this.playback.pause(); return; }
     if (!this.preview) return;
-    this.playback.pause();
-    this.preview = null;
+    this.preview = false;
+    this.playbackCameraId = null;
+    this.cameraView = false;
+    this.stage.activeCamera = null;
+    const saved = this._playbackDirector;
+    this._playbackDirector = null;
+    if (saved) {
+      this.rig.applyView(saved.pos, saved.target, saved.fov);
+      this.stage.camera.position.copy(saved.pos);
+      this.stage.camera.quaternion.copy(saved.quaternion);
+      this.stage.camera.zoom = saved.zoom;
+      this.stage.camera.updateProjectionMatrix();
+      this.stage.camera.updateMatrixWorld(true);
+    }
+    this.rig.controls.enabled = true;
     this.endCleanRender();
     this.labelSprites.disable();
     this._applyFrame();
     this._syncPov();
     this._syncEditCamera();
+    this.emit('view', false);
+    this.stage.invalidate();
   }
 
-  stopPreview() { this.playback.stop(); this.endPreview(); }
+  stopPreview() {
+    this.playback.stop();
+    this.endPreview();
+    if (this.cameraView) this.setCameraView(false);
+  }
 
   setCameraView(on) {
     if (this.playback.playing) { this.showPlaybackHint(); return; }
@@ -670,6 +728,7 @@ export class App extends Emitter {
         ent.helper.visible = ent.visible && ent._helpersOn && (ent.id === this.timeline.mainCameraId || this.selectedIds.has(ent.id));
       }
     }
+    this.pathOverlay.update();
     this.selection.update();
     this.labels.update(this.entities, this.getRenderCamera(), {
       worldScale: this.stage.world.scale.y,

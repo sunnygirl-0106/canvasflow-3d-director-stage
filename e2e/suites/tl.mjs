@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { page, ok } from '../harness.mjs';
-import { shootViewport, pixelDiff, sleep, settle, centerOf, clickSel, dragFromTo, pickInOutliner, dragPlayhead, gizmoDrag, canvasShot } from '../helpers.mjs';
+import { shootViewport, pixelDiff, sleep, settle, centerOf, clickSel, dragFromTo, pickInOutliner, dragPlayhead, gizmoDrag } from '../helpers.mjs';
 
 export async function run() {
   const OUT = 'test-output/tl';
@@ -144,7 +144,7 @@ export async function run() {
   const pathOf = () => page.evaluate((pid) => { const p = window.__app.timeline.toJSON().paths.find((x) => x.id === pid); return { start: p.start, duration: p.duration }; }, pathId);
   await page.evaluate(id=>window.__app.select(id),ids.p2);
   await clickSel(`.tl-head[data-ent="${ids.p2}"] .tl-caret`);
-  await page.click('.tl-path-line'); // 第五轮：区间在父行直接可拖，点击位置行打开属性 // 行超出可见范围时先滚动到按钮
+  await page.click('.tl-track button[title="编辑位置路径"]'); // 第五轮：区间在父行直接可拖，点击位置行打开属性 // 行超出可见范围时先滚动到按钮
   await page.$eval('.tl-bar-path', n => n.scrollIntoView({block:'nearest', inline:'nearest'}));
   await settle();
   const endXY = await centerOf('.tl-bar-path .tl-bar-end.end');
@@ -163,6 +163,7 @@ export async function run() {
   // ---- 6 约束段 ----
   await pickInOutliner(ids.camName);
   await page.evaluate(()=>{const b=[...document.querySelectorAll('.ptabs button')].find(b=>b.textContent==='运动轨迹');b?.click();});
+  await page.click('#inspector .motion-advanced > summary');
   const cnsSel = async (i) => (await page.$$('#inspector [data-sec="constraint"] select'))[i];
   await (await cnsSel(0)).select(ids.m);
   await settle();
@@ -206,7 +207,15 @@ export async function run() {
   fs.writeFileSync(shotPlay, Buffer.from(framePlay.image.split(',')[1], 'base64'));
   await page.keyboard.press('Space');
   await page.evaluate((t) => window.__app.playback.seek(t), tPlay);
-  const shotSeek = await canvasShot(`${OUT}/7_seek.png`);
+  // 暂停已回导演；显式手动查看同一机位后比较求值画面。
+  const seekImage = await page.evaluate(() => {
+    const a = window.__app, selected = a.selectedId, editing = a.transformEditing; a.setCameraView(true);
+    const image = a.withCleanRender(() => { a.beforeRender(); a.stage.render(); return a.stage.renderer.domElement.toDataURL('image/png'); });
+    a.setCameraView(false); a.select(selected, { activateTransform: editing });
+    return image;
+  });
+  const shotSeek = `${OUT}/7_seek.png`;
+  fs.writeFileSync(shotSeek, Buffer.from(seekImage.split(',')[1], 'base64'));
   const dPlay = pixelDiff(shotPlay, shotSeek, `${OUT}/_diff_play.png`);
   ok('验收7 Space 开始播放，约 1s 时的画面 ≡ seek(该时刻)（< 0.5%）', idle && playing && tPlay > 0.6 && dPlay < 0.005,
     `t=${tPlay.toFixed(3)} 差 ${(dPlay * 100).toFixed(3)}%`);
@@ -216,9 +225,9 @@ export async function run() {
     const a = window.__app;
     return { state: a.playback.state, time: a.playback.time, cameraView: a.cameraView, camera: a.povCameraId, preview: !!a.preview };
   });
-  ok('验收7 Esc 停止归零、退出预览并保留当前机位视角',
-    stopped.state === 'idle' && stopped.time === 0 && stopped.cameraView && stopped.camera === ids.cam && !stopped.preview, JSON.stringify(stopped));
-  // 播放自动进入机位；停止后由用户切回导演视角，再在相同视角下验证手动场景恢复。
+  ok('验收7 Esc 停止归零、退出预览并恢复导演视角',
+    stopped.state === 'idle' && stopped.time === 0 && !stopped.cameraView && stopped.camera === null && !stopped.preview, JSON.stringify(stopped));
+  // 停止后已回导演视角；重复选择导演页签不改变观察位置。
   await clickSel('#viewtabs [data-v="director"]');
   await settle(150);
   const stopShot = await shootViewport(`${OUT}/7_after_esc.png`);
@@ -319,10 +328,11 @@ export async function run() {
     const v0 = tr.keys[0].value;
     tl.setKey(tr.id, 4, [v0[0] + 2, v0[1], v0[2]]);
     a.select(id);
+    [...document.querySelectorAll('#inspector .ptabs button')].find(b => b.textContent === '属性')?.click();
     a.playback.seek(0);
     a.playback.play();
   }, bare.f);
-  await sleep(500);
+  await page.waitForFunction(() => window.__app.playback.playing && window.__app.playback.time > 0.2);
   const beforeFocus = await page.evaluate(() => ({ state: window.__app.playback.state, t: window.__app.playback.time }));
   const posX = await page.evaluate(() => {
     const f = [...document.querySelectorAll('#inspector .field')].find((n) => n.querySelector('label')?.textContent.startsWith('位置'));

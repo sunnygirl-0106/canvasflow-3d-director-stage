@@ -149,9 +149,10 @@ export async function run() {
     a.select(ids.other);
     const tr = a.timeline.tracks.find(t => t.id === ids.track);
     a.store.batch('边界测试', () => { for (const k of tr.keys.slice(1)) a.timeline.removeKey(tr.id, k.t); });
-    const it = a.pathOverlay._items.find(it => it.json.id === tr.id);
-    const single = it.vertices.length === 1 && !it.line;
+    const hidden = !a.pathOverlay._items.some(it => it.json.id === tr.id);
     a.pathEditor.selectNode({ kind:'pos',sourceId:tr.id,keyTime:tr.keys[0].t });
+    const it = a.pathOverlay._items.find(it => it.json.id === tr.id);
+    const single = hidden && it.vertices.length === 1 && !it.line;
     const point = a.pathEditor.point().slice();
     a.pathEditor.begin('direct'); a.pathEditor.candidate([point[0],point[1]+1,point[2]]); a.pathEditor.preview();
     const rev = a.store.revision;
@@ -160,7 +161,7 @@ export async function run() {
     a.timeline.removeKey(tr.id,tr.keys[0].t);
     return { single,clean,empty:!a.pathEditor.hasPoint && !a.pathOverlay._items.some(it=>it.json.id===tr.id) };
   },ids);
-  ok('单键只显示点、空轨道无点、截图统一取消预览', edge.single && edge.clean && edge.empty, JSON.stringify(edge));
+  ok('单键仅在明确编辑时显示点、空轨道无点、截图统一取消预览', edge.single && edge.clean && edge.empty, JSON.stringify(edge));
   const boundaries = await page.evaluate(ids => {
     const a=window.__app; a.select(ids.actor);
     const results=[];

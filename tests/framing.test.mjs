@@ -49,17 +49,20 @@ test('startup director framing is independent of the unchanged filming camera', 
       camera.position.copy(view.position); camera.lookAt(view.target); camera.updateMatrixWorld();
       return camera;
     });
-    assert.deepEqual(director.position.toArray(), [0, 2.2, 7.5]);
-    assert.deepEqual(director.target.toArray(), [0, 0.45, 0]);
+    assert.deepEqual(director.position.toArray(), [2, 3.2, 13]);
+    assert.deepEqual(director.target.toArray(), [0, 0.8, 3]);
     assert.deepEqual(shot.position.toArray(), [0, 2.2, 10]);
     assert.deepEqual(shot.target.toArray(), [0, 1.2, 0]);
     assert.equal(shot.fov, 50);
     assert.equal(director.fov, 50);
-    assert.ok(cameras[0].getWorldDirection(new THREE.Vector3()).distanceTo(new THREE.Vector3(0, -1.75, -7.5).normalize()) < 1e-9);
+    assert.ok(cameras[0].getWorldDirection(new THREE.Vector3()).distanceTo(new THREE.Vector3(-2, -2.4, -10).normalize()) < 1e-9);
     const height = camera => (new THREE.Vector3(0, 1.75, 0).project(camera).y
       - new THREE.Vector3(0, 0, 0).project(camera).y) / 2;
-    assert.ok(height(cameras[0]) > .24 && height(cameras[0]) < .27);
+    assert.ok(height(cameras[0]) > .13 && height(cameras[0]) < .15);
     assert.ok(height(cameras[1]) > .18 && height(cameras[1]) < .20);
+    const body = shot.position.clone().project(cameras[0]);
+    assert.ok(body.z > -1 && body.z < 1 && Math.abs(body.y) < .9);
+    if (aspect >= 1) assert.ok(Math.abs(body.x) < .9);
     for (const x of [-.7, .7]) for (const y of [0, 1.75]) {
       const p = new THREE.Vector3(x, y, 0);
       assert.ok(Math.abs(p.clone().project(cameras[1]).y) < 1);

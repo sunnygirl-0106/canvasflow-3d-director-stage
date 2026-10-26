@@ -59,7 +59,8 @@ export class TimelinePanel extends Emitter {
     pb.on('tick', (t) => this._onTick(t));
     pb.on('state', () => this.transport.reflectState());
     app.on('entities', () => { this.transport.reflectCameras(); this.rebuild(); }); // 改名 / 删除
-    app.on('selection', () => this.rebuild());
+    // 选择只更新行状态，不能在 pointerdown 中移除即将拖动的条/关键帧。
+    app.on('selection', () => { this.applySelection(); this.trackRows.reflectValues(); });
     app.on('transform', () => this.trackRows.reflectValues());
     app.on('motionSelection', ref => {
       this.selKeys = ref?.kind === 'pos' && ref.keyTime != null ? new Set([keyId(ref.sourceId, ref.keyTime)]) : new Set();
@@ -192,7 +193,10 @@ export class TimelinePanel extends Emitter {
       const wasSel = this.selKeys.has(id);
       if (e.shiftKey) { if (wasSel) this.selKeys.delete(id); else this.selKeys.add(id); }
       else if (!wasSel) { this.selKeys.clear(); this.selKeys.add(id); }
+      // 切换实体会清理旧空间节点；时间轴已选键由本次指针操作保留。
+      const keys = this.selKeys;
       this._selectEntityOf(key);
+      this.selKeys = keys;
       this.applySelection();
       this.syncMotionKey();
       if (this.selKeys.has(id)) dragKeys(this, e, key, { collapseOnClick: wasSel && this.selKeys.size > 1 });
@@ -315,7 +319,7 @@ export class TimelinePanel extends Emitter {
     }
     this.reflectTrackAction();
     const id = row?.dataset.ent;
-    if (id && this.app.selectedId !== id && this.app.findEntity(id)) this.app.select(id);
+    if (id && this.app.findEntity(id)) this.app.select(id, { user: true, preservePathEditing: true });
   }
 
   /** 删除某实体的全部动画（轨道 / 路径 / 以它为对象的约束），一次撤销。 */

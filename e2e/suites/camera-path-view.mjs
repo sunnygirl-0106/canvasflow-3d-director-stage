@@ -11,6 +11,8 @@ async function choose(label) {
     await (await page.$('#inspector ::-p-text(运动轨迹)')).click();
     await settle();
   }
+  const advanced = await page.$('#inspector .motion-advanced:not([open]) > summary');
+  if (advanced) await advanced.click();
   await page.click('#inspector [data-sec="path"] .sec-btn');
   const item = await page.$(`::-p-text(${label})`);
   await item.click();
@@ -95,15 +97,15 @@ export async function run() {
   await page.click('.tl-play'); await settle(450);
   ok('导演视角开始播放：进入机位，隐藏轨迹并锁定观察', await page.evaluate(() => {
     const a = window.__app;
-    return a.cameraView && a.playback.playing && a.stage.activeCamera === a.cameras[0].cam && !a.pathOverlay.visible && !a.rig.controls.enabled && a.cameras.every(c => !c.helper.visible);
+    return !a.cameraView && a.playback.playing && a.stage.activeCamera === a.cameras[0].cam && !a.pathOverlay.visible && !a.rig.controls.enabled && a.cameras.every(c => !c.helper.visible);
   }));
   await page.click('.tl-play');
-  ok('播放/暂停保留机位，后台导演位置与选择不变', await page.evaluate(before => {
+  ok('播放/暂停回导演，导演位置与选择不变', await page.evaluate(before => {
     const a = window.__app;
-    return a.cameraView && !a.playback.playing && a.playback.time > 0 && a.stage.activeCamera && !a.pathOverlay.visible && a._cleanDepth === 1 && a.selectedId === before.selected && a.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8) && a.cameras[0].root.position.distanceTo(a.stage.camera.position.clone().fromArray(before.pos)) > .01;
+    return !a.cameraView && !a.playback.playing && a.playback.time > 0 && !a.stage.activeCamera && a.pathOverlay.visible && a._cleanDepth === 0 && a.selectedId === before.selected && a.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8) && a.cameras[0].root.position.distanceTo(a.stage.camera.position.clone().fromArray(before.pos)) > .01;
   }, beforePlay));
   await page.keyboard.press('Escape'); await page.keyboard.press('Space'); await settle(100); await page.keyboard.press('Space');
-  ok('停止/Space重播进入机位，后台导演位置不变', await page.evaluate(before => window.__app.cameraView && window.__app.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8), beforePlay));
+  ok('停止/Space重播进入机位，后台导演位置不变', await page.evaluate(before => !window.__app.cameraView && window.__app.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8), beforePlay));
   await page.keyboard.press('Escape');
 
   const second = await page.evaluate(() => { const a = window.__app, c = a.addCamera('front_mid'); a.timeline.setMainCamera(c.id); return { id: c.id, name: c.name }; });
@@ -111,14 +113,14 @@ export async function run() {
   await page.click('#viewtabs [data-v="camera"]');
   await page.click('.tl-play'); await settle(120); await page.click('.tl-play');
   await pickInOutliner(second.name);
-  ok('手动机位视角播放/暂停及选择其他机位：保持原机位，不被主机位接管', await page.evaluate(id => window.__app.cameraView && window.__app.povCameraId === id, camera.id));
+  ok('手动机位视角播放/暂停及选择其他机位：返回导演视角', await page.evaluate(id => !window.__app.cameraView && window.__app.povCameraId === null, camera.id));
   await page.keyboard.press('Escape');
-  ok('机位视角停止仍保留用户选择', await page.evaluate(id => window.__app.cameraView && window.__app.povCameraId === id && window.__app.playback.time === 0, camera.id));
+  ok('机位视角停止回导演并归零', await page.evaluate(id => !window.__app.cameraView && window.__app.povCameraId === null && window.__app.playback.time === 0, camera.id));
   await page.keyboard.press('Space'); await settle(100);
   await page.click('#viewtabs [data-v="director"]');
-  ok('播放中导演入口锁定，继续机位播放', await page.evaluate(() => window.__app.cameraView && window.__app.playback.playing && window.__app.preview && window.__app._cleanDepth === 1));
+  ok('播放中导演入口锁定，继续机位播放', await page.evaluate(() => !window.__app.cameraView && window.__app.playback.playing && window.__app.preview && window.__app._cleanDepth === 1));
   await page.keyboard.press('Escape'); await page.keyboard.press('Space'); await settle(100); await page.keyboard.press('Escape');
-  ok('停止/重播持续满足机位视角规则', await page.evaluate(() => window.__app.cameraView));
+  ok('停止/重播持续满足机位视角规则', await page.evaluate(() => !window.__app.cameraView));
 
   await page.evaluate(() => window.__timelinePanel.setCollapsed(true));
   // 在用户主动选定的机位视角绘制，既保留视角，也显示投影草稿。

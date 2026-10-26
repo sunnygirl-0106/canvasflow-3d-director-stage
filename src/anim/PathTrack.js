@@ -49,8 +49,14 @@ export class PathTrack {
       }
     }
     // 精确起止时刻呈现站姿；第一帧实际位移就使用整段匀速，不添加加减速区间。
-    const moving = t > this.json.start && t < this.json.start + this.json.duration;
-    const blend = EASE.smooth(clamp01(Math.min(t - this.json.start, this.json.start + this.json.duration - t) / POSE_BLEND));
-    st.motion = { speed: moving ? path.speedAt(t) : 0, distance: s, gaitTime: Math.max(0, Math.min(t - this.json.start, this.json.duration)), blend };
+    const speed = t > this.json.start && t < this.json.start + this.json.duration ? path.speedAt(t) : 0;
+    const segment = this.json.timedSegments?.find(v => t > this.json.start + v.start && t < this.json.start + v.end);
+    const edge = segment ? Math.min(t - this.json.start - segment.start, this.json.start + segment.end - t) : Math.min(t - this.json.start, this.json.start + this.json.duration - t);
+    const blend = speed > 0 ? EASE.smooth(clamp01(edge / POSE_BLEND)) : 0;
+    const localTime = t - this.json.start;
+    const gaitTime = this.json.timedSegments
+      ? this.json.timedSegments.reduce((sum, part) => sum + Math.max(0, Math.min(localTime - part.start, part.end - part.start)), 0)
+      : Math.max(0, Math.min(localTime, this.json.duration));
+    st.motion = { speed, distance: s, gaitTime, blend };
   }
 }

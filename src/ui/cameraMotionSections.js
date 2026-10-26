@@ -1,90 +1,79 @@
 import * as THREE from 'three';
-import { el, toast } from '../util/dom.js';
+import { el } from '../util/dom.js';
 import { tripleRow, dropdownRow, numberRow } from './widgets.js';
-import { CAMERA_MOVES, MOVE_PARAMS, MOVE_DIRS, MOVE_LABEL } from '../anim/cameraMoves.js';
+import { PANEL_MOVES, PANEL_PARAMS, MOVE_DIRS, PANEL_LABEL } from '../anim/cameraMoves.js';
 
-// 表单只渲染运行时状态；刷新与文档写入由 Inspector 提供，沿用统一错误处理。
-const round2 = (x) => Math.round(x * 100) / 100;
-const fmtS = (x) => (Math.round(x * 10) / 10).toFixed(1);
+const ROUTES = {
+  circle: ['M35 8C8 0 5 32 30 32S55 10 35 8', '绕主体一圈，背景连续变化'],
+  half_orbit: ['M10 29C0 3 50 0 52 27', '绕到另一侧，呈现侧背关系'],
+  push_in: ['M8 20H42m-7-6 7 6-7 6', '真实靠近，主体逐渐放大'],
+  pull_out: ['M48 20H14m7-6-7 6 7 6', '向后退开，展开环境空间'],
+  crane: ['M30 32V7m-6 7 6-7 6 7', '保持水平位置，升高或降低'],
+  truck: ['M8 25H50m-7-6 7 6-7 6M16 9h28', '向左或向右平移'],
+  spiral: ['M12 32C55 36 55 19 27 20S0 6 44 7m-7-5 7 5-7 5', '环绕主体，同时缓缓升高'],
+  pan: ['M12 29L30 10l18 19M19 31q11-8 22 0', '位置不变，转动镜头对准主体'],
+};
 
-/**
- * 运镜段（机位）：预设 / 主体 / 参数 / 时长 → 应用（或追加）；清除运镜；已有段列表（只能删最后一段）。
- * 表单是会话态（app.cameraMoves.form），改动即重算视口里的虚线预览；写操作全在 CameraMoveTool（一次撤销）。
- */
+/** Cards mutate only on click. Opening the panel never generates a candidate path. */
 export function cameraMoveSection(app, cam, rerender) {
-  const tool = app.cameraMoves;
-  const f = tool.formOf(cam);
-  const ctx = tool.context(cam);
-  const params = tool.params(cam);
-  const built = tool.build(cam);
-  const setParam = (k, v) => { f.params[k] = v; rerender(); };
-  const segs = tool.segments(cam);
-
-  const nearest = tool.nearestSubject(cam);
-  const nearestLabel = Array.isArray(nearest) ? '前方 3 m' : app.findEntity(nearest)?.name;
-  const nodes = [
-    el('div', { class: 'sec-title' }, [
-      el('span', { text: '运镜' }),
-      segs.length ? el('span', { class: 'sec-tag path', text: `${segs.length} 段` }) : null,
-    ]),
-    dropdownRow({
-      label: '预设', value: f.name,
-      options: CAMERA_MOVES.map(([value, label]) => ({ value, label: `${label} ${value}` })),
-      onChange: (v) => { tool.setName(cam, v); rerender(); },
-    }).el,
-    dropdownRow({
-      label: '主体', value: f.subject,
-      options: [{ value: '', label: `最近角色（${nearestLabel}）` }, ...tool.subjects(cam), { value: '__point', label: '自定义点' }],
-      onChange: (v) => { f.subject = v; rerender(); },
-    }).el,
+  const tool = app.cameraMoves, state = tool.current(cam);
+  const segments = state?.segments || [], single = segments.length === 1 && !state.customPrefix ? segments[0] : null;
+  const append = tool.appendCameraId === cam.id;
+  const error = el('div', { class: 'move-error', role: 'status', text: tool.error || '', hidden: !tool.error });
+  const apply = (name, options = {}) => {
+    if (tool.applyPreset(cam, name, options)) { tool.appendCameraId = null; rerender(); }
+    else { error.textContent = tool.error; error.hidden = false; }
+  };
+  const card = name => el('button', {
+    class: 'move-card' + (single?.name === name ? ' applied' : ''), title: ROUTES[name][1],
+    'data-preset': name, 'aria-pressed': String(single?.name === name),
+    onclick: () => apply(name, { append }),
+  }, [
+    el('span', { class: 'move-route', html: `<svg viewBox="0 0 60 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ROUTES[name][0]}"/></svg>` }),
+    el('span', { class: 'move-card-title', text: PANEL_LABEL[name] }),
+    el('span', { class: 'move-card-copy', text: ROUTES[name][1] }),
+    single?.name === name ? el('span', { class: 'move-check', text: '✓' }) : null,
+  ]);
+  const summary = single ? `${PANEL_LABEL[single.name]} · ${single.params.duration.toFixed(1)} 秒` : segments.length ? `${state.customPrefix ? '自定义轨迹 + ' : ''}${segments.map(s => PANEL_LABEL[s.name]).join(' + ')} · ${(app.timeline.paths.find(p => p.target === cam.id)?.duration ?? segments.reduce((n, s) => n + s.params.duration, 0)).toFixed(1)} 秒` : tool.hasMoves(cam) ? '自定义轨迹' : '尚未设置运镜';
+  const nodes = [el('div', { class: 'move-summary', text: summary }),
+    append ? el('div', { class: 'move-append-note' }, ['选择下一段预设，将从当前路线终点追加。', el('button', { class: 'minibtn', text: '取消追加', onclick: () => { tool.appendCameraId = null; rerender(); } })]) : null,
+    el('div', { class: 'move-cards' }, PANEL_MOVES.map(card)),
+    el('details', { class: 'move-more' }, [el('summary', { text: '更多运镜' }), card('pan')]),
   ];
-  if (f.subject === '__point') {
-    const v = f.point;
-    nodes.push(tripleRow({
-      label: '主体坐标', step: 0.05, onCommit: rerender,
-      axes: ['x', 'y', 'z'].map((k, i) => ({ key: k, get: () => v[i], set: (x) => { v[i] = Math.round(x * 1000) / 1000; } })),
+  if (single) {
+    const { name, params, subject } = single;
+    const set = (key, value) => apply(name, { params: { [key]: value } });
+    nodes.push(el('div', { class: 'sec-title' }, [el('span', { text: '当前预设参数' }), el('button', { class: 'minibtn', text: '恢复默认', onclick: () => apply(name, { reset: true }) })]));
+    const fields = [['duration', '时长', 's', .5], ['amount', '距离', 'm', .1], ['sweep', '角度', '°', 15], ['rise', '升高量', 'm', .1]];
+    for (const [key, label, unit, step] of fields) {
+      if (key !== 'duration' && !PANEL_PARAMS[name].includes(key)) continue;
+      const row = numberRow({ label, unit, step, value: params[key], onChange: value => { set(key, value); if (tool.error) row.el.appendChild(error); } });
+      row.el.querySelector('input').addEventListener('keydown', e => { if (e.key === 'Enter') e.currentTarget.blur(); });
+      nodes.push(row.el);
+    }
+    if (PANEL_PARAMS[name].includes('dir')) nodes.push(dropdownRow({ label: '方向', value: params.dir, options: MOVE_DIRS[name].map(([value, label]) => ({ value, label })), onChange: value => set('dir', value) }).el);
+    nodes.push(dropdownRow({ label: '持续注视', value: Array.isArray(subject) ? '__point' : subject,
+      options: [...tool.subjects(cam), { value: '__point', label: '手动注视点' }],
+      onChange: value => apply(name, { subject: value === '__point' ? single.aim.slice() : value }),
     }).el);
+    if (Array.isArray(subject)) {
+      const point = subject.slice();
+      nodes.push(tripleRow({ label: '持续注视坐标', step: .05, onCommit: () => apply(name, { subject: point }), axes: ['x', 'y', 'z'].map((key, i) => ({ key, get: () => point[i], set: v => { point[i] = v; } })) }).el);
+    }
   }
-  const keys = MOVE_PARAMS[f.name];
-  const pair = [];
-  if (keys.includes('amount')) pair.push(numberRow({ label: '距离', value: round2(params.amount), step: 0.1, min: 0.01, unit: 'm', onChange: (v) => setParam('amount', v) }).el);
-  if (keys.includes('sweep')) pair.push(numberRow({ label: '扫过角度', value: params.sweep, step: 15, min: 1, unit: '°', onChange: (v) => setParam('sweep', v) }).el);
-  pair.push(numberRow({ label: '时长', value: params.duration, step: 0.5, min: 0.1, unit: 's', onChange: (v) => setParam('duration', v) }).el);
-  nodes.push(el('div', { class: 'anim-pair' }, pair));
-  if (keys.includes('dir')) {
-    nodes.push(dropdownRow({
-      label: '方向', value: params.dir,
-      options: MOVE_DIRS[f.name].map(([value, label]) => ({ value, label })),
-      onChange: (v) => setParam('dir', v),
-    }).el);
-  }
-  nodes.push(el('div', { class: 'anim-info move-info' + (built.error ? ' err' : ''), text: built.error || `${fmtS(ctx.time)}–${fmtS(ctx.time + built.move.duration)} s · 注视 ${subjectName(app, built.subject)}` }));
-  nodes.push(el('div', { class: 'anim-btns' }, [
-    // 有错误时也可点：点击 = toast 原因（如「摇镜头请单独使用或放在最前」）
-    el('button', { class: 'minibtn primary', text: ctx.append ? '追加' : '应用', onclick: () => tool.request(cam) }),
-    tool.hasMoves(cam) ? el('button', { class: 'minibtn danger', text: '清除运镜', title: '删除路径、该机位全部约束与旋转轨道', onclick: () => tool.clear(cam) }) : null,
-  ]));
-  if (segs.length) {
-    nodes.push(el('div', { class: 'move-segs' }, segs.map((sg, i) => el('div', { class: 'move-seg' }, [
-      el('span', { class: 'move-seg-name', text: `${i + 1}. ${MOVE_LABEL[sg.name]}` }),
-      el('span', { class: 'move-seg-time', text: `${fmtS(sg.start)}–${fmtS(sg.start + sg.duration)} s` }),
-      el('button', {
-        class: 'move-seg-del', text: '×', title: i === segs.length - 1 ? '删除这一段' : '只能删除最后一段',
-        onclick: () => { if (i === segs.length - 1) tool.removeLast(cam); else toast('只能删除最后一段，请清除后重做'); },
-      }),
-    ]))));
-  }
-  app.pathOverlay.setMovePreview(built.move?.points || null, { closed: built.move?.closed && !ctx.append });
-  return el('div', { class: 'anim-sec', 'data-sec': 'move' }, nodes);
+  nodes.push(error, el('button', { class: 'minibtn', text: '播放预览', onclick: () => app.playback.play() }));
+  return el('div', { class: 'anim-sec camera-moves', 'data-sec': 'move' }, nodes);
 }
 
-function subjectName(app, subject) {
-  if (Array.isArray(subject)) return `(${subject.map((x) => x.toFixed(2)).join(', ')})`;
-  return app.findEntity(subject)?.name || subject;
+export function cameraMoveActions(app, cam, rerender) {
+  return el('div', { class: 'anim-btns move-actions' }, [
+    el('button', { class: 'minibtn', text: '追加一段', onclick: () => { app.cameraMoves.appendCameraId = cam.id; rerender(); } }),
+    app.cameraMoves.hasMoves(cam) ? el('button', { class: 'minibtn danger', text: '清除运镜', onclick: () => { app.cameraMoves.clear(cam); rerender(); } }) : null,
+  ]);
 }
 
 /** 约束段（机位）：注视（无 / 实体 / 自定义点）、跟随（实体 + 偏移），各自生效区间。 */
-export function cameraConstraintSection(app, cam, list, edit) {
+export function cameraConstraintSection(app, cam, list, edit, { hideLook = false } = {}) {
   const look = list.find((c) => c.type === 'lookAt');
   const follow = list.find((c) => c.type === 'follow');
   const subjects = [];
@@ -108,9 +97,10 @@ export function cameraConstraintSection(app, cam, list, edit) {
   const nodes = [el('div', { class: 'sec-title' }, [el('span', { text: '约束' }), el('span', { class: 'sec-tag cns', text: '播放时生效' })])];
 
   // 注视
+  if (!hideLook) {
   const lookVal = !look ? '' : Array.isArray(look.subject) ? '__point' : look.subject;
   nodes.push(dropdownRow({
-    label: '注视', value: lookVal,
+    label: '持续注视', value: lookVal,
     options: [{ value: '', label: '无' }, ...subjects, { value: '__point', label: '自定义点' }],
     onChange: (v) => edit((tl) => {
       if (!v) { if (look) tl.removeConstraint(look.id); return; }
@@ -121,6 +111,8 @@ export function cameraConstraintSection(app, cam, list, edit) {
   }).el);
   if (look && Array.isArray(look.subject)) nodes.push(vecRow('注视点', look.subject, (v) => edit((tl) => tl.updateConstraint(look.id, { subject: v }))));
   if (look) nodes.push(range(look));
+
+  }
 
   // 跟随
   nodes.push(dropdownRow({

@@ -211,6 +211,9 @@ export class EntityActions {
       if (value.type === 'character') value.parent = null;
       return value;
     });
+    json.forEach((value, i) => {
+      if (value.type === 'character') value.trailColor = edit.nextTrailColor({ entities: [...this.app.store.document.entities, ...json.slice(0, i)] });
+    });
     const revision = this.app.store.revision;
     const results = await Promise.allSettled(json.map((j) => j.type === 'character' ? Character.fromJSON(j) : Prop.fromJSON(j)));
     const copies = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);

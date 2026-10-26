@@ -22,7 +22,7 @@ export async function run() {
     const results = [];
     for (const mode of ['director', 'camera', 'preview']) {
       a.stopPreview(); a.setCameraView(mode === 'camera');
-      if (mode === 'preview') a.startPreview({ play: false });
+      if (mode === 'preview') a.startPreview();
       panel.setCollapsed(true); await settleLayout();
       const before = capture();
       const samples = [];
@@ -51,7 +51,7 @@ export async function run() {
   const initial = await page.evaluate(() => ({ doc: JSON.stringify(window.__app.store.document), history: window.__app.history.index, height: document.querySelector('#timeline').offsetHeight }));
   ok('无轨迹仅保留弱文字提示，不生成整行持续色条', await page.evaluate(() => {
     const rows = [...document.querySelectorAll('.tl-head.no-path')];
-    return rows.length > 0 && rows.every(r => !r.querySelector('.tl-presence') && r.querySelector('.tl-path-status')?.textContent === '无轨迹');
+    return rows.length > 0 && rows.every(r => !r.querySelector('.tl-presence') && r.querySelector('.tl-path-status')?.textContent === (r.classList.contains('camera') ? '无轨迹' : '无动画'));
   }));
   const edge = async () => page.$eval('.tl-resize-handle', n => { const r = n.getBoundingClientRect(); return { x: r.width / 2, y: r.top + r.height / 2 }; });
   let handle = await edge();

@@ -233,7 +233,6 @@ export class PathEditor {
     this._shiftDown = e.shiftKey;
     this._pointerDown = { x: e.clientX, y: e.clientY };
     if (this.app.gizmo.hitTest(e.clientX, e.clientY)) { this._consumed = true; this._axisDown = true; this.app.rig.controls.enabled = false; return; }
-    const ov = this.app.pathOverlay;
     const hit = this._hit(e);
     if (hit?.kind === 'vertex') {
       e.stopImmediatePropagation(); // 不让 gizmo / 环绕接手
@@ -243,7 +242,6 @@ export class PathEditor {
       this._beginDrag(e, hit);
       return;
     }
-    if (!hit) ov.setSelectedPath(null);
     if (hit?.kind === 'line' && (!this.app.gizmo.visible || !this.app.gizmo.overAxis)) {
       this._consumed = true; // 不 stopPropagation：拖动仍是环绕，松手不动才算点线
       this._lineDown = { hit, x: e.clientX, y: e.clientY };

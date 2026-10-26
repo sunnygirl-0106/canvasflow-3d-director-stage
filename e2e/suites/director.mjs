@@ -26,11 +26,11 @@ export async function run() {
     await page.screenshot({ path: `${OUT}/director-${width}x${height}.png` });
   }
   fs.writeFileSync(`${OUT}/calibration.json`, JSON.stringify(calibration, null, 2));
-  ok('导演视角人物23–25%、脚底约56%；拍摄机位保持原构图', calibration.every(x =>
-    x.director.height >= .22 && x.director.height <= .26 && x.director.feet >= .55 && x.director.feet <= .58
+  ok('导演视角后移侧看；拍摄机位保持原构图', calibration.every(x =>
+    x.director.height >= .12 && x.director.height <= .16 && x.director.feet >= .48 && x.director.feet <= .54
     && x.camera.transform.pos.join() === '0,2.2,10' && x.camera.lookAt.join() === '0,1.2,0' && x.camera.fov === 50
-    && x.director.pos.every((v, i) => Math.abs(v - [0, 2.2, 7.5][i]) < 1e-6)
-    && x.director.target.every((v, i) => Math.abs(v - [0, .45, 0][i]) < 1e-6)), JSON.stringify(calibration.map(x => x.director)));
+    && x.director.pos.every((v, i) => Math.abs(v - [2, 3.2, 13][i]) < 1e-6)
+    && x.director.target.every((v, i) => Math.abs(v - [0, .8, 3][i]) < 1e-6)), JSON.stringify(calibration.map(x => x.director)));
   await page.setViewport({width:1440,height:900}); await settle();
   const preview = await page.evaluate(() => {
     const a = window.__app;
@@ -40,12 +40,13 @@ export async function run() {
     const immediate = a.getRenderCamera() === a.findCamera(a.timeline.mainCameraId).cam;
     a.playback.pause(); a.playback.seek(2);
     a.beforeRender();
-    return { immediate, pause: !!a.preview && a.cameraView && !a.playback.playing && a.playback.time === 2, clean: a._cleanDepth === 1 && !a.pathOverlay.group.visible && !a.selection.ring.visible, stable: before === JSON.stringify(a.store.document) && sel === a.selectedId && hist === a.history.entries.length };
+    return { immediate, pause: !a.preview && !a.cameraView && !a.playback.playing && a.playback.time === 2, clean: a._cleanDepth === 0 && a.selection.ring.visible, stable: before === JSON.stringify(a.store.document) && sel === a.selectedId && hist === a.history.entries.length };
   });
-  ok('手动进入机位视角后播放/暂停保持画面，辅助物隐藏，文档/选择/撤销不变', Object.values(preview).every(Boolean), JSON.stringify(preview));
+  ok('手动机位播放后暂停回导演，辅助物恢复，文档/选择/撤销不变', Object.values(preview).every(Boolean), JSON.stringify(preview));
   await page.screenshot({path:`${OUT}/camera-paused.png`});
   const labels = await page.evaluate(async () => {
     const a = window.__app, c = a.selected;
+    a.startPreview();
     a.rename(c.id, '预览改名'); a.beforeRender();
     const renamed = a.labelSprites._items.get(c)?.text === '预览改名';
     a.rename(c.id, '角色A');
@@ -59,6 +60,7 @@ export async function run() {
   ok('持续预览中名牌随重命名/新增/删除同步，不残留旧对象', Object.values(labels).every(Boolean), JSON.stringify(labels));
   const shot = await page.evaluate(async () => {
     const a = window.__app;
+    a.startPreview();
     const result = await a.shots.captureShot();
     const bitmap = await createImageBitmap(result.blob);
     const ratio = bitmap.width / bitmap.height; bitmap.close();
@@ -80,11 +82,11 @@ export async function run() {
   ok('横竖导出设置均不改变普通播放的全视口 aspect，框和遮罩隐藏', ratios.every(r=>r.full&&r.height>=.15&&r.height<=.25&&Math.abs(r.aspect-r.viewport)<.001&&r.frame===null&&r.hidden),JSON.stringify(ratios));
   await page.screenshot({path:`${OUT}/camera-portrait.png`});
   await page.evaluate(()=>{const a=window.__app;a.setRatio('16:9');a.stopPreview();});
-  ok('停止回0并保留机位视角，洁净计数归零',await page.evaluate(()=>{const a=window.__app;return !a.preview&&a.cameraView&&!a.timeline.active&&a.playback.time===0&&a._cleanDepth===0;}));
+  ok('停止回0并恢复导演视角，洁净计数归零',await page.evaluate(()=>{const a=window.__app;return !a.preview&&!a.cameraView&&!a.timeline.active&&a.playback.time===0&&a._cleanDepth===0;}));
   await page.keyboard.press('Space'); await settle(100);
   ok('Space复用预览入口',await page.evaluate(()=>!!window.__app.preview&&window.__app.playback.playing));
   await page.click('#viewtabs [data-v="director"]');
-  ok('播放中导演标签被锁定，拖播放头保持机位',await page.evaluate(()=>{const a=window.__app;a.playback.seek(3);return !!a.preview&&a.cameraView&&a.playback.playing&&a._cleanDepth===1;}));
+  ok('播放中导演标签被锁定，拖播放头保持机位',await page.evaluate(()=>{const a=window.__app;a.playback.seek(3);return !!a.preview&&!a.cameraView&&a.playback.playing&&a._cleanDepth===1;}));
   const lifecycle=await page.evaluate(async()=>{
     const a=window.__app;
     a.setCameraView(true);
@@ -96,9 +98,9 @@ export async function run() {
     const loop=!!a.preview&&a.playback.time<a.timeline.duration;
     a.playback.pause();a.playback.loop=false;
     a.playback.seek(9.9);a.playback.play();a.playback._last-=200;a.playback.update();
-    const end=a.playback.time===10&&!a.playback.playing&&!!a.preview;
+    const end=a.playback.time===10&&!a.playback.playing&&!a.preview&&!a.cameraView;
     const c2=a.addCamera('front_mid'); const main=a.timeline.mainCameraId;
-    a.remove(main);const fallback=!a.playback.playing&&a.getRenderCamera()===c2.cam;
+    a.remove(main);const fallback=!a.playback.playing&&a.getRenderCamera()===a.stage.camera;
     a.remove(c2.id);const empty=!a.preview&&!a.cameraView&&!a.startPreview()&&!a.playback.playing&&a._cleanDepth===0;
     return {restart,loop,end,fallback,empty};
   });
@@ -108,14 +110,14 @@ export async function run() {
     const a = window.__app;
     a.setCameraView(true); a.startPreview();
     await a.loadDocument(doc);
-    const camera = !!a.preview && !a.playback.playing && a.getRenderCamera() === a.cameras[0].cam && a._cleanDepth === 1;
+    const camera = !a.preview && !a.cameraView && !a.playback.playing && a.getRenderCamera() === a.stage.camera && a._cleanDepth === 0;
     const { createEmptyDocument } = await import('/src/doc/schema.js');
     await a.loadDocument(createEmptyDocument());
     const empty = !a.preview && !a.cameraView && a._cleanDepth === 0 && a.entities.length === 0;
     await a.loadDocument(doc); a.select(doc.entities[0].id);
     return { camera, empty };
   }, d);
-  ok('预览中导入暂停并解析新机位；导入空场景清理预览且不补seed', replaced.camera && replaced.empty, JSON.stringify(replaced));
+  ok('预览中导入暂停并回导演；导入空场景清理预览且不补seed', replaced.camera && replaced.empty, JSON.stringify(replaced));
   const frames=await page.evaluate(()=>{
     const a=window.__app,p=window.__timelinePanel;a.stopPreview();
     for(let i=0;i<30;i++)p.stepFrames(1);const forward=a.playback.time;
@@ -156,7 +158,7 @@ export async function run() {
     try {await renderFrames(a,{width:160,height:90,fps:30,range:[0,1]},()=>{throw new Error('test failure');});}catch(e){failed=e.message==='test failure';}
     let last;
     const v=await exportVideo(a,{width:320,height:180,fps:30,range:[0,10],onProgress:(i)=>{last=(i-1)/30;}});
-    return {bytes:Array.from(new Uint8Array(await v.blob.arrayBuffer())),frames:v.frames,last,cancelled,failed,restored:a._cleanDepth===1&&!!a.preview&&a.cameraView&&a.playback.time===2&&before===JSON.stringify(a.store.document)&&hist===a.history.entries.length};
+    return {bytes:Array.from(new Uint8Array(await v.blob.arrayBuffer())),frames:v.frames,last,cancelled,failed,restored:a._cleanDepth===0&&!a.preview&&!a.cameraView&&a.playback.time===2&&before===JSON.stringify(a.store.document)&&hist===a.history.entries.length};
   });
   const bytes=Buffer.from(video.bytes);fs.writeFileSync(`${OUT}/sample-10s-30fps.mp4`,bytes);const info=mp4Info(bytes);
   ok('10s/30fps视频300帧，末样本299/30；取消/失败恢复预览与文档',video.frames===300&&video.last===299/30&&video.cancelled&&video.failed&&video.restored&&info.frames===300,JSON.stringify({...video,bytes:undefined,info}));

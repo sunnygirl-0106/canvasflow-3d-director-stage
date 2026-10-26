@@ -64,6 +64,8 @@ export async function run() {
   await page.evaluate(async () => {
     const a = window.__app, { setPath } = await import('/src/doc/edit.js');
     const c = a.entities.find(e => e.type === 'character');
+    // 像素探针识别蓝色；夹具显式指定颜色，不依赖默认身份配色。
+    a.store.transact('探针颜色', doc => { doc.entities.find(e => e.id === c.id).trailColor = '#60a5fa'; });
     a.select(c.id);
     a.store.transact('深度验收轨迹', doc => setPath(doc, c.id, [[-1.5,0,4],[-2,0,-4],[2,0,-25]], { set: { duration: 10 } }));
     a.pathOverlay.setSelectedPath(a.timeline.paths[0].id);
@@ -122,7 +124,7 @@ export async function run() {
   await page.click('.tl-play');
   ok('按钮从导演视角开始播放，立即进入机位并显示播放标识', await page.evaluate(() => {
     const a = window.__app;
-    return a.playback.playing && a.cameraView && a.getRenderCamera() === a.cameras[0].cam && !a.rig.controls.enabled && document.querySelector('#povLabel').textContent === '播放中 · 机位1';
+    return a.playback.playing && !a.cameraView && a.getRenderCamera() === a.cameras[0].cam && !a.rig.controls.enabled && document.querySelector('#povLabel').textContent === '播放中 · 机位1';
   }));
   const point = await page.$eval('#viewport canvas', el => { const r = el.getBoundingClientRect(); return [r.x+r.width*.4,r.y+r.height*.4]; });
   await page.mouse.move(...point); await page.mouse.down(); await page.mouse.move(point[0]+90,point[1]+40,{steps:8});
@@ -133,10 +135,13 @@ export async function run() {
   ok('提示自动消失，同一次拖动不重复弹出', await page.evaluate(() => window.__app.playbackHint.hidden));
   await page.mouse.up(); await page.mouse.wheel({ deltaY: -300 });
   await page.click('#viewtabs [data-v="director"]'); await page.click('#navg');
-  ok('拖动/滚轮/导演标签/重置均不能改变播放视角', await page.evaluate(b => {
+  const locked = await page.evaluate(b => {
     const a = window.__app; a.beforeRender();
-    return a.playback.playing && a.cameraView && a.getRenderCamera() === a.cameras[0].cam && JSON.stringify(a.stage.camera.matrixWorld.toArray()) === JSON.stringify(b.director) && JSON.stringify(a.cameras[0].cam.matrixWorld.toArray()) === JSON.stringify(b.shot);
-  }, lockCamera));
+    return { playing: a.playback.playing, directorTab: !a.cameraView, camera: a.getRenderCamera() === a.cameras[0].cam,
+      directorDelta: Math.max(...a.stage.camera.matrixWorld.toArray().map((v, i) => Math.abs(v - b.director[i]))),
+      shotDelta: Math.max(...a.cameras[0].cam.matrixWorld.toArray().map((v, i) => Math.abs(v - b.shot[i]))) };
+  }, lockCamera);
+  ok('拖动/滚轮/导演标签/重置均不能改变播放视角', locked.playing && locked.directorTab && locked.camera && locked.directorDelta < 1e-8 && locked.shotDelta < 1e-8, JSON.stringify(locked));
   await page.click('.tl-play'); await page.click('#viewtabs [data-v="director"]');
   const directorBeforeDrag = await page.evaluate(() => window.__app.stage.camera.position.toArray());
   await page.mouse.move(...point); await page.mouse.down(); await page.mouse.move(point[0]+100,point[1]+30,{steps:8}); await page.mouse.up(); await settle(300);
@@ -144,15 +149,15 @@ export async function run() {
     const a = window.__app; return !a.playback.playing && !a.cameraView && a.rig.controls.enabled && a.playbackHint.hidden && JSON.stringify(a.stage.camera.position.toArray()) !== JSON.stringify(b);
   }, directorBeforeDrag));
   await page.keyboard.press('Space');
-  ok('Space 继续播放重新锁定机位', await page.evaluate(() => window.__app.cameraView && window.__app.playback.playing));
+  ok('Space 继续播放重新锁定机位', await page.evaluate(() => !window.__app.cameraView && window.__app.playback.playing));
   ok('直接 play、停止后重播、末端重播、循环、自然结束均满足机位规则', await page.evaluate(() => {
     const a = window.__app, p = a.playback; let pass = true;
     for (let n=0;n<3;n++) {
       a.stopPreview(); a.setCameraView(false); p.seek(n === 2 ? a.timeline.duration : 2);
-      p.play(); pass &&= a.cameraView && a.getRenderCamera() === a.cameras[0].cam && p.playing && (n !== 2 || p.time === 0);
+      p.play(); pass &&= !a.cameraView && a.getRenderCamera() === a.cameras[0].cam && p.playing && (n !== 2 || p.time === 0);
     }
-    p.loop = true; p._last -= 11000; p.update(); pass &&= p.playing && a.cameraView;
-    p.loop = false; p.seek(a.timeline.duration); p.update(); pass &&= !p.playing && a.cameraView && a.playbackHint.hidden;
+    p.loop = true; p._last -= 11000; p.update(); pass &&= p.playing && !a.cameraView;
+    p.loop = false; p.seek(a.timeline.duration); p.update(); pass &&= !p.playing && !a.cameraView && a.playbackHint.hidden;
     return pass;
   }));
   ok('机位有路径时主画面跟随机位运动，播放期间禁止换机位', await page.evaluate(async () => {

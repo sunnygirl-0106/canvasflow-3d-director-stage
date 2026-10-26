@@ -6,10 +6,10 @@ import { D2R, R2D, round6 } from '../util/math.js';
 // 运镜预设：纯函数，不依赖 DOM / App。输入机位当前位姿 + 主体注视点 + 参数，输出文档口径的
 // 路径点 / 旋转关键帧，由调用方写成 path + lookAt 约束（+ pan 的 rot 轨道）。
 // 预设名与参数名是 AI 词汇表（定了不改）：push_in / pull_out / truck / crane / pan / half_orbit / circle；
-// amount / dir / sweep / subject / duration。预设参数不进文档，文档只存生成结果。
+// amount / dir / sweep / subject / duration。手动面板额外支持 spiral / rise，身份与参数由调用方持久化。
 //
 // 几何约定：
-// - "距离 / 连线"一律取水平分量（机位→主体注视点投到水平面）：除 crane 外路径点 y = 机位当前高度。
+// - "距离 / 连线"一律取水平分量（机位→主体注视点投到水平面）：除 crane / spiral 外路径点 y = 机位当前高度。
 // - truck 的 left / right 以机位视角为准：机位往自己左边移 = left。
 // - 环绕：圆心 = 主体注视点的水平位置，半径 = 当前水平距离，高度 = 机位当前高度；
 //   dir 以俯视为准，ccw = 逆时针（pathGen.arc 的正方向），cw = 顺时针。
@@ -26,6 +26,11 @@ export const CAMERA_MOVES = [
   ['circle', '环绕'],
 ];
 export const MOVE_LABEL = Object.fromEntries(CAMERA_MOVES);
+export const PANEL_LABEL = { ...MOVE_LABEL, push_in: '推近', pull_out: '拉远', half_orbit: '半弧', pan: '摇镜头', spiral: '螺旋上升' };
+
+// Manual panel defaults are explicit; legacy AI defaults below stay unchanged.
+export const PANEL_MOVES = ['circle', 'half_orbit', 'push_in', 'pull_out', 'crane', 'truck', 'spiral'];
+export const PANEL_DURATION = { circle: 12, half_orbit: 6, push_in: 4, pull_out: 4, crane: 4, truck: 4, spiral: 12, pan: 2 };
 
 /** 默认时长（秒）。 */
 export const MOVE_DURATION = { push_in: 3, pull_out: 3, truck: 3, crane: 3, pan: 2, half_orbit: 5, circle: 8 };
@@ -41,12 +46,15 @@ export const MOVE_PARAMS = {
   circle: ['sweep', 'dir'],
 };
 
+export const PANEL_PARAMS = { ...MOVE_PARAMS, spiral: ['sweep', 'rise', 'dir'] };
+
 /** dir 的取值：[value, 中文]。 */
 export const MOVE_DIRS = {
   truck: [['left', '向左'], ['right', '向右']],
   crane: [['up', '升'], ['down', '降']],
   half_orbit: [['ccw', '逆时针'], ['cw', '顺时针']],
   circle: [['ccw', '逆时针'], ['cw', '顺时针']],
+  spiral: [['ccw', '逆时针'], ['cw', '顺时针']],
 };
 
 export const MIN_SUBJECT_DIST = 0.3; // 推镜头至少离主体保留的水平距离（米）
@@ -74,6 +82,7 @@ export function defaultParams(name, { position, aim }) {
     case 'crane': p.amount = 1; p.dir = 'up'; break;
     case 'half_orbit': p.sweep = 180; p.dir = 'ccw'; break;
     case 'circle': p.sweep = 360; p.dir = 'ccw'; break;
+    case 'spiral': p.duration = 12; p.sweep = 360; p.rise = 1; p.dir = 'ccw'; break;
     case 'pan': break;
     default: throw new MoveError(`未知运镜：${name}`);
   }
@@ -108,6 +117,8 @@ function horizDir(position, aim) {
  */
 export function cameraMove(name, { position, rot = [0, 0, 0], roll = 0, aim, params = {} }) {
   const p = { ...defaultParams(name, { position, aim }), ...params };
+  for (const k of ['duration', 'amount', 'sweep', 'rise']) if (p[k] != null && !Number.isFinite(p[k])) throw new MoveError('参数必须是有限数值');
+  if (MOVE_DIRS[name] && !MOVE_DIRS[name].some(([v]) => v === p.dir)) throw new MoveError('请选择有效方向');
   if (!(p.duration > 0)) throw new MoveError('时长必须大于 0');
   const out = { points: null, closed: false, duration: p.duration, rotKeys: null };
   const [x, y, z] = position;
@@ -117,7 +128,8 @@ export function cameraMove(name, { position, rot = [0, 0, 0], roll = 0, aim, par
       const [ux, uz, d] = horizDir(position, aim);
       if (!(p.amount > 0)) throw new MoveError('距离必须大于 0');
       const k = name === 'push_in' ? p.amount : -p.amount;
-      if (d - k < MIN_SUBJECT_DIST) throw new MoveError(`推进距离过大：离主体至少保留 ${MIN_SUBJECT_DIST} m（当前 ${d.toFixed(2)} m）`);
+      const minimum = Math.max(MIN_SUBJECT_DIST, p.minSubjectDist || 0);
+      if (d - k < minimum) throw new MoveError(`推进距离过大：离主体至少保留 ${+minimum.toFixed(2)} m（当前 ${d.toFixed(2)} m）`);
       out.points = line(position, [x + ux * k, y, z + uz * k]);
       break;
     }
@@ -139,6 +151,7 @@ export function cameraMove(name, { position, rot = [0, 0, 0], roll = 0, aim, par
       out.rotKeys = [rot.map(round6), aimRotation(position, aim, roll)];
       break;
     }
+    case 'spiral':
     case 'half_orbit':
     case 'circle': {
       const center = [aim[0], y, aim[2]];
@@ -155,6 +168,12 @@ export function cameraMove(name, { position, rot = [0, 0, 0], roll = 0, aim, par
         r.points.splice(r.points.length - 1, 0, at(deg + sweep - q));
       }
       r.points[0] = position.map(round6); // 首点 = 机位当前位置（消除 cos/sin 的舍入差）
+      if (name === 'spiral') {
+        if (!(p.rise > 0)) throw new MoveError('升高量必须大于 0');
+        if (r.closed) r.points.push(position.map(round6));
+        r.points = r.points.map((point, i, list) => [point[0], round6(y + p.rise * i / (list.length - 1)), point[2]]);
+        r.closed = false;
+      }
       out.points = r.points;
       out.closed = r.closed;
       break;

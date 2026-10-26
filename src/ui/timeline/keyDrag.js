@@ -1,6 +1,7 @@
-import { toastError } from '../../util/dom.js';
+import { toast, toastError } from '../../util/dom.js';
 import { keyId } from './TrackRows.js';
 import { round6 } from '../../util/math.js';
+import { objectAnimationRange, retimeObjectAnimation } from '../../anim/objectAnimation.js';
 
 const DRAG_PX = 3; // 移动超过此距离才算拖动（否则是点击）
 
@@ -10,20 +11,29 @@ function track(node, e, { onMove, onEnd }) {
   let dragged = false;
   try { node.setPointerCapture(e.pointerId); } catch { /* 已脱离文档 */ }
   const move = (ev) => {
+    if (ev.pointerId !== e.pointerId) return;
     const dx = ev.clientX - x0;
     if (!dragged && Math.abs(dx) < DRAG_PX) return;
     dragged = true;
     onMove(dx, ev);
   };
+  const cancel = () => up({ type: 'pointercancel' });
+  const key = ev => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); cancel(); } };
   const up = (ev) => {
-    node.removeEventListener('pointermove', move);
-    node.removeEventListener('pointerup', up);
-    node.removeEventListener('pointercancel', up);
+    if (ev.pointerId != null && ev.pointerId !== e.pointerId) return;
+    if (node.hasPointerCapture(e.pointerId)) node.releasePointerCapture(e.pointerId);
+    window.removeEventListener('keydown', key, true);
+    window.removeEventListener('blur', cancel);
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
     onEnd(dragged, ev);
   };
-  node.addEventListener('pointermove', move);
-  node.addEventListener('pointerup', up);
-  node.addEventListener('pointercancel', up);
+  window.addEventListener('keydown', key, true);
+  window.addEventListener('blur', cancel);
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
 }
 
 /** 当前文档里的键：keyId → { trackId, t, value, ease }。 */
@@ -71,6 +81,7 @@ export function dragKeys(panel, e, anchorEl, { collapseOnClick = false } = {}) {
     onEnd(dragged, ev) {
       panel.showDragTime(null);
       ghosts.forEach((g) => g.remove());
+      if (ev.type === 'pointercancel') { panel.rebuild(); return; }
       if (!dragged) {
         if (collapseOnClick && !e.shiftKey) { panel.selKeys = new Set([keyId(anchor.trackId, anchor.t)]); panel.applySelection(); panel.syncMotionKey(); }
         return;
@@ -103,7 +114,9 @@ export function dragKeys(panel, e, anchorEl, { collapseOnClick = false } = {}) {
  * 松手时经 updatePath / updateConstraint 写入（一次撤销）。
  */
 export function dragBar(panel, e, barEl, edge) {
+  if (barEl.dataset.kind === 'object') return dragObjectBar(panel, e, barEl, edge);
   const { app } = panel;
+  app.playback.pause();
   const tl = app.timeline;
   const { kind, id } = barEl.dataset;
   const { duration, fps } = tl;
@@ -131,8 +144,9 @@ export function dragBar(panel, e, barEl, edge) {
       barEl.style.setProperty('--t1', b);
       panel.showDragTime(edge === 'end' ? b : a, ev.clientX);
     },
-    onEnd(dragged) {
+    onEnd(dragged, ev) {
       panel.showDragTime(null);
+      if (ev.type === 'pointercancel') { panel.rebuild(); return; }
       if (!dragged) return;
       try {
         if (kind === 'path') {
@@ -141,6 +155,62 @@ export function dragBar(panel, e, barEl, edge) {
           else tl.updatePath(id, { start: round6(a) });
         } else if (edge === 'end') tl.updateConstraint(id, { end: round6(b) });
         else tl.updateConstraint(id, { start: round6(a) });
+      } catch (err) { toastError(err); }
+      panel.rebuild();
+    },
+  });
+}
+
+/** 对象总条：从按下时的同一份文档派生每次预览，松手仅发布一次事务。 */
+function dragObjectBar(panel, e, barEl, edge) {
+  const { app } = panel;
+  app.playback.pause();
+  const id = barEl.dataset.id, original = app.store.document;
+  const range = objectAnimationRange(original, id);
+  if (!range) return;
+  const { start, end } = range, length = end - start;
+  if (!length && edge !== 'mid') return;
+  const { duration, fps } = app.timeline;
+  const nodes = [...panel.rows.querySelectorAll('.tl-row')].filter(row => row.dataset.ent === id)
+    .flatMap(row => [...row.querySelectorAll('[style]')].map(node => ({ node,
+      times: ['--t', '--t0', '--t1'].map(prop => [prop, node.style.getPropertyValue(prop)]).filter(([, t]) => t !== ''),
+    })));
+  let change = null, warned = false;
+  track(barEl, e, {
+    onMove(dx, ev) {
+      if (app.store.document !== original) { change = null; return; }
+      const dt = dx / panel.pps;
+      let a = start, b = end;
+      if (edge === 'mid') {
+        a = Math.max(0, Math.min(duration - length, panel.snapTime(start + dt)));
+        b = a + length;
+      } else if (edge === 'end') b = Math.max(start + 1 / fps, Math.min(duration, panel.snapTime(end + dt)));
+      else a = Math.max(0, Math.min(end - 1 / fps, panel.snapTime(start + dt)));
+      a = round6(a); b = round6(b);
+      try {
+        const candidate = app.store.prepare('调整对象动画', doc => retimeObjectAnimation(doc, id, a, b));
+        change = candidate;
+      } catch (err) {
+        // 保持最后一次合法预览；不截断或覆盖某个子轨道。
+        if (!warned) { toast(err.message); warned = true; }
+        return;
+      }
+      const scale = length ? (b - a) / length : 1;
+      for (const { node, times } of nodes) for (const [prop, t] of times) {
+        // 约束不属于对象变换动画。
+        if (!node.closest('[data-constraint]')) node.style.setProperty(prop, round6(a + (+t - start) * scale));
+      }
+      for (const pathBar of panel.rows.querySelectorAll('.tl-bar-path')) {
+        const path = change?.after.paths.find(p => p.id === pathBar.dataset.id && p.target === id) || original.paths.find(p => p.id === pathBar.dataset.id && p.target === id);
+        if (path) pathBar.querySelector('.tl-bar-text').textContent = `位置路径 · ${path.duration.toFixed(1)} s`;
+      }
+      barEl.querySelector('.tl-bar-text').textContent = length ? `对象动画 · ${(b - a).toFixed(1)} s` : `对象动画 · ${a.toFixed(2)} s（单点）`;
+      panel.showDragTime(edge === 'end' ? b : a, ev.clientX);
+    },
+    onEnd(dragged, ev) {
+      panel.showDragTime(null);
+      try {
+        if (dragged && ev.type !== 'pointercancel') app.store.commit(change);
       } catch (err) { toastError(err); }
       panel.rebuild();
     },

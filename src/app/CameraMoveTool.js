@@ -1,7 +1,8 @@
 import { toast, toastError, confirmToast } from '../util/dom.js';
 import { aimPoint } from '../anim/Constraint.js';
-import { cameraMove, defaultParams, MoveError, MOVE_LABEL } from '../anim/cameraMoves.js';
+import { cameraMove, defaultParams, MoveError, MOVE_LABEL, PANEL_LABEL, PANEL_DURATION } from '../anim/cameraMoves.js';
 import { cameraAnimation, moveContext, aheadPoint, nearestSubject, applyCameraMove, clearCameraMoves } from '../doc/edit.js';
+import { cameraMotionState, motionSignature } from '../doc/cameraMotionState.js';
 import { round4, clone } from '../util/math.js';
 
 const fmt = (s) => (Math.round(s * 10) / 10).toString();
@@ -10,11 +11,9 @@ const fmt = (s) => (Math.round(s * 10) / 10).toString();
  * 机位运镜：把 cameraMoves 的生成结果写成 path + lookAt 约束（+ pan 的 rot 轨道），一次撤销。
  * Inspector「运镜」段只管显示，写操作全在这里（selftest 也直接调）。
  *
- * 会话态（不进文档）：app.moveMeta[cameraId] = { segments: [...] }，每段记 预设名 / 参数 / 主体 / 时间窗，
- * 以及删末段要用的逆操作和写入后的签名 sig。签名 = 机位路径（points / closed / start / duration）+ rot 轨道键；
- * 段列表只显示签名仍与文档一致的前缀（拖过顶点 / 刷新页面后退化为普通路径；撤销后自然回到对应的段数）。
- *
- * 编辑表单的状态（预设 / 主体 / 用户改过的参数）按机位记在 this.form，同样是会话态。
+ * 手动卡片使用 doc.meta.cameraMoves 保存参数、主体、生成起始位姿与结果签名；
+ * 节点编辑使签名失效后显示为自定义轨迹。旧 build/commit 段接口仍供现有集成调用，
+ * 它的追加段逆操作与表单使用 app.moveMeta / this.form 会话状态。
  */
 export class CameraMoveTool {
   constructor(app) {
@@ -23,6 +22,75 @@ export class CameraMoveTool {
   }
 
   get meta() { return this.app.moveMeta; }
+
+  current(cam) { return cameraMotionState(this.app.store.document, cam.id); }
+
+  /** Stable start pose and captured aim are reused for parameter changes, never the last endpoint. */
+  presetOrigin(cam) {
+    const saved = this.current(cam)?.segments[0]?.origin;
+    if (saved) return clone(saved);
+    const doc = this.app.store.document, entity = doc.entities.find(e => e.id === cam.id);
+    const path = doc.paths.find(p => p.target === cam.id);
+    return { position: (path?.points[0] || entity.transform.pos).slice(), rot: entity.transform.rot.slice(), roll: entity.roll || 0, time: path?.start || 0 };
+  }
+
+  defaultSubject(cam, origin) {
+    const valid = id => this.subjects(cam).some(s => s.value === id);
+    const look = this._anim(cam).lookAts.find(c => (c.start ?? 0) <= this.app.playback.time && (c.end == null || c.end >= this.app.playback.time) && (Array.isArray(c.subject) || valid(c.subject)));
+    if (look) return clone(look.subject);
+    if (valid(cam.aimRef)) return cam.aimRef;
+    const chars = this.app.store.document.entities.filter(e => e.type === 'character' && e.visible && (!e.parent || this.app.findEntity(e.parent)?.visible));
+    const distance = e => { const p = this._aim(e.id); return p ? Math.hypot(...p.map((v, i) => v - origin.position[i])) : Infinity; };
+    chars.sort((a, b) => distance(a) - distance(b));
+    if (chars.length) return chars[0].id;
+    const manual = cam.lookTarget.toArray();
+    return manual.every(Number.isFinite) && Math.hypot(...manual.map((v, i) => v - origin.position[i])) > .001 ? manual : aheadPoint({ pos: origin.position, rot: origin.rot });
+  }
+
+  /** Click a card = replace; append is an explicit, separate command. */
+  applyPreset(cam, name, { params, subject, reset = false, append = false } = {}) {
+    const current = this.current(cam), last = current?.segments.at(-1);
+    if (!append && !reset && !params && subject === undefined && !current?.customPrefix && current?.segments.length === 1 && last.name === name) { this.error = null; return true; }
+    this.app.playback.pause();
+    let origin = this.presetOrigin(cam);
+    if (append) {
+      const ctx = this.context(cam);
+      origin = { position: ctx.position, rot: ctx.rot, roll: ctx.roll || 0, time: ctx.time };
+    }
+    const editing = !append && !reset && last?.name === name && current.segments.length === 1 && !current.customPrefix;
+    subject = subject ?? (editing ? last.subject : this.defaultSubject(cam, origin));
+    const aim = editing && JSON.stringify(subject) === JSON.stringify(last.subject) ? last.aim : this._aim(subject);
+    if (!aim) return this._presetError('持续注视对象已不存在');
+    const defaults = { ...defaultParams(name, { position: origin.position, aim }), duration: PANEL_DURATION[name] };
+    if (name === 'push_in') {
+      const ent = typeof subject === 'string' && this.app.findEntity(subject);
+      const height = ent?.type === 'character' ? ent.height * ent.root.scale.y / ent.baseScale : 1.7;
+      defaults.minSubjectDist = Math.max(.3, .35 * height);
+    }
+    const next = { ...defaults, ...(editing ? last.params : {}), ...params };
+    if (name === 'half_orbit' && (next.sweep < 30 || next.sweep > 180)) return this._presetError('半弧角度范围为 30–180°');
+    if (['circle', 'spiral'].includes(name) && (next.sweep <= 0 || next.sweep > 360)) return this._presetError('角度范围为 1–360°');
+    if (editing && JSON.stringify(next) === JSON.stringify(last.params) && JSON.stringify(subject) === JSON.stringify(last.subject)) { this.error = null; return true; }
+    const detached = this.app.directorDetached;
+    try {
+      this.app.directorDetached = true;
+      this.app.history.capture();
+      this.app.store.transact(append ? '追加运镜' : '替换运镜', doc => {
+        applyCameraMove(doc, cam.id, { name, subject, aim, params: next, ownPan: current?.segments.some(s => s.name === 'pan'), mode: append ? 'append' : 'replace', origin, time: origin.time, lastPan: append && last?.name === 'pan' ? { start: last.origin.time, duration: last.params.duration, rotEnd: origin.rot } : null });
+        doc.timeline.duration = Math.max(doc.timeline.duration, origin.time + next.duration);
+        const segment = { name, subject: clone(subject), aim: aim.slice(), params: next, origin };
+        doc.meta.cameraMoves ||= {};
+        doc.meta.cameraMoves[cam.id] = { signature: motionSignature(doc, cam.id), segments: append ? [...(current?.segments || []), segment] : [segment], ...(append && (current?.customPrefix || !current && origin.time > 0) ? { customPrefix: true } : {}) };
+      });
+      this.app.history.capture();
+      this.error = null;
+      toast(`已${append ? '追加' : '替换为'}${PANEL_LABEL[name]}运镜`, { action: { label: '撤销', onClick: () => this.app.history.undo() } });
+      this.app.stage.invalidate();
+      return true;
+    } catch (err) { this.app.directorDetached = detached; return this._presetError(err.errors?.[0] || err.message); }
+  }
+
+  _presetError(message) { this.error = message; return false; }
 
   // ---- 表单 ----
   formOf(cam) {
@@ -40,8 +108,8 @@ export class CameraMoveTool {
   subjects(cam) {
     const out = [];
     for (const e of this.app.entities) {
-      if (e !== cam) out.push({ value: e.id, label: e.name });
-      for (const m of e.children) out.push({ value: m.id, label: `${e.name} / ${m.name}` });
+      if (e !== cam && e.visible && e.type !== 'camera') out.push({ value: e.id, label: e.name });
+      for (const m of e.visible ? e.children : []) if (m.visible) out.push({ value: m.id, label: `${e.name} / ${m.name}` });
     }
     return out;
   }
@@ -91,7 +159,9 @@ export class CameraMoveTool {
   context(cam) {
     const { app } = this;
     const segs = this.segments(cam);
-    return moveContext(app.store.document, cam.id, { time: app.timeline.active ? round4(app.playback.time) : 0, lastPan: segs[segs.length - 1] || null });
+    const saved = this.current(cam)?.segments.at(-1);
+    const pan = saved?.name === 'pan' ? { start: saved.origin.time, duration: saved.params.duration, rotEnd: this._anim(cam).rotTrack.keys.at(-1).value } : segs.at(-1) || null;
+    return moveContext(app.store.document, cam.id, { time: app.timeline.active ? round4(app.playback.time) : 0, lastPan: pan });
   }
 
   /** 表单参数（缺省项 = 默认值，按当前起点与主体计算）。 */
@@ -207,12 +277,13 @@ export class CameraMoveTool {
       app.store.transact('清除运镜', (doc) => { clearCameraMoves(doc, cam.id); });
     } catch (err) { toastError(err); return; }
     delete this.meta[cam.id];
+    this.error = null; this.appendCameraId = null;
     toast('已清除运镜');
   }
 
   /** 是否有可清除的运镜数据。 */
   hasMoves(cam) {
-    const { path, constraints, rotTrack } = this._anim(cam);
-    return !!(path || constraints.length || rotTrack);
+    const { path, constraints, rotTrack, posTrack } = this._anim(cam);
+    return !!(path || constraints.length || rotTrack || posTrack);
   }
 }

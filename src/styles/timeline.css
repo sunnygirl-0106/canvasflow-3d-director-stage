@@ -232,7 +232,6 @@
 
 #timeline button.tl-caret { border: 0; background: transparent; cursor: pointer; padding: 0; }
 
-.tl-path-line { position: absolute; left: calc(var(--gutter) + var(--t0) * var(--pps) * 1px); width: calc((var(--t1) - var(--t0)) * var(--pps) * 1px); height: 1px; top: 50%; background: var(--accent); cursor: pointer; border: 0; }
 
 #timeline .tl-path-status { position: absolute; left: calc(var(--gutter) + 8px); pointer-events: none; }
 
@@ -342,7 +341,6 @@ body.resizing-timeline, body.resizing-timeline * { cursor: ns-resize !important;
 #timeline .tl-track .tl-addkey:hover { color: var(--icon-hover); background: #ffffff0a; }
 #timeline .tl-head .tl-addkey { border-radius: 5px; }
 #timeline .tl-row-delete:disabled { opacity: .2; }
-#timeline .tl-path-line { background: #527d85; }
 
 /* 剪辑轨道：名称优先，灰阶区间，浅蓝色文字标识轨迹入口。 */
 #timeline { --surface-timeline: #222222; --track-row-active: #383838; --tl-row-h: 38px; --dim: #b6b6b6; --dim2: #777777; --txt: #dedede; }
@@ -396,3 +394,11 @@ body.resizing-timeline, body.resizing-timeline * { cursor: ns-resize !important;
 #timeline button:focus-visible { outline: 1px solid #70cedb; outline-offset: -2px; }
 
 .tl-path-node.is-selected { outline: 2px solid var(--accent, #3b82f6); outline-offset: 3px; }
+
+/* 对象总条与位置子条共享区间几何，但操作范围不同。 */
+.tl-bar-object { background: rgba(69,201,207,.3); border: 1px solid rgba(69,201,207,.65); }
+#timeline .tl-bar-object .tl-bar-text { opacity: 1; }
+#timeline .tl-bar-point { width: 8px; min-width: 8px; overflow: visible; }
+#timeline .tl-bar-point .tl-bar-text { position: absolute; left: 12px; }
+
+#timeline .tl-track .tl-bar-path .tl-bar-end { top: 0; width: 10px; height: 6px; transform: translateX(-50%); z-index: 3; }

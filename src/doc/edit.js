@@ -95,6 +95,16 @@ export function characterJSON({ id, name, body, pos = [0, 0, 0], rot = [0, 0, 0]
   };
 }
 
+export function nextTrailColor(doc) {
+  const palette = ['#4dd9ed', '#ff897d', '#f4c85c', '#83d69a', '#76a9ff', '#f49ec4'];
+  const used = new Set(doc.entities.filter(e => e.type === 'character').map(e => e.trailColor).filter(Boolean));
+  return palette.find(c => !used.has(c)) || (() => {
+    let i = 0, c;
+    do { c = `#${new THREE.Color().setHSL(((i++ * 0.61803398875) + 0.12) % 1, 0.72, 0.66).getHexString()}`; } while (used.has(c));
+    return c;
+  })();
+}
+
 /** 新建角色并加入文档（默认落点 = spawnPoint）。返回条目。 */
 export function addCharacter(doc, { name, body, pos, yaw = 0, color, pose = null }) {
   const characterCount = doc.entities.filter(e => e.type === 'character').length;
@@ -103,6 +113,7 @@ export function addCharacter(doc, { name, body, pos, yaw = 0, color, pose = null
     id: newId(doc), name, body, pos: pos || spawnPoint(topLevelCount(doc)),
     rot: [0, yaw, 0], color: color ?? hexColor(defaultColor), pose,
   });
+  json.trailColor = nextTrailColor(doc);
   doc.entities.push(json);
   return json;
 }
@@ -135,6 +146,7 @@ export function addCrowd(doc, { rows = 3, cols = 3, spacing = CROWD_SPACING, nam
         id: newId(doc), name: memberName(), body, parent: gid,
         pos: [c * spacing - w / 2, 0, r * spacing - d / 2], color: hexColor(CROWD_PALETTE[i % CROWD_PALETTE.length]),
       });
+      m.trailColor = nextTrailColor(doc);
       doc.entities.push(m);
       group.members.push(m.id);
       members.push(m);
@@ -223,6 +235,7 @@ export function removeEntity(doc, id) {
   doc.timeline.tracks = anim.tracks;
   doc.paths = anim.paths;
   doc.constraints = anim.constraints;
+  if (doc.meta.cameraMoves) for (const deadId of dead) delete doc.meta.cameraMoves[deadId];
   if (dead.includes(doc.timeline.mainCameraId)) doc.timeline.mainCameraId = null;
   if (dead.includes(doc.scene.activeCameraId)) doc.scene.activeCameraId = null;
   return dead;
@@ -257,6 +270,8 @@ export function setPath(doc, target, points, { closed = false, start = 0, set = 
   let path;
   if (old) { // 重新绘制：旧停顿作废（set.stops 给出时用新的）
     path = fitStops(null, { ...old, interpolation: undefined, points: clone(points), closed, duration, stops: undefined, stopTimes: undefined, ...clone(set), speed });
+    if (!set.timedSegments) delete path.timedSegments;
+    if (!set.waypointTimes) delete path.waypointTimes;
     doc.paths = doc.paths.map((p) => (p === old ? path : p));
   } else {
     doc.timeline.tracks = doc.timeline.tracks.filter((t) => !(t.target === target && t.property === 'pos'));
@@ -333,10 +348,19 @@ export function nearestSubject(doc, camId, position, aimOf) {
  * @returns {{ctx:object, move:object, start:number, undo:object}} undo = 删末段用的逆操作信息
  * @throws {MoveError} 几何上做不出来（文案直接给用户看）
  */
-export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, time = 0, lastPan = null, ownPan = false }) {
-  const ctx = moveContext(doc, camId, { time, lastPan });
+export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, time = 0, lastPan = null, ownPan = false, mode = 'append', origin = null }) {
+  const cam = findEntity(doc, camId);
+  const ctx = mode === 'replace'
+    ? { ...(origin || { position: cam.transform.pos, rot: cam.transform.rot, roll: cam.roll, time }), append: false, path: null }
+    : moveContext(doc, camId, { time, lastPan });
   if (name === 'pan' && ctx.path) throw new MoveError('摇镜头请单独使用或放在最前');
   const move = cameraMove(name, { position: ctx.position, rot: ctx.rot, roll: ctx.roll, aim, params });
+  // Validate geometry first; failed generation cannot partially clear existing motion.
+  if (mode === 'replace') {
+    doc.paths = doc.paths.filter(p => p.target !== camId);
+    doc.timeline.tracks = doc.timeline.tracks.filter(t => t.target !== camId || (t.property !== 'pos' && !(t.property === 'rot' && (name === 'pan' || ownPan))));
+    doc.constraints = doc.constraints.filter(c => c.target !== camId);
+  }
   const before = cameraAnimation(doc, camId);
   const start = ctx.time;
   const undo = {};
@@ -389,10 +413,12 @@ export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, t
 
 /** 清除机位的运镜：路径 + 该机位全部约束 + rot 轨道。返回是否有改动。 */
 export function clearCameraMoves(doc, camId) {
-  const { path, rotTrack } = cameraAnimation(doc, camId);
+  const { path, rotTrack, posTrack } = cameraAnimation(doc, camId);
+  if (doc.meta.cameraMoves) delete doc.meta.cameraMoves[camId];
+  if (posTrack) doc.timeline.tracks = doc.timeline.tracks.filter(t => t !== posTrack);
   const n = doc.constraints.length;
   if (path) doc.paths = doc.paths.filter((p) => p !== path);
   doc.constraints = doc.constraints.filter((c) => c.target !== camId);
   if (rotTrack) doc.timeline.tracks = doc.timeline.tracks.filter((t) => t !== rotTrack);
-  return !!(path || rotTrack || n !== doc.constraints.length);
+  return !!(path || rotTrack || posTrack || n !== doc.constraints.length);
 }

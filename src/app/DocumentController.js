@@ -119,12 +119,15 @@ export class DocumentController {
    * 由 serialize.loadDocument 调用：实体与全景都已就绪，同步替换（中间不会渲染出半个场景）。
    * entities 里可能有当前场景复用的实体，apply 把文档值写进它们。
    */
-  commitRuntime(doc, entities, panoHandle, { applyView = false, pruneShots = false, apply = [] } = {}) {
-    const preview = this.app.preview;
+  commitRuntime(doc, entities, panoHandle, { applyView = false, pruneShots = false, newScene = false, apply = [] } = {}) {
     this.app.endPreview();
     this.app._scenePreview = null;
     this.app.gizmo.cancel();
-    const prevSel = this.app.selectedId;
+    if (newScene || applyView) {
+      this.app.userSelectedId = null;
+      this.app.pathOverlay?.reset();
+    }
+    const prevSel = newScene || applyView ? null : this.app.selectedId;
     const transformEditing = this.app.transformEditing;
     this._clearEntities(new Set(entities));
     for (const fn of apply) fn();
@@ -148,7 +151,6 @@ export class DocumentController {
     this.app.emit('entities');
     this.app.emit('scene');
     this.app.select(this.app.findEntity(prevSel) ? prevSel : null, { activateTransform: transformEditing }); // id 稳定：撤销后仍选中同一对象
-    if (preview && this.app.cameraView) this.app.startPreview({ play: false });
     this.app.emit('document', doc);
   }
 

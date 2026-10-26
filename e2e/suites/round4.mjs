@@ -23,7 +23,7 @@ export async function run() {
   await page.evaluate(()=>window.__app.startPreview());
   await page.click(`.tl-head[data-ent="${ids[1]}"] .tl-addkey`);
   await page.keyboard.press('Escape');
-  ok('播放中打开/取消菜单不暂停、不切导演视角',await page.evaluate(()=>window.__app.playback.playing&&window.__app.cameraView&&!window.__app.pathTool.mode));
+  ok('播放中打开/取消菜单不暂停，导演页签保持且继续临时出画',await page.evaluate(()=>window.__app.playback.playing&&!window.__app.cameraView&&window.__app.preview&&!window.__app.pathTool.mode));
   await page.evaluate(()=>window.__app.stopPreview());
   const projection=await page.evaluate(()=>{
     const a=window.__app,c=a.cameras[0];a.beforeRender();const before=c._viz.far,far=c.cam.far,g=c.helper.geometry;
@@ -31,8 +31,10 @@ export async function run() {
     return {before,far:far===c.cam.far,fov:c._viz.fov,aspect:c._viz.aspect===c.cam.aspect,geometry:g===c.helper.geometry,width:2*c._viz.far*Math.tan(c._viz.fov*Math.PI/360)*c._viz.aspect};
   });await shot('frustum-fov65');
   ok('视锥延伸主体、同步FOV/aspect、不改变真实far或重建几何',projection.before>.5&&projection.far&&projection.fov===65&&projection.aspect&&projection.geometry,JSON.stringify(projection));
-  await page.evaluate(()=>{window.__app.startPreview();window.__app.playback.pause();});await shot('playback-clean');
+  await page.evaluate(()=>{window.__app.startPreview();});await shot('playback-clean');
   ok('播放画面隐藏视锥',await page.evaluate(()=>window.__app.cameras.every(c=>!c.helper.visible)));
+  await page.evaluate(()=>window.__app.playback.pause());
+  ok('暂停恢复导演视角及主机位视锥',await page.evaluate(()=>!window.__app.cameraView&&!window.__app.preview&&window.__app.cameras.some(c=>c.helper.visible)));
   await page.evaluate(()=>window.__app.stopPreview());
   await page.click('#scenePresets');await shot('presets');
   await page.focus('.ai-preset'); await page.keyboard.press('Space');

@@ -11,7 +11,7 @@ import { propState, toggleKey } from './timeline/animState.js';
 import { arcPoints, pathLength, paceFor, defaultDuration, stopsAfterReverse, toggleStop, WALK_PACE } from '../anim/pathGen.js';
 import { rampFor } from '../anim/Path.js';
 import { popupMenu } from './popupMenu.js';
-import { cameraMoveSection, cameraConstraintSection } from './cameraMotionSections.js';
+import { cameraMoveSection, cameraMoveActions, cameraConstraintSection } from './cameraMotionSections.js';
 import { D2R, R2D } from '../util/math.js';
 
 const FOV_TIP = '控制镜头视野范围。数值越小，画面越近、越聚焦；数值越大，画面越广、能看到更多环境。';
@@ -68,7 +68,7 @@ export class Inspector {
     this.app.pathOverlay.setMovePreview(null); // 运镜预览只跟着机位的运镜段走
     if (!entity) { this.container.replaceChildren(); return; }
 
-    const root = el('div', { class: 'rp rp-pad' });
+    const root = el('div', { class: 'rp rp-pad' + (entity.type === 'camera' ? ' camera-panel' : '') });
     this._activeHint = el('div', { class: 'tl-active-hint', text: '当前时刻的修改将记录为关键帧', hidden: true });
     root.appendChild(this._activeHint);
     const title = { character: '角色', camera: '摄像机', group: `${entity.name} (${entity.children.length})` }[entity.type] || '道具';
@@ -97,6 +97,9 @@ export class Inspector {
   }
 
   _motion(root) {
+    if (this.entity.type === 'camera') {
+      const monitor = this._buildPreview(this.entity); monitor.classList.add('camera-motion-monitor'); root.appendChild(monitor);
+    }
     this._animHost = el('div');
     root.appendChild(this._animHost);
     this._renderAnimSections();
@@ -112,6 +115,7 @@ export class Inspector {
       if (this._sectionsDirty) { this._sectionsDirty = false; this._renderAnimSections(); }
       this._syncFn?.();
       this._refreshAnim();
+      if (this._previewEnt) this.schedulePreview();
     });
   }
 
@@ -123,6 +127,7 @@ export class Inspector {
     if (this.app.selectedId !== id) this.app.select(id); else this.show(ent);
     const sec = this.container.querySelector(`[data-sec="${section}"]`);
     if (!sec) return;
+    if (sec.closest('details')) sec.closest('details').open = true;
     sec.scrollIntoView({ block: 'nearest' });
     sec.classList.remove('flash');
     void sec.offsetWidth; // 重新触发动画
@@ -136,10 +141,20 @@ export class Inspector {
     const anim = this.app.timeline.toJSON();
     const nodes = [];
     const path = anim.paths.find((p) => p.target === ent.id);
-    if (ent.type === 'camera') nodes.push(cameraMoveSection(this.app, ent, () => this._renderAnimSections()));
-    if (path) nodes.push(ent.type === 'character' ? this._characterPathSection(path, ent) : this._pathSection(path, ent));
-    else if (this.app.pathTool.canDraw(ent)) nodes.push(this._pathEmpty(ent));
-    if (ent.type === 'camera') nodes.push(cameraConstraintSection(this.app, ent, anim.constraints.filter((c) => c.target === ent.id), (fn) => this._tl(fn)));
+    const camera = ent.type === 'camera';
+    if (camera) nodes.push(cameraMoveSection(this.app, ent, () => this._renderAnimSections()));
+    const advanced = [];
+    if (path) advanced.push(ent.type === 'character' ? this._characterPathSection(path, ent) : this._pathSection(path, ent));
+    else if (this.app.pathTool.canDraw(ent)) advanced.push(this._pathEmpty(ent));
+    if (camera) {
+      const state = this.app.cameraMoves.current(ent);
+      const single = state?.segments.length === 1 && !state.customPrefix;
+      advanced.push(cameraConstraintSection(this.app, ent, anim.constraints.filter(c => c.target === ent.id), fn => this._tl(fn), { hideLook: single }));
+      const open = host.querySelector('.motion-advanced')?.open;
+      const details = el('details', { class: 'motion-advanced' }, [el('summary', { text: '轨迹编辑与约束' }), ...advanced]);
+      details.open = !!open;
+      nodes.push(details, cameraMoveActions(this.app, ent, () => this._renderAnimSections()));
+    } else nodes.push(...advanced);
     host.replaceChildren(...nodes);
   }
 
@@ -217,7 +232,7 @@ export class Inspector {
       ]),
       el('div', { class: 'anim-pair' }, [
         numberRow({ label: '开始', value: p.start, step: 0.1, min: 0, unit: 's', onChange: (x) => upd({ start: x }) }).el,
-        numberRow({ label: '时长', value: p.duration, step: 0.1, min: 0.01, unit: 's', onChange: (x) => upd({ duration: x }) }).el,
+        !(ent.type === 'camera' && this.app.cameraMoves.current(ent)?.segments.length === 1 && !this.app.cameraMoves.current(ent)?.customPrefix) ? numberRow({ label: '时长', value: p.duration, step: 0.1, min: 0.01, unit: 's', onChange: (x) => upd({ duration: x }) }).el : null,
       ]),
       el('div', { class: 'path-timing-hint' + (needsMoreTime ? ' fast' : '') }, [
         el('span', { text: `${fmtS(p.start)}–${fmtS(p.start + p.duration)} 秒 · 场景共 ${fmtS(total)} 秒` }),
@@ -416,7 +431,6 @@ export class Inspector {
     const commit = (prop) => () => app.edited(ent, new Set([prop])); // 一次修改结束：按时间轴状态归属（3.3）
 
     root.appendChild(this._buildPreview(ent));
-    root.appendChild(dropdownRow({ label: '截图 / 导出画幅', value: app.ratio, options: RATIO_OPTIONS.map(([value, label]) => ({ value, label })), onChange: value => app.setRatio(value) }).el);
     root.appendChild(this._nameField(ent));
 
     const cams = app.cameras;
@@ -430,48 +444,59 @@ export class Inspector {
 
     const pos = tripleRow({
       label: '位置', step: 0.01, onCommit: commit('pos'),
-      axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.position[k], set: (v) => { o.position[k] = v; changed(); } })),
+      axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => o.position[k], set: (v) => { if (app.timeline.forcedProps(ent.id, app.timeline.active ? app.playback.time : 0).get('pos') === '跟随') return; o.position[k] = v; changed(); } })),
     });
     root.appendChild(pos.el);
 
-    // 注视目标：选对象时一次性对准，之后仍是手动坐标
+    const forced = prop => {
+      const source = app.timeline.forcedProps(ent.id, app.timeline.active ? app.playback.time : 0).get(prop);
+      return prop === 'pos' && source === '路径' ? null : source;
+    };
+    const rot = tripleRow({ label: '旋转', deg: true, onCommit: commit('rot'), axes: ['x', 'y', 'z'].map(k => ({ key: k, get: () => o.rotation[k] * R2D, set: v => { if (forced('rot')) return; o.rotation[k] = v * D2R; changed(); } })) });
+    root.appendChild(rot.el);
+    // 一次对准与持续注视是不同操作，复用已有约束系统。
     const targets = app.entities.filter((e) => e.type === 'character' || e.type === 'prop');
     let lookRow;
-    root.appendChild(dropdownRow({
-      label: '注视目标', value: ent.aimRef || 'manual',
+    const aimField = dropdownRow({
+      label: '一次对准', value: ent.aimRef || 'manual',
       options: [{ value: 'manual', label: '手动坐标' }, ...targets.map((t) => ({ value: t.id, label: t.name }))],
       onChange: (val) => {
+        if (forced('rot')) return;
         ent.aimRef = val;
         if (val === 'manual') return;
         if (app.aimCameraAtObject(ent.id, val)) { lookRow.syncAll(); pos.syncAll(); this.schedulePreview(); }
       },
-    }).el);
+    });
+    root.appendChild(aimField.el);
 
     lookRow = tripleRow({
-      label: '注视坐标', step: 0.05, onCommit: commit('rot'), // 注视坐标决定机位朝向：菱形 = 旋转关键帧
-      axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => ent.lookTarget[k], set: (v) => { ent.lookTarget[k] = v; ent.aimAt(ent.lookTarget); changed(); } })),
+      label: '一次对准坐标', step: 0.05, onCommit: commit('rot'), // 注视坐标决定机位朝向：菱形 = 旋转关键帧
+      axes: ['x', 'y', 'z'].map((k) => ({ key: k, get: () => ent.lookTarget[k], set: (v) => { if (forced('rot')) return; ent.lookTarget[k] = v; ent.aimAt(ent.lookTarget); changed(); } })),
     });
     root.appendChild(lookRow.el);
 
     const fovField = sliderRow({
-      label: '视野角度', min: FOV_RANGE[0], max: FOV_RANGE[1], step: 1, value: ent.cam.fov,
+      label: 'FOV', editable: true, min: FOV_RANGE[0], max: FOV_RANGE[1], step: 1, value: ent.cam.fov,
       format: (v) => Math.round(v) + '°',
       onInput: (v) => { ent.setFov(v); this._previewBadge.textContent = 'FOV ' + Math.round(v) + '°'; changed(); },
       onChange: commit('fov'),
     });
     fovField.el.querySelector('label')?.appendChild(infoTip(FOV_TIP));
     root.appendChild(fovField.el);
-    this._keyable(ent, [['pos', pos.el], ['rot', lookRow.el], ['fov', fovField.el]]);
+    this._keyable(ent, [['pos', pos.el], ['rot', rot.el], ['rot', lookRow.el], ['fov', fovField.el]]);
 
 
-    const myShots = app.shots.shotsForCamera(ent.id);
-    if (myShots.length) {
-      root.appendChild(el('div', { class: 'sec-title', text: '相机截图', style: { marginTop: '6px' } }));
-      root.appendChild(this._shotGrid(myShots, true));
-    }
+    root.appendChild(dropdownRow({ label: '画幅设置', value: app.ratio, options: RATIO_OPTIONS.map(([value, label]) => ({ value, label })), onChange: value => app.setRatio(value) }).el);
+    const controlHint = el('div', { class: 'anim-info' }); root.appendChild(controlHint);
 
     this._syncFn = () => {
-      pos.syncAll(); lookRow.syncAll();
+      pos.syncAll(); rot.syncAll(); lookRow.syncAll();
+      for (const [row, prop] of [[pos.el, 'pos'], [rot.el, 'rot'], [lookRow.el, 'rot'], [aimField.el, 'rot']]) {
+        const source = forced(prop);
+        row.querySelectorAll('input, select').forEach(input => { input.disabled = !!source; input.title = source ? `由${source}控制` : ''; });
+        row.querySelectorAll('.ax').forEach(axis => { axis.style.pointerEvents = source ? 'none' : ''; });
+      }
+      controlHint.textContent = [forced('pos') ? `位置由${forced('pos')}控制` : '', forced('rot') ? `旋转由${forced('rot')}控制；请在运动轨迹页调整持续注视` : ''].filter(Boolean).join(' · ');
       fovField.set(ent.cam.fov);
       this._previewBadge.textContent = 'FOV ' + Math.round(ent.cam.fov) + '°';
       this.schedulePreview();

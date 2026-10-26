@@ -31,7 +31,7 @@ export class ShotManager {
   /** 截图归属的机位：机位视角下用户指定的出画机位 > 选中的机位 > 按当前视角新建。 */
   _resolveShotCamera() {
     const app = this.app;
-    if (app.cameraView && app.povCameraId) {
+    if ((app.preview || app.cameraView) && app.povCameraId) {
       const a = app.findCamera(app.povCameraId);
       if (a) return { ent: a, created: false };
     }

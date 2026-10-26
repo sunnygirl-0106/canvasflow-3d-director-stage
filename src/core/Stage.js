@@ -53,7 +53,7 @@ export class Stage {
     this.renderer.toneMappingExposure = 1.0;
     viewportEl.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(40, 1, 0.05, 1000);
+    this.camera = new THREE.PerspectiveCamera(40, 1, 0.01, 1000);
     this.camera.position.set(0, 1.6, 6.2);
 
     // 机位视角 POV：非 null 时主视口透过该相机出画面

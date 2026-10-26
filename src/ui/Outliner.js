@@ -71,13 +71,13 @@ export class Outliner {
       node.addEventListener('click', (e) => {
         // Shift 点击角色/道具 → 多选切换
         if (e.shiftKey && (ent.type === 'character' || ent.type === 'prop')) { app.toggleSelect(ent.id); return; }
-        app.select(ent.id);
+        app.select(ent.id, { user: true });
       });
       // 右键菜单（角色/道具）：打组 / 显示隐藏 / 创建副本 / 删除
       if (ent.type === 'character' || ent.type === 'prop') {
         node.addEventListener('contextmenu', (e) => {
           e.preventDefault();
-          if (!app.selectedIds.has(ent.id)) app.select(ent.id); // 右键未选中项 → 先单选它
+          if (!app.selectedIds.has(ent.id)) app.select(ent.id, { user: true }); // 右键未选中项 → 先单选它
           this._showContextMenu(e.clientX, e.clientY);
         });
       }
@@ -160,7 +160,7 @@ export class Outliner {
       el('span', { class: 'nm', text: crowd.name }),
       this._ops(crowd, [el('button', { class: 'op', title: '解组', text: '⊟', onclick: (e) => { e.stopPropagation(); app.ungroupCrowd(crowd.id); } })]),
     );
-    node.addEventListener('click', () => app.select(crowd.id));
+    node.addEventListener('click', () => app.select(crowd.id, { user: true }));
     tree.appendChild(node);
 
     if (!open) return;
@@ -171,7 +171,7 @@ export class Outliner {
         el('span', { class: 'ic-type', html: ICON.person }),
         el('span', { class: 'nm', text: m.name }),
       ]);
-      child.addEventListener('click', () => app.select(m.id));
+      child.addEventListener('click', () => app.select(m.id, { user: true }));
       tree.appendChild(child);
     }
   }

@@ -2,7 +2,7 @@ import { el, clear, toast } from '../util/dom.js';
 import { icon } from './icons.js';
 import { MODES, MODE_LABEL } from '../ai/ops.js';
 import { OpenAICompatProvider, loadSettings, saveSettings } from '../ai/provider.js';
-import { SCENE_PRESETS } from '../ai/presets.js';
+import { SCENE_PRESETS, createPresetScene } from '../ai/presets.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 识图：原图 ≤ 2 MB
 const IMAGE_EDGE = 1024;                 // 压到长边 1024 px（JPEG）
@@ -113,11 +113,16 @@ export class AiPanel {
     this.tray?.remove();
     if (!this.browsePresets) return;
     const close = () => { this.browsePresets = false; this.pendingPreset = null; this.render(); this.textarea.focus(); };
-    const apply = preset => {
+    const apply = async preset => {
       if (this.agent.busy) return;
-      this.mode = 'generate'; this.image = null;
-      this.textarea.value = preset.prompt;
-      close();
+      try {
+        const doc = createPresetScene(SCENE_PRESETS.indexOf(preset));
+        await this.app.loadDocument(doc, { pruneShots: true, newScene: true, label: `预制场景：${preset.title}` });
+        this.mode = 'modify'; this.image = null;
+        this.textarea.value = '';
+        close();
+        toast(`已创建「${preset.title}」`);
+      } catch (err) { console.error(err); toast(`创建预制场景失败：${err.message}`); }
     };
     const choose = preset => {
       if (this.agent.busy) return;
@@ -347,7 +352,7 @@ export class AiPanel {
     };
     this.textarea.addEventListener('input', resize);
     const presets = el('button', {
-      id: 'scenePresets', class: 'ai-presets-trigger', type: 'button', title: `预制场景：从 ${SCENE_PRESETS.length} 个场景中选择，填入描述`,
+      id: 'scenePresets', class: 'ai-presets-trigger', type: 'button', title: `预制场景：从 ${SCENE_PRESETS.length} 个场景中选择并创建`,
       'aria-label': '打开预制场景', 'aria-expanded': String(this.browsePresets), 'aria-controls': 'scenePresetTray',
       disabled: busy || undefined, onclick: () => this.openPresets(),
     }, [el('span', { class: 'ai-presets-icon', html: icon('sparkle', 17, 1.5) }), el('span', { class: 'ai-presets-label', text: '预制场景' })]);

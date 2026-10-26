@@ -47,6 +47,8 @@
 //   orient: 'tangent' | 'keep',      // 朝向跟随切线（只改 yaw）/ 保持手动朝向
 //   stops: [i, ...],                 // 可选：停顿的顶点索引，升序、不含首尾（闭合路径可到 n−1）；缺省 = 无停顿
 //   stopTimes: [秒, ...],            // 可选：到达各停顿顶点的时刻（相对 start），与 stops 等长、递增、在 (0, duration) 内；
+//   timedSegments: [{from,to,start,end}], // 可选：连续覆盖全部顶点；时段间空隙是真正的驻足，时间相对路径 start
+//   waypointTimes: [秒, ...],       // 可选：依次到达各节点的相对时刻；内部节点速度连续，不能与分段停步并用
 // }                                  //   缺省 = 各段按弧长比例分配时长。有 stops 时每段各自缓入缓出（停顿处速度 0）
 // Constraint = {
 //   id, type: 'lookAt' | 'follow',
@@ -127,7 +129,7 @@ const TIMELINE_KEYS = ['duration', 'fps', 'mainCameraId', 'tracks'];
 const TRACK_KEYS = ['id', 'target', 'property', 'keys'];
 const KEY_KEYS = ['t', 'value', 'ease'];
 const PATH_KEYS = ['id', 'target', 'points', 'closed', 'start', 'duration', 'speed', 'orient'];
-const PATH_OPTIONAL = ['stops', 'stopTimes', 'interpolation'];
+const PATH_OPTIONAL = ['stops', 'stopTimes', 'interpolation', 'timedSegments', 'waypointTimes'];
 const CONSTRAINT_KEYS = ['id', 'type', 'target', 'subject', 'offset', 'start', 'end'];
 
 const isStr = (v) => typeof v === 'string';
@@ -182,13 +184,38 @@ export function validate(doc) {
   checkKeys(doc, '文档', TOP_KEYS);
 
   // ---- meta ----
-  if (checkKeys(doc.meta, 'meta', META_KEYS)) {
+  if (checkKeys(doc.meta, 'meta', META_KEYS, ['cameraMoves'])) {
     const m = doc.meta;
     str(m.name, 'meta.name');
     for (const k of ['createdAt', 'updatedAt']) {
       if (m[k] !== undefined && (!isStr(m[k]) || Number.isNaN(Date.parse(m[k])))) err(`meta.${k}`, `应为 ISO 时间字符串，实际为 ${fmt(m[k])}`);
     }
     str(m.app, 'meta.app');
+    if (m.cameraMoves != null) {
+      if (typeof m.cameraMoves !== 'object' || Array.isArray(m.cameraMoves)) err('meta.cameraMoves', '应为对象');
+      else for (const [id, state] of Object.entries(m.cameraMoves)) {
+        const p = `meta.cameraMoves.${id}`;
+        if (!checkKeys(state, p, ['signature', 'segments'], ['customPrefix'])) continue;
+        str(state.signature, `${p}.signature`);
+        if (state.customPrefix !== undefined && typeof state.customPrefix !== 'boolean') err(`${p}.customPrefix`, '应为布尔值');
+        if (!Array.isArray(state.segments)) { err(`${p}.segments`, '应为数组'); continue; }
+        state.segments.forEach((segment, i) => {
+          const q = `${p}.segments[${i}]`;
+          if (!checkKeys(segment, q, ['name', 'params', 'subject', 'aim', 'origin'])) return;
+          if (!['circle', 'half_orbit', 'push_in', 'pull_out', 'truck', 'crane', 'spiral', 'pan'].includes(segment.name)) err(`${q}.name`, '未知运镜');
+          vec3(segment.aim, `${q}.aim`);
+          if (Array.isArray(segment.subject)) vec3(segment.subject, `${q}.subject`); else str(segment.subject, `${q}.subject`);
+          if (checkKeys(segment.origin, `${q}.origin`, ['position', 'rot', 'roll', 'time'])) {
+            vec3(segment.origin.position, `${q}.origin.position`); vec3(segment.origin.rot, `${q}.origin.rot`);
+            num(segment.origin.roll, `${q}.origin.roll`); num(segment.origin.time, `${q}.origin.time`, { min: 0 });
+          }
+          if (checkKeys(segment.params, `${q}.params`, ['duration'], ['amount', 'sweep', 'rise', 'dir', 'minSubjectDist'])) {
+            for (const k of ['duration', 'amount', 'sweep', 'rise', 'minSubjectDist']) num(segment.params[k], `${q}.params.${k}`, { gt: 0 });
+            if (segment.params.dir != null && !['ccw', 'cw', 'left', 'right', 'up', 'down'].includes(segment.params.dir)) err(`${q}.params.dir`, '无效方向');
+          }
+        });
+      }
+    }
     if (m.editorView != null && checkKeys(m.editorView, 'meta.editorView', ['pos', 'target'], ['fov'])) {
       vec3(m.editorView.pos, 'meta.editorView.pos');
       vec3(m.editorView.target, 'meta.editorView.target');
@@ -235,7 +262,7 @@ export function validate(doc) {
     const p = `entities[${i}]`;
     if (!isObj(e)) { err(p, `应为对象，实际为 ${fmt(e)}`); return; }
     if (!ENTITY_TYPES.includes(e.type)) { err(`${p}.type`, `未知实体类型 ${fmt(e.type)}（可选 ${ENTITY_TYPES.join(' / ')}）`); return; }
-    checkKeys(e, p, ENTITY_KEYS[e.type]);
+    checkKeys(e, p, ENTITY_KEYS[e.type], e.type === 'character' ? ['trailColor'] : []);
     nonEmpty(e.id, `${p}.id`);
     str(e.name, `${p}.name`);
     bool(e.visible, `${p}.visible`);
@@ -246,6 +273,7 @@ export function validate(doc) {
     if (e.type === 'character') {
       if (e.body !== undefined && !(isStr(e.body) && e.body in BODY_TYPES)) err(`${p}.body`, `未知体型 ${fmt(e.body)}（可选 ${Object.keys(BODY_TYPES).join(' / ')}）`);
       hex(e.color, `${p}.color`);
+      hex(e.trailColor, `${p}.trailColor`);
       if (checkKeys(e.pose, `${p}.pose`, ['preset', 'values'])) {
         const { preset, values } = e.pose;
         if (preset != null && !(isStr(preset) && preset in POSE_PRESET_MAP)) {
@@ -431,6 +459,32 @@ export function validate(doc) {
     oneOf(pa.speed, `${p}.speed`, PATH_SPEEDS, '速度曲线');
     oneOf(pa.orient, `${p}.orient`, PATH_ORIENTS, '朝向方式');
     checkStops(pa, p);
+    if (pa.timedSegments !== undefined) {
+      if (!Array.isArray(pa.timedSegments) || !pa.timedSegments.length) err(`${p}.timedSegments`, '应为非空分段数组');
+      else {
+        if (pa.stops?.length || pa.stopTimes?.length) err(`${p}.timedSegments`, '不能与 stops 同时使用');
+        let lastPoint = 0, lastEnd = 0;
+        pa.timedSegments.forEach((s, j) => {
+          const q = `${p}.timedSegments[${j}]`;
+          if (!checkKeys(s, q, ['from', 'to', 'start', 'end'])) return;
+          if (s.from !== lastPoint || !Number.isInteger(s.to) || s.to <= s.from || s.to >= pa.points?.length) err(q, '顶点区间应连续、递增并覆盖路径');
+          if (!isNum(s.start) || !isNum(s.end) || s.start < lastEnd || s.end <= s.start || s.end > pa.duration) err(q, '时段应递增且位于路径时长内');
+          lastPoint = s.to; lastEnd = s.end;
+        });
+        if (lastPoint !== pa.points?.length - 1) err(`${p}.timedSegments`, '最后一段须到达终点');
+      }
+    }
+    if (pa.waypointTimes !== undefined) {
+      const times = pa.waypointTimes;
+      if (pa.closed || pa.timedSegments || pa.stops?.length) err(`${p}.waypointTimes`, '仅开放、连续路径可设置节点时间');
+      if (!Array.isArray(times) || times.length !== pa.points?.length) err(`${p}.waypointTimes`, '应为与路径顶点等长的时刻数组');
+      else {
+        times.forEach((value, j) => {
+          if (!isNum(value) || (j === 0 ? value !== 0 : value <= times[j - 1]) || value > pa.duration) err(`${p}.waypointTimes[${j}]`, '应从 0 开始并严格递增，且不超过路径时长');
+        });
+        if (times.at(-1) !== pa.duration) err(`${p}.waypointTimes`, '末时刻应等于路径时长');
+      }
+    }
   });
 
   arr(doc.constraints, 'constraints');

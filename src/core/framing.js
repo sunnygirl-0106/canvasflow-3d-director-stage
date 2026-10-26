@@ -12,10 +12,10 @@ export const FRAMING = Object.freeze({
   minimumDistance: 1.5,
 });
 
-/** 新场景的导演观察视角独立校准；拍摄机位保持原构图。 */
+/** 从拍摄机位后侧观察，让人物和摄影机同时入画；拍摄机位保持原构图。 */
 export function startupFraming() {
   return {
-    director: { position: new THREE.Vector3(0, 2.2, 7.5), target: new THREE.Vector3(0, 0.45, 0), fov: 50 },
+    director: { position: new THREE.Vector3(2, 3.2, 13), target: new THREE.Vector3(0, 0.8, 3), fov: 50 },
     shot: { position: new THREE.Vector3(0, 2.2, 10), target: new THREE.Vector3(0, 1.2, 0), fov: 50 },
   };
 }

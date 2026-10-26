@@ -98,8 +98,16 @@ export function pathLength(points, closed = false, stops = null, interpolation) 
  * - stops 为空 → 两个字段都删掉（没有停顿的路径与旧文档逐字段相同）。
  * @param {object|null} old 改动前的路径（新建时为 null） @param {object} next 合并后的路径 @param {object} patch
  */
-export function fitStops(old, next, patch = {}) {
+export function fitStops(old, next, patch = {}, roundTime = round4) {
   const out = { ...next };
+  if (old?.waypointTimes && patch.points?.length !== undefined && patch.points.length !== old.points.length && !patch.waypointTimes) delete out.waypointTimes;
+  else if (old?.waypointTimes && next.duration !== old.duration && !patch.waypointTimes && out.waypointTimes) {
+    out.waypointTimes = out.waypointTimes.map(t => roundTime(t * next.duration / old.duration));
+  }
+  if (old?.timedSegments && patch.points?.length !== undefined && patch.points.length !== old.points.length && !patch.timedSegments) delete out.timedSegments;
+  else if (old?.timedSegments && next.duration !== old.duration && !patch.timedSegments && out.timedSegments) {
+    out.timedSegments = out.timedSegments.map(s => ({ ...s, start: roundTime(s.start * next.duration / old.duration), end: roundTime(s.end * next.duration / old.duration) }));
+  }
   let stops = 'stops' in patch ? patch.stops : out.stops;
   let times = 'stopTimes' in patch ? patch.stopTimes : out.stopTimes;
   delete out.stops;
@@ -117,7 +125,7 @@ export function fitStops(old, next, patch = {}) {
   }
 
   if (times?.length && old && !('stopTimes' in patch) && out.duration !== old.duration) {
-    times = times.map((t) => round4(t * out.duration / old.duration));
+    times = times.map((t) => roundTime(t * out.duration / old.duration));
   }
   if (times) {
     const validTimes = times.length === stops.length && times.every((t, index) => (

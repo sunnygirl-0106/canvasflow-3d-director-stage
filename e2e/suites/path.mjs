@@ -152,7 +152,7 @@ export async function run() {
     const selectedPaths = d2.paths.filter(p => a.selectedIds.has(p.target)).length;
     return { eq: strip(d1) === strip(d2), paths: d2.paths.length, items: a.pathOverlay.itemCount, selectedPaths, visible: a.pathOverlay.visible };
   });
-  ok('验收11 含手绘路径的文档 导出 → 导入 → 导出 ≡；导入后立即显示选中对象的路径', rt.eq && rt.paths === 4 && rt.selectedPaths > 0 && rt.items === rt.selectedPaths && rt.visible, JSON.stringify(rt));
+  ok('验收11 含手绘路径的文档 导出 → 导入 → 导出 ≡；导演视角显示全部彩色路径', rt.eq && rt.paths === 4 && rt.selectedPaths > 0 && rt.items === rt.paths && rt.visible, JSON.stringify(rt));
 
   // ---- 5 Explicitly enter editing before dragging existing vertices (round 4). ----
   await pickInOutliner(ids.An);

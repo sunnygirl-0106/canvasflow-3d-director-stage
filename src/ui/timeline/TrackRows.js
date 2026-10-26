@@ -3,6 +3,7 @@ import { openPathMenu } from '../pathMenu.js';
 import { el, toast, toastError } from '../../util/dom.js';
 import { icon } from '../icons.js';
 import { toggleKey, propState, hitTime } from './animState.js';
+import { objectAnimationRange } from '../../anim/objectAnimation.js';
 import { toggleStop } from '../../anim/pathGen.js';
 
 /** 轨道行名（词汇表 → 中文）。 */
@@ -86,13 +87,16 @@ export class TrackRows {
       this.panel.rebuild();
     });
     const pathRow = rows.find(r => r.kind === 'path');
+    const objectBar = ent.type !== 'camera';
+    const range = objectBar ? objectAnimationRange(this.panel.app.timeline.view(), ent.id) : null;
+    const removePath = !objectBar && pathRow;
     const remove = el('button', {
-      class: 'tl-row-delete', title: pathRow ? '删除轨迹' : '删除动画',
-      'aria-label': `删除${ent.name}的${pathRow ? '轨迹' : '动画'}`, disabled: !rows.some(r => r.kind !== 'property') || undefined,
+      class: 'tl-row-delete', title: removePath ? '删除轨迹' : '删除对象动画',
+      'aria-label': `删除${ent.name}的${removePath ? '轨迹' : '对象动画'}`, disabled: !rows.some(r => r.kind !== 'property') || undefined,
       html: icon('trash', 13, 1.5), onclick: (e) => {
         e.stopPropagation();
         try {
-          if (pathRow) this.panel.app.timeline.removePath(pathRow.data.id);
+          if (removePath) this.panel.app.timeline.removePath(pathRow.data.id);
           else this.panel.removeAllAnimation(ent.id);
         } catch (err) { toastError(err); }
       },
@@ -113,13 +117,20 @@ export class TrackRows {
     const times = new Set();
     for (const r of rows) if (r.kind === 'track') for (const k of r.data.keys) times.add(k.t);
     const lane = el('div', { class: 'tl-lane' }, [...times].map((t) => vars(el('i', { class: 'tl-sum' }), { '--t': t })));
-    if (pathRow) {
+    if (objectBar) {
+      if (range) {
+        const bar = this._bar('object', ent.id, range.start, range.end, range.end === range.start
+          ? `对象动画 · ${range.start.toFixed(2)} s（单点）` : `对象动画 · ${(range.end - range.start).toFixed(1)} s`);
+        bar.classList.add('tl-path-clip');
+        lane.append(bar);
+      } else lane.append(el('span', { class: 'tl-path-status', text: '无动画' }));
+    } else if (pathRow) {
       const p = pathRow.data;
-      const bar = this._bar('path', p.id, p.start, p.start + p.duration, `轨迹 · ${p.duration.toFixed(1)} s`);
+      const bar = this._bar('path', p.id, p.start, p.start + p.duration, `位置路径 · ${p.duration.toFixed(1)} s`);
       bar.classList.add('tl-path-clip');
       lane.append(bar);
     } else lane.append(el('span', { class: 'tl-path-status', text: '无轨迹' }));
-    return el('div', { class: 'tl-row tl-head' + (pathRow ? ' has-path' : ' no-path') + (ent.type === 'camera' ? ' camera' : ''), 'data-ent': ent.id, 'data-path': pathRow?.data.id }, [name, lane]);
+    return el('div', { class: 'tl-row tl-head' + ((objectBar ? range : pathRow) ? ' has-path' : ' no-path') + (ent.type === 'camera' ? ' camera' : ''), 'data-ent': ent.id, 'data-path': objectBar ? undefined : pathRow?.data.id }, [name, lane]);
   }
 
   _row(ent, { kind, data }) {
@@ -156,10 +167,8 @@ export class TrackRows {
 
   _pathLane(ent, path) {
     const end = path.start + path.duration;
-    const content = vars(el('button', {
-        class: 'tl-path-line', title: '打开轨迹编辑与区间设置',
-        onclick: () => this.panel.app.emit('inspect', { id: ent.id, section: 'path' }),
-      }), { '--t0': path.start, '--t1': end });
+    const content = this._bar('path', path.id, path.start, end, `位置路径 · ${path.duration.toFixed(1)} s`);
+    content.ondblclick = () => this.panel.app.emit('inspect', { id: ent.id, section: 'path' });
     const model = this._pathModel(path, ent);
     const count = path.points.length + (path.closed ? 1 : 0);
     const nodes = Array.from({ length: count }, (_, i) => {
@@ -193,6 +202,10 @@ export class TrackRows {
   _rowControls(ent, kind, data) {
     if (data.property) return this._propertyControls(ent, data.property);
     if (kind === 'path') return [
+      el('button', { class: 'tl-row-delete', title: '删除位置路径', html: icon('trash', 13, 1.5), onclick: () => {
+        try { this.panel.app.timeline.removePath(data.id); } catch (err) { toastError(err); }
+      } }),
+      el('button', { class: 'tl-addkey', title: '编辑位置路径', html: icon('path', 14), onclick: () => this.panel.app.emit('inspect', { id: ent.id, section: 'path' }) }),
       ...this._navigation(ent.id, 'path', data.id),
       el('span', { class: 'tl-value', 'data-value-ent': ent.id, 'data-property': 'pos' }),
     ];
@@ -328,12 +341,12 @@ export class TrackRows {
   /** 区间条：起止两颗菱形 + 中间填充。 */
   _bar(kind, id, t0, t1, text, { openStart = false, openEnd = false } = {}) {
     return vars(el('div', {
-      class: `tl-bar tl-bar-${kind}`,
-      'data-kind': kind, 'data-id': id, title: kind === 'path' ? '路径动画：拖动条形调整开始时间，拖动两端调整起止时间' : '约束生效范围：拖动调整注视或跟随的时间范围',
+      class: `tl-bar tl-bar-${kind}` + (kind === 'object' && t0 === t1 ? ' tl-bar-point' : ''),
+      'data-kind': kind, 'data-id': id, title: kind === 'object' ? (t0 === t1 ? '对象动画单点：整体移动动画' : '对象动画总时长：拖中间整体移动动画，拖两端整体调整时长') : kind === 'path' ? '位置路径时长：拖动独立调整路径，双击打开路径编辑' : '约束生效范围：拖动调整注视或跟随的时间范围',
     }, [
-      el('i', { class: 'tl-bar-end start' + (openStart ? ' open' : ''), 'data-edge': 'start', title: '拖动调整开始时间' }),
+      ...(kind === 'object' && t0 === t1 ? [] : [el('i', { class: 'tl-bar-end start' + (openStart ? ' open' : ''), 'data-edge': 'start', title: kind === 'object' ? '整体调整时长（固定结束）' : '拖动调整开始时间' })]),
       el('span', { class: 'tl-bar-text', text }),
-      el('i', { class: 'tl-bar-end end' + (openEnd ? ' open' : ''), 'data-edge': 'end', title: '拖动调整结束时间' }),
+      ...(kind === 'object' && t0 === t1 ? [] : [el('i', { class: 'tl-bar-end end' + (openEnd ? ' open' : ''), 'data-edge': 'end', title: kind === 'object' ? '整体调整时长（固定开始）' : '拖动调整结束时间' })]),
     ]), { '--t0': t0, '--t1': t1 });
   }
 }

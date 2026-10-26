@@ -14,7 +14,7 @@ export class CameraRig {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
     this.controls.target.set(0, 0.95, 0);
-    this.controls.minDistance = 1.5;
+    this.controls.minDistance = 0.15;
     this.controls.maxDistance = 40;
     this.controls.maxPolarAngle = Math.PI / 2 - 0.02; // 不穿到地面以下
     this.controls.update();

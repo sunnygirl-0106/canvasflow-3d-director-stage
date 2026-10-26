@@ -41,6 +41,7 @@ export async function run() {
         }),
         yaw: direction.x, pitch: Math.atan2(direction.y, direction.z) * 180 / Math.PI,
         director: camera.position.toArray(), target: a.rig.controls.target.toArray(),
+        body: a.cameras[0].body.getWorldPosition(new V()).project(camera).toArray(),
         shot: a.cameras[0].toJSON(), selected: a.selectedId === characters[0].id,
         gizmo: a.gizmo.visible, collapsed: window.__timelinePanel.collapsed, playing: a.playback.playing,
       };
@@ -50,11 +51,12 @@ export async function run() {
       && state.actors[0].body === 'male' && state.actors[1].body === 'female'
       && state.actors[0].color === '#57a2ff' && state.actors[1].color === '#ff6b7a'
       && state.actors[0].pos.join() === '-0.7,0,0' && state.actors[1].pos.join() === '0.7,0,0');
-    ok(`${width}×${height} 导演视角独立校准：人物23–25%、13.13°下俯，拍摄参数不变`,
-      state.actors.every(e => e.height > .22 && e.height < .26 && e.feet > .55 && e.feet < .58)
-      && Math.abs(state.yaw) < 1e-8 && state.pitch > 13.1 && state.pitch < 13.2
-      && state.director.every((v, i) => Math.abs(v - [0, 2.2, 7.5][i]) < 1e-6)
-      && state.target.join() === '0,0.45,0' && !state.gizmo
+    ok(`${width}×${height} 导演视角同时展示人物和摄像机，拍摄参数不变`,
+      state.actors.every(e => e.height > .12 && e.height < .16 && e.feet > .48 && e.feet < .54)
+      && state.yaw > 0 && state.pitch > 13 && state.pitch < 14
+      && Math.abs(state.body[0]) < .9 && Math.abs(state.body[1]) < .9 && state.body[2] > -1 && state.body[2] < 1
+      && state.director.every((v, i) => Math.abs(v - [2, 3.2, 13][i]) < 1e-6)
+      && state.target.join() === '0,0.8,3' && !state.gizmo
       && state.shot.lookAt.join() === '0,1.2,0'
       && state.shot.transform.pos.join() === '0,2.2,10' && state.shot.fov === 50 && state.selected && state.collapsed && !state.playing,
       JSON.stringify(state.actors.map(e => ({ height: e.height, feet: e.feet }))));

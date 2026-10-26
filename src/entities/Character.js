@@ -157,6 +157,7 @@ export class Character extends Entity {
     return {
       type: 'character', id: this.id, name: this.name, body: this.body,
       color: hexColor(this.color), visible: this.root.visible,
+      ...(this.trailColor ? { trailColor: this.trailColor } : {}),
       transform: this.transformJSON(base || this.root),
       pose: { preset: this.currentPreset, values },
       parent,
@@ -167,6 +168,7 @@ export class Character extends Entity {
     const c = await Character.load(json.name, bodySpec(json.body), json.id);
     c.applyTransform(json.transform);
     c.setColor(json.color);
+    c.trailColor = json.trailColor;
     Object.assign(c.values, Pose.fromJSON(json.pose).values); // values 是 pose.values 的别名，原地写入
     c.currentPreset = json.pose.preset;
     c.applyPose();
@@ -180,6 +182,7 @@ export class Character extends Entity {
     this.name = json.name;
     this.applyTransform(json.transform);
     this.setColor(json.color);
+    this.trailColor = json.trailColor;
     Object.assign(this.values, Pose.fromJSON(json.pose).values); // 补齐全部关节，等同新建
     this.currentPreset = json.pose.preset;
     this.autoGround = true;

@@ -14,7 +14,7 @@ export async function run() {
     other.root.position.x = -2; a.edited(other);
     const p = a.timeline.addPath({ target: actor.id, points: [[0, 0, 0], [2, 0, -1], [3, 0, -4]], start: 0, duration: 5, speed: 'linear', orient: 'tangent' });
     a.addCamera('front_mid');
-    a.select(actor.id);
+    a.select(actor.id, { user: true });
     a.rig.controls.target.set(1, 0, -1.5);
     a.stage.camera.position.set(5, 7, 9); a.rig.controls.update();
     a.history.reset();
@@ -35,7 +35,7 @@ export async function run() {
   }, ids.path);
   await settle();
   let s = await state();
-  ok('选人物只显示轨迹线，没有箭头 / 控制点 / 编辑栏', !s.selected && s.handles === 0 && s.gizmo && !s.bar);
+  ok('选人物只显示轨迹线，没有控制点 / 编辑栏', !s.selected && s.handles === 0 && s.gizmo && !s.bar);
   await page.screenshot({ path: `${out}/01-entity.png` });
   const point = await linePoint();
   await page.mouse.click(...await scr(point)); await settle();
@@ -75,14 +75,14 @@ export async function run() {
   await page.click('.path-edit-done'); await settle();
   ok('完成按钮退出编辑', !(await state()).selected);
   await page.mouse.click(...await scr(await linePoint())); await settle();
-  await page.evaluate(id => window.__app.select(id), ids.other); await settle();
+  await page.evaluate(id => window.__app.select(id, { user: true }), ids.other); await settle();
   ok('切换人物清除原轨迹编辑状态', !(await state()).selected && !(await state()).handles);
-  await page.evaluate(id => window.__app.select(id), ids.actor); await settle();
+  await page.evaluate(id => window.__app.select(id, { user: true }), ids.actor); await settle();
   await page.mouse.click(...await scr(await linePoint())); await settle();
   await page.evaluate(() => window.__app.setCameraView(true)); await settle();
   ok('机位视角隐藏编辑栏', !(await state()).bar);
   await page.evaluate(() => window.__app.setCameraView(false)); await settle();
-  await page.evaluate(id => window.__app.select(id), ids.actor); await settle();
+  await page.evaluate(id => window.__app.select(id, { user: true }), ids.actor); await settle();
   await page.mouse.click(...await scr(await linePoint())); await settle();
   await page.click('.path-edit-delete'); await settle();
   s = await state();

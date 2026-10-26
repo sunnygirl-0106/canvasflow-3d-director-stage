@@ -141,11 +141,12 @@ class Polyline {
 export class Path {
   /** @param {object} json 文档 Path @param {{ramp?:number, uniform?:boolean}} [opts] uniform：人物匀速；显式停顿仍按段处理。 */
   constructor(json, { ramp = 0, uniform = false } = {}) {
-    this.json = uniform ? { ...json, speed: 'linear' } : json;
-    this.ramp = uniform && !json.stops?.length ? 0 : ramp;
+    this.json = uniform && !json.timedSegments?.length ? { ...json, speed: 'linear' } : json;
+    this.ramp = uniform && !json.stops?.length && !json.timedSegments?.length ? 0 : ramp;
     const geometry = (points, closed) => json.interpolation === 'polyline' || (!closed && points.length === 2)
       ? new Polyline(points, closed) : new Curve(points, closed);
-    const stops = json.stops?.length ? json.stops : null;
+    const timed = json.timedSegments;
+    const stops = timed?.length ? timed.slice(0, -1).map(s => s.to) : json.stops?.length ? json.stops : null;
     if (!stops) {
       this.curves = [geometry(json.points, json.closed)];
       this._vs = [0];
@@ -160,6 +161,15 @@ export class Path {
     this._S = [0];
     for (const c of this.curves) this._S.push(this._S[this._S.length - 1] + c.length);
     this.length = this._S[this._S.length - 1];
+    this.timedSegments = timed || null;
+    this.waypointTimes = json.waypointTimes || null;
+    if (this.waypointTimes) {
+      const T = this.waypointTimes;
+      this._waypointS = T.map((_, i) => this.vertexDistance(i));
+      const slopes = T.slice(0, -1).map((v, i) => (this._waypointS[i + 1] - this._waypointS[i]) / (T[i + 1] - v));
+      this._waypointV = T.map((_, i) => i === 0 || i === T.length - 1 ? 0
+        : slopes[i - 1] * slopes[i] <= 0 ? 0 : 2 * slopes[i - 1] * slopes[i] / (slopes[i - 1] + slopes[i]));
+    }
     const D = json.duration;
     this._T = stops
       ? [0, ...(json.stopTimes?.length === stops.length ? json.stopTimes : this._S.slice(1, -1).map((s) => (this.length > 0 ? D * s / this.length : 0))), D]
@@ -226,6 +236,7 @@ export class Path {
 
   /** t 时刻的进度 ∈ [0,1]（已走弧长 / 全长）。 */
   progress(t) {
+    if (this.waypointTimes) return this.length > 0 ? this.distanceAt(t) / this.length : 0;
     if (this.curves.length === 1 && !this.ramp) {
       const { start, duration, speed } = this.json;
       return EASE[speed](clamp01((t - start) / duration));
@@ -244,6 +255,16 @@ export class Path {
 
   /** t 时刻已走的路程（米）。 */
   distanceAt(t) {
+    if (this.waypointTimes) return this._waypointMotion(t)[0];
+    if (this.timedSegments) {
+      const x = t - this.json.start;
+      for (let k = 0; k < this.timedSegments.length; k++) {
+        const seg = this.timedSegments[k];
+        if (x < seg.start) return this._S[k];
+        if (x <= seg.end) return this._S[k] + profile(x - seg.start, seg.end - seg.start, this._S[k + 1] - this._S[k], this.json.speed, this.ramp)[0];
+      }
+      return this.length;
+    }
     if (this.curves.length === 1 && !this.ramp) return this.progress(t) * this.length;
     const [k, x, dt] = this._segTime(t);
     const ease = this.curves.length === 1 ? this.json.speed : 'smooth';
@@ -252,6 +273,14 @@ export class Path {
 
   /** t 时刻的瞬时速度（米/秒）：弧长对时间的导数（解析式；区间外为 0）。 */
   speedAt(t) {
+    if (this.waypointTimes) return this._waypointMotion(t)[1];
+    if (this.timedSegments) {
+      const x = t - this.json.start;
+      const k = this.timedSegments.findIndex(s => x > s.start && x < s.end);
+      if (k < 0) return 0;
+      const seg = this.timedSegments[k];
+      return profile(x - seg.start, seg.end - seg.start, this._S[k + 1] - this._S[k], this.json.speed, this.ramp)[1];
+    }
     const { start, duration, speed } = this.json;
     const x = (t - start) / duration;
     if (x < 0 || x > 1) return 0;
@@ -259,5 +288,22 @@ export class Path {
     const [k, u, dt] = this._segTime(t);
     const ease = this.curves.length === 1 ? speed : 'smooth';
     return dt > 0 ? profile(clamp01(u) * dt, dt, this._S[k + 1] - this._S[k], ease, this.ramp)[1] : 0;
+  }
+
+  /** 指定经过节点的时间，节点间使用单调三次 Hermite；内部节点速度连续且不停车。 */
+  _waypointMotion(t) {
+    const T = this.waypointTimes, x = t - this.json.start;
+    if (x <= T[0]) return [0, 0];
+    if (x >= T.at(-1)) return [this.length, 0];
+    const S = this._waypointS, velocity = this._waypointV;
+    let i = 0;
+    while (i < T.length - 2 && x > T[i + 1]) i++;
+    const dt = T[i + 1] - T[i], u = (x - T[i]) / dt, a = S[i], b = S[i + 1];
+    const h00 = 2 * u ** 3 - 3 * u ** 2 + 1, h10 = u ** 3 - 2 * u ** 2 + u;
+    const h01 = -2 * u ** 3 + 3 * u ** 2, h11 = u ** 3 - u ** 2;
+    const distance = h00 * a + h10 * dt * velocity[i] + h01 * b + h11 * dt * velocity[i + 1];
+    const speed = ((6 * u ** 2 - 6 * u) * a + (3 * u ** 2 - 4 * u + 1) * dt * velocity[i]
+      + (-6 * u ** 2 + 6 * u) * b + (3 * u ** 2 - 2 * u) * dt * velocity[i + 1]) / dt;
+    return [distance, Math.max(0, speed)];
   }
 }

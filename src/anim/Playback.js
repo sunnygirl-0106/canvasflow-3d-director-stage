@@ -44,7 +44,8 @@ export class Playback extends Emitter {
   pause() {
     if (!this.playing) return;
     const prev = this.state;
-    this.update(); // 先把时间推进到此刻
+    this.update(); // 先把时间推进到此刻；自然结束已发送 state，不重复退出。
+    if (!this.playing) return;
     this.playing = false;
     this._setState(prev);
   }

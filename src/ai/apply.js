@@ -96,6 +96,7 @@ export function compileOps(base, ops, { mode = 'modify', charSeq = 0 } = {}) {
 
   const clearAll = () => {
     doc.entities = [];
+    delete doc.meta.cameraMoves;
     doc.paths = [];
     doc.constraints = [];
     doc.timeline = { ...clone(DEFAULT_TIMELINE), tracks: [] };
@@ -291,7 +292,7 @@ export async function applyOps(app, ops, { mode = 'modify', expectedRevision = a
   const check = validate(r.doc);
   if (!check.ok) return { ok: false, applied: 0, renames: r.renames, warnings: r.warnings, errors: check.errors.map((e) => `场景文档：${e}`) };
   try {
-    await app.loadDocument(r.doc, { applyView: false, pruneShots: true, expectedRevision, signal });
+    await app.loadDocument(r.doc, { applyView: false, pruneShots: true, newScene: mode !== 'modify', expectedRevision, signal });
   } catch (err) {
     if (err?.name === 'AbortError' || err?.name === 'StaleRequestError') throw err;
     return { ok: false, applied: 0, renames: r.renames, warnings: r.warnings, errors: [`加载失败：${err?.message || err}`] };

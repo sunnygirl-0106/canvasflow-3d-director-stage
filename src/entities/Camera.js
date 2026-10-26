@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Entity } from './Entity.js';
 import { round6, xyz } from '../util/math.js';
 import { CAMERA_FOV } from '../config.js';
@@ -8,18 +9,26 @@ const FRUSTUM_COLOR = 0x8297a6; // 低强调蓝灰视锥线
 const VIZ_FAR = 4; // 无有效前向目标时的有限缺省长度
 const SIDE_STEPS = 32; // 分段绘制穿过观察相机近平面的视锥长边
 
-// 紧凑数字摄影机：倒角机身、镜筒、遮光斗和提手。镜头朝 -Z。
-// 保持真实道具尺度；浅灰外壳配中灰结构，保证深色画布上的辨识度。
+// 紧凑电影摄影机，镜头朝 -Z；细节保持米制尺度，所有附件随 body 一起显隐。
 function buildCameraBody() {
   const g = new THREE.Group();
-  // 少量同色自发光为背光面提供亮度下限，避免旋转视角后再次融入背景。
+  // 背光面保留少量亮度，使深色工业材质在导演台背景上仍可辨识。
   const material = (color, roughness, metalness) => new THREE.MeshStandardMaterial({
     color, roughness, metalness, fog: false, emissive: color, emissiveIntensity: 0.12,
   });
-  const shell = material(0xaab7c5, 0.7, 0.12);
-  const rubber = material(0x596978, 0.86, 0.04);
-  const metal = material(0xd0dbe5, 0.45, 0.32);
-  const glass = material(0x38677a, 0.18, 0.3);
+  const shell = material(0x687786, 0.48, 0.35);
+  const rubber = material(0x242d37, 0.88, 0.04);
+  const metal = material(0xb8c7d5, 0.3, 0.65);
+  const recess = material(0x101923, 0.72, 0.12);
+  const brass = material(0xb49a60, 0.33, 0.6);
+  const red = material(0xc74a40, 0.42, 0.2);
+  const glass = new THREE.MeshPhysicalMaterial({
+    color: 0x123449, metalness: 0.35, roughness: 0.1,
+    clearcoat: 1, clearcoatRoughness: 0.06,
+    emissive: 0x123049, emissiveIntensity: 0.22, fog: false,
+  });
+  const display = material(0x183744, 0.28, 0.15);
+  const screenInk = new THREE.MeshBasicMaterial({ color: 0x84b4ba, fog: false });
   const add = (geometry, mat, x, y, z) => {
     const mesh = new THREE.Mesh(geometry, mat);
     mesh.position.set(x, y, z);
@@ -27,40 +36,121 @@ function buildCameraBody() {
     return mesh;
   };
   const box = (w, h, d, mat, x, y, z, radius = 0.003) =>
-    add(new RoundedBoxGeometry(w, h, d, 2, radius), mat, x, y, z);
+    add(radius <= 0.001 ? new THREE.BoxGeometry(w, h, d) : new RoundedBoxGeometry(w, h, d, 2, radius), mat, x, y, z);
   const barrel = (radius, depth, mat, z) => {
-    const mesh = add(new THREE.CylinderGeometry(radius, radius, depth, 24), mat, 0, 0, z);
+    const mesh = add(new THREE.CylinderGeometry(radius, radius, depth, 48), mat, 0, 0, z);
     mesh.rotation.x = Math.PI / 2;
     return mesh;
   };
+  const ring = (radius, tube, mat, z) =>
+    add(new THREE.TorusGeometry(radius, tube, 8, 48), mat, 0, 0, z);
 
+  // 分体外壳、前端卡口面板、背部电池及锁扣。
   box(0.17, 0.125, 0.19, shell, 0, 0, 0.015, 0.009);
-  box(0.145, 0.105, 0.044, rubber, 0, 0, 0.122, 0.006); // 电池
-  box(0.009, 0.078, 0.114, rubber, 0.086, -0.003, 0.025);
-  box(0.009, 0.062, 0.085, metal, -0.086, 0, 0.023);
-  // 提手保留中间镂空，缩小后仍能读出摄影机轮廓。
-  box(0.025, 0.025, 0.018, metal, 0, 0.074, -0.038);
-  box(0.025, 0.025, 0.018, metal, 0, 0.074, 0.064);
-  box(0.032, 0.018, 0.135, metal, 0, 0.094, 0.013);
-  box(0.11, 0.016, 0.11, metal, 0, -0.069, 0.012); // 快装底座
+  box(0.157, 0.112, 0.012, metal, 0, 0, -0.083, 0.006);
+  box(0.145, 0.1, 0.008, recess, 0, 0, 0.113);
+  box(0.134, 0.106, 0.048, rubber, 0, 0, 0.138, 0.007);
+  box(0.112, 0.078, 0.004, shell, 0, 0, 0.163);
+  box(0.03, 0.012, 0.009, metal, 0, 0.05, 0.165);
+  for (let i = 0; i < 4; i++) box(0.008, 0.003, 0.002, i < 3 ? screenInk : recess, -0.017 + i * 0.011, 0.022, 0.166, 0.0005);
 
-  barrel(0.047, 0.095, rubber, -0.123);
-  barrel(0.049, 0.012, metal, -0.098); // 镜头卡口
-  barrel(0.051, 0.019, shell, -0.143); // 对焦环
-  barrel(0.053, 0.014, rubber, -0.174);
-  barrel(0.041, 0.004, glass, -0.184);
+  // 两侧嵌入面板、散热百叶、固定螺钉与录制按钮。
+  for (const side of [-1, 1]) {
+    box(0.006, 0.086, 0.13, rubber, side * 0.086, -0.003, 0.014);
+    box(0.003, 0.063, 0.105, shell, side * 0.09, -0.002, 0.014);
+    for (let i = 0; i < 7; i++) box(0.002, 0.027, 0.004, recess, side * 0.092, 0.006, -0.022 + i * 0.01, 0.0008);
+    for (const y of [-0.035, 0.034]) for (const z of [-0.04, 0.069]) {
+      const screw = add(new THREE.CylinderGeometry(0.0032, 0.0032, 0.002, 8), metal, side * 0.091, y, z);
+      screw.rotation.z = Math.PI / 2;
+      box(0.001, 0.0008, 0.0036, recess, side * 0.0925, y, z, 0.0002);
+    }
+  }
+  const record = add(new THREE.CylinderGeometry(0.008, 0.008, 0.004, 24), red, 0.094, -0.022, -0.021);
+  record.rotation.z = Math.PI / 2;
+  box(0.002, 0.005, 0.025, metal, 0.092, -0.023, 0.025, 0.001);
 
-  // 遮光斗使用镂空框，前后观察都能看见镜片。
+  // 镂空提手与橡胶握持区；底部快装板和双导轨。
+  for (const z of [-0.04, 0.066]) box(0.026, 0.031, 0.021, metal, 0, 0.077, z);
+  box(0.034, 0.019, 0.146, metal, 0, 0.101, 0.014);
+  box(0.038, 0.022, 0.082, rubber, 0, 0.103, 0.013);
+  for (let i = 0; i < 6; i++) box(0.039, 0.002, 0.003, shell, 0, 0.115, -0.018 + i * 0.012, 0.0008);
+  box(0.112, 0.017, 0.123, recess, 0, -0.071, 0.012);
+  box(0.125, 0.009, 0.143, metal, 0, -0.084, 0.005);
+  for (const x of [-0.043, 0.043]) {
+    const rod = barrel(0.005, 0.3, metal, -0.027);
+    rod.position.set(x, -0.093, -0.027);
+  }
+
+  // 多级镜筒、卡口金属环、双齿圈和距离刻度。
+  barrel(0.05, 0.016, recess, -0.094);
+  ring(0.048, 0.0025, metal, -0.101);
+  barrel(0.045, 0.091, rubber, -0.146);
+  for (const z of [-0.124, -0.165]) {
+    barrel(0.05, 0.019, recess, z);
+    for (let i = 0; i < 40; i++) {
+      const angle = i * Math.PI / 20;
+      const tooth = box(0.003, 0.004, 0.018, rubber, Math.sin(angle) * 0.05, Math.cos(angle) * 0.05, z, 0.0006);
+      tooth.rotation.z = -angle;
+    }
+    ring(0.048, 0.0012, metal, z + 0.011);
+  }
+  barrel(0.047, 0.013, shell, -0.143);
+  for (let i = -5; i <= 5; i++) {
+    const angle = i * Math.PI / 16;
+    const tick = box(0.0009, 0.001, i % 2 === 0 ? 0.007 : 0.004, metal,
+      Math.sin(angle) * 0.0475, Math.cos(angle) * 0.0475, -0.143, 0.0002);
+    tick.rotation.z = -angle;
+  }
+  barrel(0.052, 0.014, rubber, -0.188);
+  ring(0.048, 0.0016, brass, -0.194);
+  barrel(0.043, 0.004, recess, -0.197);
+  barrel(0.039, 0.003, glass, -0.2);
+  ring(0.0395, 0.001, metal, -0.202);
+  // 镀膜镜片使用浅弧面捕捉现有灯光，不依赖外部贴图或环境资源。
+  const lens = add(new THREE.SphereGeometry(0.039, 40, 20), glass, 0, 0, -0.202);
+  lens.scale.z = 0.09;
+
+  // 镂空遮光斗及向前伸出的遮光旗。
   const hood = new THREE.Shape();
-  hood.moveTo(-0.071, -0.05); hood.lineTo(0.071, -0.05);
-  hood.lineTo(0.071, 0.05); hood.lineTo(-0.071, 0.05); hood.closePath();
+  hood.moveTo(-0.074, -0.054); hood.lineTo(0.074, -0.054);
+  hood.lineTo(0.074, 0.054); hood.lineTo(-0.074, 0.054); hood.closePath();
   const aperture = new THREE.Path();
-  aperture.moveTo(-0.057, -0.038); aperture.lineTo(-0.057, 0.038);
-  aperture.lineTo(0.057, 0.038); aperture.lineTo(0.057, -0.038); aperture.closePath();
+  aperture.moveTo(-0.06, -0.042); aperture.lineTo(-0.06, 0.042);
+  aperture.lineTo(0.06, 0.042); aperture.lineTo(0.06, -0.042); aperture.closePath();
   hood.holes.push(aperture);
-  add(new THREE.ExtrudeGeometry(hood, { depth: 0.026, bevelEnabled: false, steps: 1 }), shell, 0, 0, -0.215);
-  box(0.15, 0.006, 0.046, shell, 0, 0.053, -0.204);
-  g.traverse((o) => { if (o.isMesh) o.castShadow = false; });
+  add(new THREE.ExtrudeGeometry(hood, { depth: 0.024, bevelEnabled: true, bevelThickness: 0.001, bevelSize: 0.001, bevelSegments: 1, steps: 1 }), rubber, 0, 0, -0.235);
+  const flag = box(0.157, 0.003, 0.062, shell, 0, 0.06, -0.242, 0.001);
+  flag.rotation.x = -0.16;
+  for (const x of [-0.077, 0.077]) box(0.004, 0.088, 0.03, shell, x, 0, -0.22, 0.001);
+
+  // 顶部监视器朝向操作者，带铰链、遮光边框与简单取景标记。
+  box(0.013, 0.025, 0.019, metal, 0.069, 0.081, 0.025);
+  box(0.049, 0.008, 0.019, metal, 0.084, 0.096, 0.025);
+  box(0.112, 0.073, 0.014, rubber, 0.093, 0.14, 0.025, 0.005);
+  box(0.1, 0.061, 0.002, metal, 0.093, 0.14, 0.033, 0.002);
+  box(0.093, 0.053, 0.002, display, 0.093, 0.14, 0.0345, 0.001);
+  for (const x of [-1, 1]) for (const y of [-1, 1]) {
+    box(0.012, 0.0007, 0.0005, screenInk, 0.093 + x * 0.031, 0.14 + y * 0.017, 0.036, 0.0001);
+    box(0.0007, 0.007, 0.0005, screenInk, 0.093 + x * 0.037, 0.14 + y * 0.014, 0.036, 0.0001);
+  }
+  box(0.006, 0.0007, 0.0005, screenInk, 0.093, 0.14, 0.036, 0.0001);
+  box(0.0007, 0.006, 0.0005, screenInk, 0.093, 0.14, 0.036, 0.0001);
+
+  // 静态零件按材质合并：齿纹、螺钉等细节不逐件增加 draw call。
+  const batches = new Map();
+  for (const mesh of g.children) {
+    mesh.updateMatrix();
+    const geometry = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+    geometry.applyMatrix4(mesh.matrix);
+    if (!batches.has(mesh.material)) batches.set(mesh.material, []);
+    batches.get(mesh.material).push(geometry);
+    mesh.geometry.dispose();
+  }
+  g.clear();
+  for (const [mat, geometries] of batches) {
+    g.add(new THREE.Mesh(mergeGeometries(geometries), mat));
+    geometries.forEach(geometry => geometry.dispose());
+  }
   return g;
 }
 
