@@ -57,7 +57,7 @@ export class PathOverlay {
     app.stage.viewport.appendChild(this.nameHint);
     app.stage.viewport.addEventListener('pointermove', e => {
       if (e.target !== app.stage.renderer.domElement || !this.group.visible) { this.nameHint.hidden = true; return; }
-      const hit = this.hitTest(e.clientX, e.clientY) || this._labelHit(e.clientX, e.clientY);
+      const hit = this.hitTest(e.clientX, e.clientY);
       if (this._hoverPathId !== hit?.pathId) { this._hoverPathId = hit?.pathId || null; this._recolor(); }
       const ent = hit && app.findEntity(hit.target);
       this.nameHint.hidden = !ent;
@@ -154,48 +154,7 @@ export class PathOverlay {
     this._updateItem(item, json);
     item.dot = this._screenMesh(this._discGeo, discMat(color, 'start'), DOT_PX);
     item.group.add(item.dot);
-    item.label = this._startLabel(ent?.name || '轨迹', color);
-    item.label.position.fromArray(this.points(json)[0]);
-    item.label.position.y += .06;
-    item.group.add(item.label);
     return item;
-  }
-
-  _startLabel(name, color) {
-    const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
-    const short = name.length > 13 ? name.slice(0, 12) + '…' : name;
-    ctx.font = '22px sans-serif';
-    canvas.width = Math.ceil(ctx.measureText(short).width + 42); canvas.height = 40;
-    ctx.fillStyle = 'rgba(22,25,34,.82)'; ctx.strokeStyle = 'rgba(220,220,245,.26)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(1, 1, canvas.width - 2, 38, 14); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
-    ctx.beginPath(); ctx.arc(16, 20, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ececf4'; ctx.font = '22px sans-serif'; ctx.textBaseline = 'middle'; ctx.fillText(short, 28, 21);
-    const texture = new THREE.CanvasTexture(canvas);
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: true, depthWrite: false, transparent: true }));
-    sprite.userData.width = canvas.width / 2;
-    sprite.center.set(.5, 0); sprite.renderOrder = 14;
-    sprite.onBeforeRender = (renderer, scene, camera) => {
-      sprite.parent.updateWorldMatrix(true, false);
-      const depth = Math.abs(sprite.getWorldPosition(_v).applyMatrix4(camera.matrixWorldInverse).z);
-      const unit = 2 * depth * Math.tan(camera.fov * Math.PI / 360) / renderer.getSize(_s).y / sprite.parent.getWorldScale(_w).y;
-      sprite.scale.set(canvas.width / 2 * unit, 20 * unit, 1);
-      sprite.updateMatrixWorld(true); sprite.modelViewMatrix.multiplyMatrices(camera.matrixWorldInverse, sprite.matrixWorld);
-    };
-    return sprite;
-  }
-
-  _labelHit(x, y) {
-    if (!this.group.visible || this.app.cameraView) return null;
-    const rect = this.app.stage.renderer.domElement.getBoundingClientRect();
-    for (const it of this._items) {
-      if (!it.group.visible || !it.label) continue;
-      const p = it.label.getWorldPosition(_v).project(this.app.getRenderCamera());
-      if (p.z < -1 || p.z > 1) continue;
-      const sx = rect.left + (p.x + 1) * rect.width / 2, sy = rect.top + (1 - p.y) * rect.height / 2;
-      if (Math.abs(x - sx) <= it.label.userData.width / 2 && y >= sy - 20 && y <= sy) return { pathId: it.json.id, target: it.json.target };
-    }
-    return null;
   }
 
   _syncParent(item) {
@@ -266,7 +225,6 @@ export class PathOverlay {
       item.edge.geometry.dispose(); item.edge.geometry = item.line.geometry.clone();
       item.edge.visible = item.selected;
     }
-    if (item.label) { item.label.position.fromArray(points[0]); item.label.position.y += .06; }
     this.update();
   }
 
