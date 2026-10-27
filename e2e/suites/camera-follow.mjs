@@ -23,10 +23,11 @@ export async function run() {
   const after = await pose();
   const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-5);
   ok('初次跟随静止角色：有场景旋转/缩放及角色转向时，位置和朝向不跳', near(before.pos, after.pos) && near(before.rot, after.rot), JSON.stringify({ before, after }));
-  ok('仅跟随时旋转输入可编辑，注视目标保持为空', await page.evaluate(() => {
+  ok('仅跟随时旋转输入可编辑，注视显示默认手动坐标且不创建注视约束', await page.evaluate(() => {
     const root = document.querySelector('#inspector');
     const rot = [...root.querySelectorAll('.field')].find(f => f.querySelector('label')?.textContent.startsWith('旋转'));
-    return !rot.querySelector('input').disabled && root.querySelector('[data-constraint-type="lookAt"] select').value === '';
+    return !rot.querySelector('input').disabled && root.querySelector('[data-constraint-type="lookAt"] select').value === '__point'
+      && !window.__app.timeline.constraints.some(c => c.target === window.__app.selectedId && c.type === 'lookAt');
   }));
 
   await page.select('[data-constraint-type="lookAt"] select', ids.a);

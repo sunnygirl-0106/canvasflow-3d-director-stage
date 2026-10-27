@@ -45,6 +45,8 @@ export async function run() {
   }, { ids, prefix }));
   await page.evaluate(ids => {
     const a = window.__app; a.playback.seek(3);
+    // 本用例只验证两个分段区间，先移除预设生成的默认全程注视。
+    for (const c of a.timeline.constraints.filter(c => c.target === ids.cam && c.type === 'lookAt')) a.timeline.removeConstraint(c.id);
     a.timeline.addConstraint({ type: 'lookAt', target: ids.cam, subject: ids.a, start: 0, end: 5 });
     a.timeline.addConstraint({ type: 'lookAt', target: ids.cam, subject: ids.b, start: 6, end: 10 });
     a.emit('inspect', { id: ids.cam, section: 'constraint' });
