@@ -51,20 +51,22 @@ export async function run() {
   await page.evaluate(() => window.__aiPanel.toggle(false));
   await page.click('#scenePresets');
   await page.click('.ai-preset');
-  await page.waitForFunction(() => !window.__app.loadingDocument && !document.querySelector('.ai-preset-tray'));
+  ok('选择预制卡片只预览，点击创建前不替换场景', await page.evaluate(() => window.__app.store.document === window.__presetBefore.doc));
+  await page.click('.scene-preset-footer .primary');
+  await page.waitForFunction(() => !window.__app.loadingDocument && !document.querySelector('#scenePresetTray'));
   const preset = await page.evaluate(async () => {
     const { SCENE_PRESETS } = await import('/src/ai/presets.js');
     const p = window.__aiPanel, a = window.__app;
     a.history.capture();
     window.__loadedPreset = a.store.document;
-    return !document.querySelector('.ai-preset-tray') && SCENE_PRESETS.length === 8
-      && p.mode === 'modify' && p.textarea.value === '' && document.activeElement === p.textarea
+    return !document.querySelector('#scenePresetTray') && SCENE_PRESETS.length === 8
+      && p.mode === 'modify' && p.textarea.value === '' && document.activeElement.id === 'scenePresets'
       && a.store.document.meta.name === SCENE_PRESETS[0].title
       && a.store.document.entities.filter(e => e.type === 'character').map(e => e.name).join() === '角色A,角色B'
       && a.store.document.paths.length > 0 && !!a.store.document.timeline.mainCameraId
       && a.store.document !== window.__presetBefore.doc && a.history.index === window.__presetBefore.hist + 1 && window.__aiMock.calls.length === 0;
   });
-  ok('8 个预制场景：真实点击直接加载完整角色名、路径和主机位，一步提交且不调用模型', preset);
+  ok('8 个预制场景：选择后点击创建加载完整角色名、路径和主机位，一步提交且不调用模型', preset);
   await page.evaluate(() => { window.__aiMock.delayMs = 1000; });
   await page.type('.ai-text', '两个阿明');
   await page.click('.ai-send');
@@ -77,16 +79,16 @@ export async function run() {
   const controls = await page.evaluate(() => {
     const p = window.__aiPanel;
     p.openPresets(); p.renderInput();
-    const collapsed = !document.querySelector('.ai-preset-tray');
-    p.openPresets();
+    const collapsed = !document.querySelector('#scenePresetTray');
     p.agent.busy = true; p.renderInput();
-    const disabled = [...document.querySelectorAll('.ai-preset')].every((button) => button.disabled);
+    p.openPresets();
+    const disabled = document.querySelector('#scenePresets').disabled && !document.querySelector('#scenePresetTray');
     p.agent.busy = false; p.toggle(false); p.toggle(true); p.mode = 'image'; p.renderInput();
-    const hidden = !document.querySelector('.ai-preset-tray');
-    p.mode = 'modify'; p.presetsOpen = true; p.textarea.value = ''; p.renderInput();
+    const hidden = !document.querySelector('#scenePresetTray');
+    p.mode = 'modify'; p.textarea.value = ''; p.renderInput();
     return collapsed && disabled && hidden;
   });
-  ok('预制场景折叠状态跨重绘保留，忙碌时禁用，识图模式隐藏', controls);
+  ok('预制场景关闭状态跨重绘保留，忙碌时禁止打开，切换模式不自动打开', controls);
 
   // ---- 验收 1 一句话生成 ----
   const h0 = (await aiState()).hist;
