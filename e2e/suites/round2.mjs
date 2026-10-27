@@ -95,7 +95,13 @@ export async function run() {
 
 // 同尺寸参考与实际 UI 裁区；3D 舞台不参与差异比较。
 function comparison() {
-  const source=PNG.sync.read(fs.readFileSync('docs/references/director-round2-02.png'));
+  // 私有评审图仅在本地提供；缺少时不生成对比附件，功能断言照常执行。
+  const referencePath = 'docs/references/director-round2-02.png';
+  if (!fs.existsSync(referencePath)) {
+    console.log('跳过 UI 对比附件：未提供本地私有评审图');
+    return;
+  }
+  const source=PNG.sync.read(fs.readFileSync(referencePath));
   const current=PNG.sync.read(fs.readFileSync(`${OUT}/final.png`));
   const ref=new PNG({width:1920,height:1080});
   for(let y=0;y<1080;y++)for(let x=0;x<1920;x++){

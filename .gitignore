@@ -17,3 +17,8 @@ test-output/
 
 # 固定版本的测试浏览器缓存
 .cache/
+
+# 交接文档、评审附件仅保留在本地；公开说明仅保留根目录 README
+/docs/
+*.md
+!/README.md

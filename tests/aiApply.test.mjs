@@ -4,8 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { compileOps, summarize, docAimPoint } from '../src/ai/apply.js';
 import { validateOps, sceneIndex } from '../src/ai/ops.js';
-import { EXAMPLES, systemPrompt, userMessage, retryMessage, aiVocabMarkdown, README_MARKERS } from '../src/ai/prompt.js';
-import fs from 'node:fs';
+import { EXAMPLES, systemPrompt, userMessage, retryMessage } from '../src/ai/prompt.js';
 import { parseReply } from '../src/ai/agent.js';
 import { VOCAB, MOVE_PARAM_KEYS } from '../src/ai/vocab.js';
 import { OP_NAMES } from '../src/ai/ops.js';
@@ -176,12 +175,6 @@ test('parseReply：围栏 / 前后杂字 / 顶层数组 / 坏 JSON', () => {
   assert.deepEqual(parseReply('[{"op":"clear"}]').ops, [{ op: 'clear' }]);
   assert.ok(parseReply('{ops:').error.startsWith('输出不是合法 JSON'));
   assert.ok(parseReply('{"x":1}').error.includes('缺少 ops'));
-});
-
-test('开发参考「AI 生成」的词汇表块与代码生成结果一致（不一致请 npm run docs:ai）', () => {
-  const text = fs.readFileSync(new URL('../docs/开发参考.md', import.meta.url), 'utf8');
-  const [a, b] = README_MARKERS;
-  assert.equal(text.slice(text.indexOf(a) + a.length, text.indexOf(b)).trim(), aiVocabMarkdown().trim());
 });
 
 test('set_path 的 stops（收尾 1）：points 下标 → 路径顶点索引 +1；越界被定位', () => {

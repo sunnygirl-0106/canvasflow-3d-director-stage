@@ -89,7 +89,7 @@ npm run build       # 构建到 dist/
 npm run preview     # 预览构建结果
 ```
 
-本地 AI 代理配置、测试命令和 API 示例，请看 **[开发参考](docs/开发参考.md)**。
+运行 `npm run check` 可执行静态检查、类型检查与单元测试。
 
 ## 🛠️ 舞台背后
 
@@ -109,7 +109,7 @@ src/
 └─ styles/      界面样式
 ```
 
-想了解实现细节，可以继续阅读 [开发参考](docs/开发参考.md)；部署配置见 [GitHub Actions 工作流](.github/workflows/deploy.yml)，推送到 `main` 后会自动构建并发布到 GitHub Pages。
+部署配置见 [GitHub Actions 工作流](.github/workflows/deploy.yml)，推送到 `main` 后会自动构建并发布到 GitHub Pages。
 
 ---
 
