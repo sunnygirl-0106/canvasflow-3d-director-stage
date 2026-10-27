@@ -72,19 +72,8 @@ app.on('view', (on) => {
   $('navg').title = on ? '返回导演视角并重置（不修改机位）' : '重置视角';
   for (const b of $('viewtabs').querySelectorAll('button')) b.classList.toggle('on', (b.dataset.v === 'camera') === on);
 });
-// 机位视角旁显示用户指定的机位；播放时该机位恰为主机位则强调标识。
-const renderPov = () => {
-  const camera = app.findCamera(app.povCameraId);
-  const main = app.mainPreview;
-  const label = $('povLabel');
-  label.hidden = !camera;
-  label.classList.toggle('main', main || app.playback.playing);
-  label.textContent = camera ? (app.playback.playing ? `播放中 · ${camera.name}` : main ? `▶ 主机位 · ${camera.name}` : camera.name) : '';
-  $('povHint').hidden = !app.povUnset;
-};
+const renderPov = () => { $('povHint').hidden = !app.povUnset; };
 app.on('pov', renderPov);
-app.playback.on('state', renderPov);
-app.on('entities', renderPov); // 改名
 $('closeBtn').innerHTML = icon('close', 18);
 $('foldLeft').innerHTML = icon('chevron', 18);
 $('foldLeft').style.transform = 'rotate(180deg)';

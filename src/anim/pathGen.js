@@ -108,6 +108,8 @@ export function fitStops(old, next, patch = {}, roundTime = round4) {
   else if (old?.timedSegments && next.duration !== old.duration && !patch.timedSegments && out.timedSegments) {
     out.timedSegments = out.timedSegments.map(s => ({ ...s, start: roundTime(s.start * next.duration / old.duration), end: roundTime(s.end * next.duration / old.duration) }));
   }
+  if (patch.points && out.timedSegments) out.timedSegments = out.timedSegments.map(s =>
+    s.closed && JSON.stringify(out.points[s.from]) !== JSON.stringify(out.points[s.to]) ? { ...s, closed: false } : s);
   let stops = 'stops' in patch ? patch.stops : out.stops;
   let times = 'stopTimes' in patch ? patch.stopTimes : out.stopTimes;
   delete out.stops;
@@ -181,6 +183,22 @@ export function stopsAfterReverse(path) {
  * @returns {{stops:number[], stopTimes?:number[]}} 交给 updatePath 的 patch（stops 为空时 fitStops 会删掉字段）
  */
 export function toggleStop(path, index, on) {
+  if (path.timedSegments) {
+    const segments = path.timedSegments.map(s => ({ ...s }));
+    const boundary = segments.findIndex(s => s.to === index);
+    if (!on && boundary >= 0 && boundary < segments.length - 1) {
+      const a = segments[boundary], b = segments[boundary + 1];
+      segments.splice(boundary, 2, { from: a.from, to: b.to, start: a.start, end: b.end, speed: 'smooth' });
+    } else if (on && boundary < 0) {
+      const i = segments.findIndex(s => s.from < index && index < s.to);
+      if (i >= 0) {
+        const s = segments[i], time = round6(new Path(path).vertexTime(index) - path.start);
+        segments.splice(i, 1, { from: s.from, to: index, start: s.start, end: time, speed: 'smooth' },
+          { from: index, to: s.to, start: time, end: s.end, speed: 'smooth' });
+      }
+    }
+    return { timedSegments: segments };
+  }
   const stops = (path.stops || []).slice(), times = path.stopTimes ? path.stopTimes.slice() : null;
   const j = stops.indexOf(index);
   if (!on) {

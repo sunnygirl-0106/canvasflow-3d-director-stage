@@ -30,7 +30,7 @@ export const PANEL_LABEL = { ...MOVE_LABEL, push_in: '推近', pull_out: '拉远
 
 // Manual panel defaults are explicit; legacy AI defaults below stay unchanged.
 export const PANEL_MOVES = ['circle', 'half_orbit', 'push_in', 'pull_out', 'crane', 'truck', 'spiral'];
-export const PANEL_DURATION = { circle: 12, half_orbit: 6, push_in: 4, pull_out: 4, crane: 4, truck: 4, spiral: 12, pan: 2 };
+export const PANEL_DURATION = { circle: 2, half_orbit: 2, push_in: 2, pull_out: 2, crane: 2, truck: 2, spiral: 2, pan: 2 };
 
 /** 默认时长（秒）。 */
 export const MOVE_DURATION = { push_in: 3, pull_out: 3, truck: 3, crane: 3, pan: 2, half_orbit: 5, circle: 8 };
@@ -204,6 +204,26 @@ export function appendMove(path, next) {
   if (Math.hypot(head[0] - end[0], head[1] - end[1], head[2] - end[2]) > 1e-4) throw new MoveError('追加的运镜必须从现有路径的终点开始');
   const prev = openPoints(path.points, path.closed);
   const points = [...prev, ...openPoints(next.points, next.closed).slice(1)];
+  if (path.timedSegments) return { ...path, points, closed: false, duration: round6(path.duration + next.duration),
+    timedSegments: [...path.timedSegments, { from: prev.length - 1, to: points.length - 1, start: path.duration, end: round6(path.duration + next.duration), speed: 'smooth', ...(next.closed ? { closed: true } : {}) }] };
+  if (path.waypointTimes) {
+    const model = new Path({ ...next, start: 0, speed: 'smooth', orient: 'keep' });
+    return { ...path, points, closed: false, duration: round6(path.duration + next.duration),
+      stops: [...(path.stops || []), prev.length - 1],
+      waypointTimes: [...path.waypointTimes, ...points.slice(prev.length).map((_, i) => round6(path.duration + model.vertexTime(i + 1)))] };
+  }
+  // A closed curve must retain its cyclic tangents; a linear prefix must not be
+  // silently eased by the new seam. The existing timed segments carry both facts.
+  if ((path.closed || path.speed === 'linear') && !path.stops?.length || next.closed) {
+    const cuts = [0, ...(path.stops || []), prev.length - 1];
+    const times = [0, ...new Path(path).segmentTimes];
+    const timedSegments = cuts.slice(0, -1).map((from, i) => ({ from, to: cuts[i + 1], start: times[i], end: times[i + 1],
+      speed: path.stops?.length ? 'smooth' : path.speed || 'smooth', ...(path.closed && cuts.length === 2 ? { closed: true } : {}) }));
+    timedSegments.push({ from: prev.length - 1, to: points.length - 1, start: path.duration, end: round6(path.duration + next.duration), speed: 'smooth', ...(next.closed ? { closed: true } : {}) });
+    const result = { ...path, points, closed: false, duration: round6(path.duration + next.duration), timedSegments };
+    delete result.stops; delete result.stopTimes;
+    return result;
+  }
   // 已有停顿沿用（闭合路径展开后索引不变）；没有 stopTimes 的按当前（弧长比例）分配取到达时刻
   const stops = [...(path.stops || [])];
   const times = path.stops?.length ? (path.stopTimes?.length ? path.stopTimes.slice() : new Path(path).segmentTimes.slice(0, -1).map(round6)) : [];

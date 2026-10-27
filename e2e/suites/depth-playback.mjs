@@ -124,7 +124,7 @@ export async function run() {
   await page.click('.tl-play');
   ok('按钮从导演视角开始播放，立即进入机位并显示播放标识', await page.evaluate(() => {
     const a = window.__app;
-    return a.playback.playing && !a.cameraView && a.getRenderCamera() === a.cameras[0].cam && !a.rig.controls.enabled && document.querySelector('#povLabel').textContent === '播放中 · 机位1';
+    return a.playback.playing && !a.cameraView && a.getRenderCamera() === a.cameras[0].cam && !a.rig.controls.enabled && !document.querySelector('#povLabel');
   }));
   const point = await page.$eval('#viewport canvas', el => { const r = el.getBoundingClientRect(); return [r.x+r.width*.4,r.y+r.height*.4]; });
   await page.mouse.move(...point); await page.mouse.down(); await page.mouse.move(point[0]+90,point[1]+40,{steps:8});

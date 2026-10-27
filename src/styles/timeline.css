@@ -312,7 +312,6 @@
 #timeline .tl-path-node::before { content: ''; position: absolute; width: 7px; height: 7px; top: 7px; left: 5px; border: 1px solid #45b9cb; background: #203338; transform: rotate(45deg); }
 #timeline .tl-path-node:hover::before, #timeline .tl-path-node:focus-visible::before, #timeline .tl-path-node.is-current::before { background: #68d9e5; border-color: #c8f9ff; }
 #timeline .tl-path-node.is-stop::before { background: #d2ae63; border-color: #f1d49b; }
-#timeline .tl-path-node:focus-visible { outline: 1px solid #70cedb; border-radius: 3px; }
 #timeline .tl-track .tl-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 #timeline .tl-key-line { position: absolute; top: 50%; height: 1px; background: #34666e; left: calc(var(--gutter) + var(--t0) * var(--pps) * 1px); width: calc((var(--t1) - var(--t0)) * var(--pps) * 1px); pointer-events: none; }
 
@@ -393,7 +392,6 @@ body.resizing-timeline, body.resizing-timeline * { cursor: ns-resize !important;
 #timeline .tl-export:hover { background: #fff; color: #161616; }
 #timeline button:focus-visible { outline: 1px solid #70cedb; outline-offset: -2px; }
 
-.tl-path-node.is-selected { outline: 2px solid var(--accent, #3b82f6); outline-offset: 3px; }
 
 /* 对象总条与位置子条共享区间几何，但操作范围不同。 */
 .tl-bar-object { background: rgba(69,201,207,.3); border: 1px solid rgba(69,201,207,.65); }
@@ -402,3 +400,31 @@ body.resizing-timeline, body.resizing-timeline * { cursor: ns-resize !important;
 #timeline .tl-bar-point .tl-bar-text { position: absolute; left: 12px; }
 
 #timeline .tl-track .tl-bar-path .tl-bar-end { top: 0; width: 10px; height: 6px; transform: translateX(-50%); z-index: 3; }
+
+/* 位置子行：透明时间命中区与细线，控制点保持独立。 */
+#timeline .tl-track .tl-bar-path { top: 50%; bottom: auto; height: 16px; transform: translateY(-50%); background: transparent; border: 0; border-radius: 0; overflow: visible; box-shadow: none; }
+#timeline .tl-track .tl-bar-path::before { content: ''; position: absolute; left: 0; right: 0; top: 8px; height: 1px; background: #718c91; }
+#timeline .tl-track .tl-bar-path:hover::before, #timeline .tl-track.current .tl-bar-path::before, #timeline .tl-track .tl-bar-path:focus-visible::before { background: #aad0d4; }
+#timeline .tl-track .tl-bar-path .tl-bar-end { top: 2px; width: 12px; height: 12px; border: 0; border-radius: 2px; background: transparent; transform: translateX(-50%); z-index: 3; }
+#timeline .tl-track .tl-bar-path .tl-bar-end::after { content: ''; position: absolute; left: 5px; top: 1px; height: 10px; width: 2px; background: #bdd6d8; opacity: 0; }
+#timeline .tl-track .tl-bar-path:hover .tl-bar-end::after, #timeline .tl-track .tl-bar-path:focus-within .tl-bar-end::after { opacity: 1; }
+/* Only the diamond carries selection and keyboard focus; the hit area stays transparent. */
+#timeline .tl-path-node:focus-visible, #timeline .tl-key:focus-visible { outline:none; }
+#timeline .tl-path-node::before { box-sizing:border-box; width:9px; height:9px; top:7px; left:5px; border:1px solid #8daeb3; background:#283639; }
+#timeline .tl-path-node.is-stop::before { border-style:double; border-width:3px; border-color:#d2b879; }
+#timeline .tl-path-node.is-selected::before, #timeline .tl-path-node.is-current::before { background:#5de3ec; border-color:#e4ffff; }
+#timeline .tl-path-node:focus-visible::before { box-shadow:0 0 0 2px #24292c, 0 0 0 3px #b4edf2; }
+#timeline .tl-key { box-sizing:border-box; width:18px; height:22px; border:0; background:transparent; transform:translate(-50%, -50%); border-radius:0; }
+#timeline .tl-key::before { content:''; position:absolute; box-sizing:border-box; width:9px; height:9px; top:7px; left:5px; border:1px solid #8daeb3; background:#283639; transform:rotate(45deg); }
+#timeline .tl-key.sel { background:transparent; }
+#timeline .tl-key:hover::before { border-color:#c8f9ff; }
+#timeline .tl-key.sel::before { background:#5de3ec; border-color:#e4ffff; }
+#timeline .tl-key:focus-visible::before { box-shadow:0 0 0 2px #24292c, 0 0 0 3px #b4edf2; }
+#timeline .tl-head .tl-addkey { height: 32px; min-height: 32px; padding: 0 8px; border-radius: 5px; color: #abb8bf; }
+#timeline .tl-head .tl-addkey:hover { background: #a8c8d012; color: #d0e3e8; }
+#timeline .tl-head .tl-row-delete { margin-left: 1px; flex: 0 0 32px; border-radius: 5px; }
+#timeline .tl-head .tl-row-delete:disabled { display: block; opacity: .25; cursor: default; }
+#timeline .tl-head .tl-row-delete:hover:not(:disabled) { background: #ba72721c; color: #dba0a0; }
+
+#timeline .tl-track .tl-bar-path .tl-bar-end.start { left: -14px; }
+#timeline .tl-track .tl-bar-path .tl-bar-end.end { left: calc(100% + 14px); }

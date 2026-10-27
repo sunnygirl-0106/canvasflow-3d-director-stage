@@ -248,8 +248,8 @@ export async function run() {
     out.roundTrip = JSON.stringify(d1) === JSON.stringify(d2) && JSON.stringify(d2.paths[0].stops) === '[1]';
     // 插入 / 删除顶点后停顿索引跟着走；顶点数被整体替换时停顿去掉
     const id = d2.paths[0].id;
-    a.select(ids.m);
-    a.pathEditor.insertAt(id, 0.5);
+    a.select(ids.m, { user: true });
+    out.inserted = a.pathEditor.insertAt(id, 0.5)?.inserted === true;
     out.afterInsert = tl.toJSON().paths[0].stops;
     a.pathEditor.deleteVertex(id, 1);
     out.afterDelete = tl.toJSON().paths[0].stops;
@@ -259,7 +259,7 @@ export async function run() {
   }, ids);
   ok('停顿：角色走到停顿顶点时 速度 0、在顶点上（< 1 cm）、姿势 ≡ 原姿势；段中在走', stopRes.v < 1e-9 && stopRes.atVertex < 0.01 && stopRes.still && stopRes.walkMid && !stopRes.hasTimes,
     `stops=${JSON.stringify(stopRes.stops)} T1=${stopRes.T1.toFixed(3)}s 离顶点 ${(stopRes.atVertex * 100).toFixed(4)} cm`);
-  ok('停顿：含 stops 的文档往返 ≡；插入 / 删除顶点后索引跟着走，顶点数整体改变时去掉', stopRes.roundTrip && JSON.stringify(stopRes.afterInsert) === '[2]' && JSON.stringify(stopRes.afterDelete) === '[1]' && !stopRes.afterReplace,
+  ok('停顿：含 stops 的文档往返 ≡；插入 / 删除顶点后索引跟着走，顶点数整体改变时去掉', stopRes.roundTrip && stopRes.inserted && JSON.stringify(stopRes.afterInsert) === '[2]' && JSON.stringify(stopRes.afterDelete) === '[1]' && !stopRes.afterReplace,
     JSON.stringify({ rt: stopRes.roundTrip, ins: stopRes.afterInsert, del: stopRes.afterDelete, replaced: stopRes.afterReplace }));
   // ---- 收尾 1 · 起步立即转向：手动朝向 −100°、路径朝 +X（90°），差 170° ----
   await buildAnimScene().then((v) => Object.assign(ids, v));
@@ -322,7 +322,7 @@ export async function run() {
     const c1 = a.findEntity(ids.c1), c2 = a.findEntity(ids.c2);
     const V = c1.root.position.constructor, Q = c1.root.quaternion.constructor;
     c1.rollRad = 12 * Math.PI / 180; // 荷兰角
-    // f 沿弧线走（会转向）；c1 注视 f；c2 跟随 f，并且有自己的 pos 轨道和 rot 关键帧（应被 follow 覆盖 / 按 f 的 yaw 旋转）
+    // f 沿弧线走（会转向）；c1 注视 f；c2 跟随 f，覆盖位置轨道但保留独立朝向。
     tl.addPath({ target: ids.f, points: [[1, 0, 0.6], [2.5, 0, -1], [1, 0, -3], [-1, 0, -2]], start: 0, duration: 5, speed: 'linear', orient: 'tangent' });
     tl.addConstraint({ type: 'lookAt', target: ids.c1, subject: ids.f });
     const tp = tl.addTrack({ target: ids.c2, property: 'pos' });
@@ -348,8 +348,8 @@ export async function run() {
       const an = anchorOf(a, ids.f);
       const rel = c2.root.position.clone().sub(an.pos).applyQuaternion(new Q().setFromAxisAngle(new V(0, 1, 0), -an.yaw));
       maxOff = Math.max(maxOff, rel.distanceTo(new V(0.4, 1.6, -2.5)));
-      // follow 朝向：Ry(yaw) × 机位手动朝向
-      const want = new Q().setFromAxisAngle(new V(0, 1, 0), an.yaw).multiply(new Q().setFromEuler(tl.baseOf(c2).rotation));
+      // follow 不参与朝向求值。
+      const want = new Q().setFromEuler(tl.baseOf(c2).rotation);
       maxRot = Math.max(maxRot, 2 * Math.acos(Math.min(1, Math.abs(want.dot(c2.root.quaternion)))) * R2D);
     }
     // 生效区间：end 之后 follow 失效，pos 轨道接管
@@ -362,7 +362,7 @@ export async function run() {
   ok('约束：lookAt 机位 −Z 对准 subject（每 0.5 s 采样）', cons.maxAim < 0.1, `max ${cons.maxAim.toExponential(2)}°`);
   ok('约束：lookAt 保留荷兰角 roll', cons.maxRoll < 0.1 && cons.rollKept, `max 偏差 ${cons.maxRoll.toExponential(2)}°`);
   ok('约束：follow 相对偏移恒等于 offset（subject yaw 坐标系），覆盖 pos 轨道', cons.maxOff < 1e-6, `max ${cons.maxOff.toExponential(2)}m`);
-  ok('约束：follow 朝向随 subject yaw 刚性旋转', cons.maxRot < 1e-3, `max ${cons.maxRot.toExponential(2)}°`);
+  ok('约束：follow 不改变机位独立朝向', cons.maxRot < 1e-3, `max ${cons.maxRot.toExponential(2)}°`);
   ok('约束：生效区间外 follow 失效，pos 轨道接管', Math.abs(cons.trackX + 3) < 1e-9, `x=${cons.trackX}`);
   // ======== 验收 1–6：完整动画场景（pos/rot/scale/fov 轨道各 1、角色路径 1、lookAt 1、follow 1）========
   await buildAnimScene().then((v) => Object.assign(ids, v));

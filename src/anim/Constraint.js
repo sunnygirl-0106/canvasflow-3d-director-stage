@@ -9,9 +9,8 @@ import { aimPointWith, anchorWith } from './subject.js';
 //   入场 / 退场混合：start > 0 时在 [start, start+0.5 s] 内从"约束前的朝向"slerp 到注视朝向（进度 smoothstep）；
 //   end 非空时在 [end−0.5 s, end] 内从注视朝向 slerp 回约束前的朝向。start 为 null / 0 时直接全量生效（t=0 之前没有"约束前"）。
 //   接力：同一机位上一条 lookAt 的 end 恰好等于这条的 start 时，上一条不做退场，这一条从上一条的注视朝向转过来。
-// - follow（刚性跟随）：位置 = subject 锚点 + Ry(subject yaw)·offset；
-//   朝向 = Ry(subject yaw) × 机位原朝向（关键帧 / 路径 / 手动值都按 subject yaw=0 的坐标系解释）。
-//   follow 覆盖机位的 pos 轨道 / 路径；同时有 lookAt 时朝向由 lookAt 决定（follow 先于 lookAt）。
+// - follow：位置 = subject 锚点 + Ry(subject yaw)·offset，只驱动位置。
+//   follow 覆盖机位的 pos 轨道 / 路径；朝向仍由手动值、旋转轨道或独立 lookAt 决定。
 //
 // 注视点 / 锚点的定义见 subject.js（与 AI 编译共用）；这里只提供从场景对象取数的适配器。
 //   角色脚底取站立基准（root.y − rootY0），注视点不随步态抖动；道具几何中心按实体缓存。
@@ -105,8 +104,6 @@ export function applyConstraint(app, c, st, t = null, all = null) {
     if (!a) return;
     _q.setFromAxisAngle(_up, a.yaw);
     st.position.copy(_v.fromArray(c.offset).applyQuaternion(_q).add(a.pos));
-    st.quaternion.premultiply(_q);
-    st.rotTouched = true;
   } else if (c.type === 'lookAt') {
     const roll = st.ent.rollRad || 0;
     if (!aimQuat(app, c.subject, st.position, roll, _aim)) return;

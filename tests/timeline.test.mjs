@@ -158,3 +158,15 @@ test('位置键候选遵循 Channel 的 linear/smooth/step，撤销预览恢复�
     app.timeline.evaluate(4); assert.deepEqual(posOf(box), [4,2,8]);
   }
 });
+
+test('机位位置键前缀在接续路径开始前保持求值，衔接与随机 seek 不跳变', () => {
+  const app = fakeApp(), cam = addCamera(app);
+  const tr = app.timeline.addTrack({ target: cam.id, property: 'pos' });
+  app.timeline.setKey(tr.id, 0, [0, 2, 5], 'smooth');
+  app.timeline.setKey(tr.id, 3, [1, 2, 5], 'linear');
+  const samples = Array.from({ length: 31 }, (_, i) => { app.timeline.evaluate(i / 10); return posOf(cam); });
+  app.timeline.addPath({ target: cam.id, points: [[1, 2, 5], [3, 2, 5]], start: 3, duration: 4, closed: false, speed: 'smooth', orient: 'keep' });
+  for (let i = 30; i >= 0; i--) { app.timeline.evaluate(i / 10); assert.ok(closeVec(posOf(cam), samples[i])); }
+  app.timeline.evaluate(7); assert.ok(closeVec(posOf(cam), [3, 2, 5]));
+  app.timeline.evaluate(3); assert.ok(closeVec(posOf(cam), [1, 2, 5]));
+});

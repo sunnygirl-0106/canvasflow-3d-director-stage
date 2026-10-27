@@ -144,7 +144,7 @@ export async function run() {
   const pathOf = () => page.evaluate((pid) => { const p = window.__app.timeline.toJSON().paths.find((x) => x.id === pid); return { start: p.start, duration: p.duration }; }, pathId);
   await page.evaluate(id=>window.__app.select(id),ids.p2);
   await clickSel(`.tl-head[data-ent="${ids.p2}"] .tl-caret`);
-  await page.click('.tl-track button[title="编辑位置路径"]'); // 第五轮：区间在父行直接可拖，点击位置行打开属性 // 行超出可见范围时先滚动到按钮
+  await page.click('.tl-path-node', { count: 2 }); // 第五轮：区间在父行直接可拖，点击位置行打开属性 // 行超出可见范围时先滚动到按钮
   await page.$eval('.tl-bar-path', n => n.scrollIntoView({block:'nearest', inline:'nearest'}));
   await settle();
   const endXY = await centerOf('.tl-bar-path .tl-bar-end.end');
@@ -162,14 +162,14 @@ export async function run() {
 
   // ---- 6 约束段 ----
   await pickInOutliner(ids.camName);
-  await page.evaluate(()=>{const b=[...document.querySelectorAll('.ptabs button')].find(b=>b.textContent==='运动轨迹');b?.click();});
-  await page.click('#inspector .motion-advanced > summary');
-  const cnsSel = async (i) => (await page.$$('#inspector [data-sec="constraint"] select'))[i];
+  await page.evaluate(()=>{const b=[...document.querySelectorAll('.ptabs button')].find(b=>b.textContent==='属性');b?.click();});
+  const cnsSel = async () => (await page.$$('#inspector [data-constraint-type="lookAt"] select')).at(-1);
   await (await cnsSel(0)).select(ids.m);
   await settle();
   const c1 = await page.evaluate((cam) => window.__app.timeline.toJSON().constraints.filter((c) => c.target === cam), ids.cam);
   const typeInto = async (i, text) => {
-    const inp = (await page.$$('#inspector [data-sec="constraint"] .num-input'))[i];
+    await page.$eval('[data-constraint-type="lookAt"] details', d => { d.open = true; });
+    const inp = (await page.$$('#inspector [data-constraint-type="lookAt"] .num-input'))[i];
     await inp.click({ clickCount: 3 });
     await page.keyboard.type(text);
     await page.keyboard.press('Tab');

@@ -348,18 +348,18 @@ export function nearestSubject(doc, camId, position, aimOf) {
  * @returns {{ctx:object, move:object, start:number, undo:object}} undo = 删末段用的逆操作信息
  * @throws {MoveError} 几何上做不出来（文案直接给用户看）
  */
-export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, time = 0, lastPan = null, ownPan = false, mode = 'append', origin = null }) {
+export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, time = 0, lastPan = null, ownPan = false, mode = 'append', origin = null, preserveConstraints = false, preservePositionKeys = false }) {
   const cam = findEntity(doc, camId);
   const ctx = mode === 'replace'
     ? { ...(origin || { position: cam.transform.pos, rot: cam.transform.rot, roll: cam.roll, time }), append: false, path: null }
-    : moveContext(doc, camId, { time, lastPan });
+    : { ...moveContext(doc, camId, { time, lastPan }), ...(origin || {}) };
   if (name === 'pan' && ctx.path) throw new MoveError('摇镜头请单独使用或放在最前');
   const move = cameraMove(name, { position: ctx.position, rot: ctx.rot, roll: ctx.roll, aim, params });
   // Validate geometry first; failed generation cannot partially clear existing motion.
   if (mode === 'replace') {
     doc.paths = doc.paths.filter(p => p.target !== camId);
     doc.timeline.tracks = doc.timeline.tracks.filter(t => t.target !== camId || (t.property !== 'pos' && !(t.property === 'rot' && (name === 'pan' || ownPan))));
-    doc.constraints = doc.constraints.filter(c => c.target !== camId);
+    if (!preserveConstraints) doc.constraints = doc.constraints.filter(c => c.target !== camId);
   }
   const before = cameraAnimation(doc, camId);
   const start = ctx.time;
@@ -370,11 +370,11 @@ export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, t
   if (move.points) {
     if (before.path) {
       const bp = before.path;
-      undo.path = { points: bp.points, closed: bp.closed, duration: bp.duration, stops: bp.stops || [], stopTimes: bp.stopTimes };
+      undo.path = { ...clone(bp), stops: bp.stops || [], stopTimes: bp.stopTimes, timedSegments: bp.timedSegments, waypointTimes: bp.waypointTimes };
       const next = { ...before.path, ...appendMove(before.path, move) };
       doc.paths = doc.paths.map((p) => (p === before.path ? next : p));
     } else {
-      if (before.posTrack) tl.tracks = tl.tracks.filter((t) => t !== before.posTrack);
+      if (before.posTrack && !preservePositionKeys) tl.tracks = tl.tracks.filter((t) => t !== before.posTrack);
       doc.paths = [...doc.paths, { id: newId(doc), target: camId, points: move.points, closed: move.closed, start, duration: move.duration, speed: 'smooth', orient: 'keep' }];
       undo.path = null;
     }
@@ -397,6 +397,9 @@ export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, t
   }
 
   // 2 注视窗口：带路径的段从 start 开始注视，摇镜头摇完（start + duration）才开始
+  // 保留用户已有的注视区间和旋转轨道；默认位移预设仍需真正写入注视，
+  // 否则 subject 只参与路径几何计算，播放时镜头会始终保持原朝向。
+  if (preserveConstraints && (before.lookAts.length || before.rotTrack?.keys.length || !move.points)) return { ctx, move, start, undo };
   const lookStart = move.points ? start : round4(start + move.duration);
   const w = lookAtWindows(before.lookAts, { subject, cut: start, start: lookStart });
   undo.removed = before.lookAts.filter((c) => w.remove.includes(c.id));
@@ -411,14 +414,34 @@ export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, t
   return { ctx, move, start, undo };
 }
 
+/** Remove only a verified generated tail before editing its parameters in the same transaction. */
+export function removeCameraMoveTail(doc, camId, segment) {
+  const { path, rotTrack } = cameraAnimation(doc, camId);
+  const start = segment.origin.time;
+  if (segment.name === 'pan') {
+    rotTrack.keys = rotTrack.keys.filter(k => k.t <= start);
+    return;
+  }
+  if (start === path.start) { doc.paths = doc.paths.filter(p => p !== path); return; }
+  const generated = cameraMove(segment.name, { ...segment.origin, aim: segment.aim, params: segment.params });
+  const count = generated.points.length + (generated.closed ? 1 : 0) - 1;
+  const endIndex = path.points.length - count - 1;
+  path.points = path.points.slice(0, endIndex + 1);
+  path.duration = round4(start - path.start);
+  if (path.timedSegments) path.timedSegments = path.timedSegments.slice(0, -1);
+  if (path.waypointTimes) path.waypointTimes = path.waypointTimes.slice(0, endIndex + 1);
+  if (path.stops) path.stops = path.stops.filter(i => i < endIndex);
+  if (path.stopTimes) path.stopTimes = path.stopTimes.slice(0, path.stops.length);
+}
+
 /** 清除机位的运镜：路径 + 该机位全部约束 + rot 轨道。返回是否有改动。 */
-export function clearCameraMoves(doc, camId) {
+export function clearCameraMoves(doc, camId, { preserveConstraints = false } = {}) {
   const { path, rotTrack, posTrack } = cameraAnimation(doc, camId);
   if (doc.meta.cameraMoves) delete doc.meta.cameraMoves[camId];
   if (posTrack) doc.timeline.tracks = doc.timeline.tracks.filter(t => t !== posTrack);
   const n = doc.constraints.length;
   if (path) doc.paths = doc.paths.filter((p) => p !== path);
-  doc.constraints = doc.constraints.filter((c) => c.target !== camId);
+  if (!preserveConstraints) doc.constraints = doc.constraints.filter((c) => c.target !== camId);
   if (rotTrack) doc.timeline.tracks = doc.timeline.tracks.filter((t) => t !== rotTrack);
   return !!(path || rotTrack || posTrack || n !== doc.constraints.length);
 }

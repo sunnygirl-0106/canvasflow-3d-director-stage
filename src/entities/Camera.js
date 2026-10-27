@@ -12,22 +12,22 @@ const SIDE_STEPS = 32; // 分段绘制穿过观察相机近平面的视锥长边
 // 紧凑电影摄影机，镜头朝 -Z；细节保持米制尺度，所有附件随 body 一起显隐。
 function buildCameraBody() {
   const g = new THREE.Group();
-  // 背光面保留少量亮度，使深色工业材质在导演台背景上仍可辨识。
+  // 背光面保留柔和亮度，使机身轮廓和材质层次在导演台背景上清晰可辨。
   const material = (color, roughness, metalness) => new THREE.MeshStandardMaterial({
-    color, roughness, metalness, fog: false, emissive: color, emissiveIntensity: 0.12,
+    color, roughness, metalness, fog: false, emissive: color, emissiveIntensity: 0.18,
   });
-  const shell = material(0x687786, 0.48, 0.35);
-  const rubber = material(0x242d37, 0.88, 0.04);
-  const metal = material(0xb8c7d5, 0.3, 0.65);
+  const shell = material(0x9aabba, 0.48, 0.22);
+  const rubber = material(0x3a4654, 0.88, 0.04);
+  const metal = material(0xd4dfe8, 0.3, 0.45);
   const recess = material(0x101923, 0.72, 0.12);
   const brass = material(0xb49a60, 0.33, 0.6);
   const red = material(0xc74a40, 0.42, 0.2);
   const glass = new THREE.MeshPhysicalMaterial({
-    color: 0x123449, metalness: 0.35, roughness: 0.1,
+    color: 0x23566f, metalness: 0.35, roughness: 0.1,
     clearcoat: 1, clearcoatRoughness: 0.06,
-    emissive: 0x123049, emissiveIntensity: 0.22, fog: false,
+    emissive: 0x23516b, emissiveIntensity: 0.25, fog: false,
   });
-  const display = material(0x183744, 0.28, 0.15);
+  const display = material(0x244b59, 0.28, 0.15);
   const screenInk = new THREE.MeshBasicMaterial({ color: 0x84b4ba, fog: false });
   const add = (geometry, mat, x, y, z) => {
     const mesh = new THREE.Mesh(geometry, mat);

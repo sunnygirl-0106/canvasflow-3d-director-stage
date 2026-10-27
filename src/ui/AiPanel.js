@@ -1,3 +1,4 @@
+import { onKey, KEY_PRIORITY } from '../util/keys.js';
 import { el, clear, toast } from '../util/dom.js';
 import { icon } from './icons.js';
 import { MODES, MODE_LABEL } from '../ai/ops.js';
@@ -54,14 +55,8 @@ export class AiPanel {
     this.root = el('div', { class: 'ai-capsule' });
     this.root.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.key === 'Escape') { this.browsePresets = false; this.open = false; this.render(); this.textarea.focus(); }
+      if (e.key === 'Escape') { if (this.creatingPreset) return; this.closePresets({ returnFocus: false }); this.open = false; this.render(); this.textarea.focus(); }
     });
-    document.addEventListener('pointerdown', (e) => {
-      if (this.browsePresets && !this.root.contains(e.target)) {
-        e.preventDefault(); e.stopImmediatePropagation();
-        this.browsePresets = false; this.render();
-      }
-    }, true); // 关闭托盘的这次按下不交给舞台绘制。
     viewport.appendChild(this.root);
     this.agent.on('turn', () => this.renderFlow());
     this.agent.on('update', () => { this.renderFlow(); this.renderInput(); });
@@ -73,6 +68,8 @@ export class AiPanel {
   }
 
   toggle(v = !this.open) {
+    if (this.creatingPreset) return;
+    this.closePresets({ returnFocus: false });
     this.open = v;
     this.browsePresets = false;
     this.render();
@@ -87,17 +84,17 @@ export class AiPanel {
   }
 
   openPresets() {
-    if (this.agent.busy) { toast('请先取消当前生成'); return; }
-    this.browsePresets = !this.browsePresets;
+    if (this.agent.busy || this.creatingPreset) { toast('请等待当前操作完成'); return; }
+    if (this.browsePresets) { this.closePresets(); return; }
+    this.browsePresets = true;
+    document.getElementById('scenePresets')?.setAttribute('aria-expanded', 'true');
     this.pendingPreset = null;
-    this.showSettings = this.showHistory = this.open = false;
-    this.render();
-    if (this.browsePresets) this.tray.querySelector('button')?.focus();
-    else this.textarea.focus();
+    this.presetError = null;
+    this.renderPresets();
   }
 
   openImageImport() {
-    if (this.agent.busy) return;
+    if (this.agent.busy || this.creatingPreset) return;
     const input = el('input', { type: 'file', accept: 'image/*' });
     input.addEventListener('change', async () => {
       if (!input.files?.[0]) return;
@@ -109,37 +106,99 @@ export class AiPanel {
     input.click();
   }
 
+  closePresets({ returnFocus = true } = {}) {
+    if (this.creatingPreset) return;
+    this.browsePresets = false;
+    document.getElementById('scenePresets')?.setAttribute('aria-expanded', 'false');
+    this._presetCleanup?.();
+    this.tray?.remove();
+    if (returnFocus) document.getElementById('scenePresets')?.focus();
+  }
+
   renderPresets() {
+    this._presetCleanup?.();
     this.tray?.remove();
     if (!this.browsePresets) return;
-    const close = () => { this.browsePresets = false; this.pendingPreset = null; this.render(); this.textarea.focus(); };
-    const apply = async preset => {
-      if (this.agent.busy) return;
+    const close = () => this.closePresets();
+    const apply = async () => {
+      if (this.agent.busy || this.creatingPreset || !this.pendingPreset) return;
+      const preset = this.pendingPreset;
+      this.creatingPreset = true; this.presetError = null; this.renderPresets();
       try {
-        const doc = createPresetScene(SCENE_PRESETS.indexOf(preset));
+        const doc = createPresetScene(SCENE_PRESETS.indexOf(preset), { ratio: this.app.ratio === 'auto' ? '16:9' : this.app.ratio });
         await this.app.loadDocument(doc, { pruneShots: true, newScene: true, label: `预制场景：${preset.title}` });
-        this.mode = 'modify'; this.image = null;
-        this.textarea.value = '';
+        this.mode = 'modify';
+        this.creatingPreset = false;
         close();
         toast(`已创建「${preset.title}」`);
-      } catch (err) { console.error(err); toast(`创建预制场景失败：${err.message}`); }
+      } catch (err) {
+        this.presetError = `创建失败：${err.message}`;
+      } finally {
+        this.creatingPreset = false;
+        if (this.browsePresets) this.renderPresets();
+      }
     };
-    const choose = preset => {
-      if (this.agent.busy) return;
-      if (this.textarea.value.trim()) { this.pendingPreset = preset; this.renderPresets(); }
-      else apply(preset);
+    const description = el('div', { class: 'scene-preset-description' });
+    const hint = el('span', { class: 'scene-preset-hint' });
+    const create = el('button', { class: 'minibtn primary', text: this.creatingPreset ? '创建中…' : '创建', onclick: apply });
+    const updateSelection = () => {
+      const preset = this.pendingPreset;
+      description.replaceChildren(
+        el('div', { text: preset ? preset.detail.split(' · ').slice(2).join(' · ') : '选择一个场景' }),
+        el('div', { class: 'scene-preset-stages', text: preset?.stages || '', title: preset?.stages || '' }),
+      );
+      hint.textContent = preset ? '将替换当前场景' : '';
+      create.disabled = !preset || this.creatingPreset;
     };
-    this.tray = el('div', { id: 'scenePresetTray', class: 'ai-preset-tray', role: 'dialog', 'aria-label': '选个场景开始' }, [
-      el('div', { class: 'ai-preset-heading' }, [el('strong', { text: '选个场景开始' }), el('button', { text: '关闭', onclick: close })]),
-      this.pendingPreset ? el('div', { class: 'ai-preset-confirm' }, [
-        el('span', { text: '替换当前草稿？' }),
-        el('button', { text: '取消', onclick: () => { this.pendingPreset = null; this.renderPresets(); } }),
-        el('button', { text: '替换草稿', disabled: this.agent.busy || undefined, onclick: () => apply(this.pendingPreset) }),
-      ]) : el('div', { class: 'ai-preset-grid' }, SCENE_PRESETS.map(preset => el('button', {
-        class: 'ai-preset', type: 'button', disabled: this.agent.busy || undefined, onclick: () => choose(preset),
-      }, [el('strong', { text: preset.title }), el('span', { text: preset.detail })]))),
+    updateSelection();
+    this.tray = el('div', { id: 'scenePresetTray', class: 'scene-preset-popover', role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'scenePresetTitle' }, [
+      el('header', { class: 'scene-preset-heading' }, [
+        el('h2', { id: 'scenePresetTitle', text: '预制场景' }),
+        el('button', { class: 'minibtn', title: '关闭预制场景', html: icon('close', 16), disabled: this.creatingPreset || undefined, onclick: close }),
+      ]),
+      el('div', { class: 'scene-preset-grid' }, SCENE_PRESETS.map(preset => el('button', {
+        class: 'ai-preset' + (this.pendingPreset === preset ? ' selected' : ''), type: 'button',
+        'aria-pressed': String(this.pendingPreset === preset), disabled: this.creatingPreset || undefined,
+        onclick: e => {
+          this.pendingPreset = preset;
+          this.tray.querySelectorAll('.ai-preset').forEach(card => { const on = card === e.currentTarget; card.classList.toggle('selected', on); card.setAttribute('aria-pressed', String(on)); });
+          updateSelection();
+        },
+      }, [el('strong', { text: preset.title }), el('span', { text: preset.detail.split(' · ').slice(0, 2).join(' · ') })]))),
+      el('footer', { class: 'scene-preset-footer' }, [
+        description,
+        el('div', { class: 'move-error', role: 'alert', text: this.presetError || '', hidden: !this.presetError || undefined }),
+        el('div', { class: 'scene-preset-confirm' }, [hint, create]),
+      ]),
     ]);
-    this.root.append(this.tray);
+    const position = () => {
+      const trigger = document.getElementById('scenePresets');
+      if (!trigger) return;
+      const r = trigger.getBoundingClientRect(), gap = 8, edge = 12;
+      const above = r.top - gap - edge, below = innerHeight - r.bottom - gap - edge;
+      const up = above >= Math.min(360, innerHeight - edge * 2) || above >= below;
+      this.tray.style.maxHeight = `${Math.max(0, Math.min(360, up ? above : below))}px`;
+      const box = this.tray.getBoundingClientRect();
+      this.tray.style.left = `${Math.max(edge, Math.min(r.right - box.width, innerWidth - box.width - edge))}px`;
+      this.tray.style.top = `${Math.max(edge, Math.min(up ? r.top - gap - box.height : r.bottom + gap, innerHeight - box.height - edge))}px`;
+    };
+    const offKey = onKey(e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); close(); }
+      else if (this.tray.contains(e.target)) e.stopImmediatePropagation();
+      // Leave Tab's native default intact; this is a non-modal surface.
+    }, { priority: KEY_PRIORITY.popup });
+    const outside = e => {
+      if (!this.tray.contains(e.target) && !e.target.closest('#scenePresets')) this.closePresets({ returnFocus: false });
+    };
+    document.addEventListener('pointerdown', outside);
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+    this._presetCleanup = () => {
+      offKey(); document.removeEventListener('pointerdown', outside);
+      window.removeEventListener('resize', position); window.removeEventListener('scroll', position, true);
+    };
+    document.body.append(this.tray);
+    position();
   }
 
   /** 实际生效的模式：修改模式遇空场景自动切生成。 */
@@ -149,7 +208,6 @@ export class AiPanel {
     const draft = this.textarea?.value ?? '';
     clear(this.root);
     this.root.classList.toggle('continuing', !!this.continuing);
-    this.root.classList.toggle('browsing-presets', !!this.browsePresets);
     const head = el('div', { class: 'ai-head' }, [
       el('button', { class: 'ai-icbtn', title: '设置（模型接口）', html: icon('gear', 17), onclick: () => { this.showSettings = !this.showSettings; this.showHistory = false; this.render(); } }),
       el('button', { class: 'minibtn', text: '会话历史', onclick: () => { this.showHistory = !this.showHistory; this.showSettings = false; this.render(); } }),
@@ -230,7 +288,7 @@ export class AiPanel {
     if (!turns.length) {
       this.flowEl.appendChild(el('div', { class: 'ai-empty' }, [
         el('div', { text: '用一句话描述场景，AI 会摆好人物、机位和运镜。' }),
-        el('div', { class: 'ai-eg', text: '不想打字？选下方预制场景，再点「发送」即可。' }),
+        el('div', { class: 'ai-eg', text: '不想打字？打开预制场景，选择后点击「创建」。' }),
       ]));
       return;
     }
@@ -381,7 +439,7 @@ export class AiPanel {
 
   /** 发送：直接生成，成功加载后才替换场景；识图模式必须有图。 */
   send() {
-    if (this.agent.busy) return;
+    if (this.agent.busy || this.creatingPreset) return;
     const input = this.textarea.value.trim();
     const mode = this.effectiveMode;
     if (!this.agent.provider?.configured) { this.showSettings = true; this.open = true; this.render(); toast('请先在设置里填写模型接口'); return; }

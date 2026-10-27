@@ -48,7 +48,7 @@
 //   stops: [i, ...],                 // 可选：停顿的顶点索引，升序、不含首尾（闭合路径可到 n−1）；缺省 = 无停顿
 //   stopTimes: [秒, ...],            // 可选：到达各停顿顶点的时刻（相对 start），与 stops 等长、递增、在 (0, duration) 内；
 //   timedSegments: [{from,to,start,end}], // 可选：连续覆盖全部顶点；时段间空隙是真正的驻足，时间相对路径 start
-//   waypointTimes: [秒, ...],       // 可选：依次到达各节点的相对时刻；内部节点速度连续，不能与分段停步并用
+//   waypointTimes: [秒, ...],       // 可选：依次到达各节点的相对时刻；内部节点速度连续；stops 可固定追加接缝速度为零
 // }                                  //   缺省 = 各段按弧长比例分配时长。有 stops 时每段各自缓入缓出（停顿处速度 0）
 // Constraint = {
 //   id, type: 'lookAt' | 'follow',
@@ -369,7 +369,7 @@ export function validate(doc) {
   const time = (v, path) => num(v, path, { min: 0 });
   const nullableTime = (v, path) => { if (v !== null) time(v, path); };
 
-  const posTracks = new Map(); // targetId → 轨道路径（pos 轨道，与路径互斥）
+  const posTracks = new Map(); // targetId → 位置轨道；机位允许结束后衔接路径
   if (checkKeys(doc.timeline, 'timeline', TIMELINE_KEYS)) {
     const t = doc.timeline;
     num(t.duration, 'timeline.duration', { gt: 0 });
@@ -388,7 +388,7 @@ export function validate(doc) {
         const k = `${tr.target}|${tr.property}`;
         if (seen.has(k)) err(p, `与 ${seen.get(k)} 重复：同一实体 ${fmt(tr.target)} 的 ${tr.property} 只能有一条轨道`);
         else seen.set(k, p);
-        if (tr.property === 'pos') posTracks.set(tr.target, p);
+        if (tr.property === 'pos') posTracks.set(tr.target, { track: tr, path: p });
       }
       if (tr.keys === undefined) return;
       // keys 可为空（先加轨道、再打键的中间状态；evaluate 里是 no-op），非空时严格递增
@@ -446,7 +446,12 @@ export function validate(doc) {
       if (hit.type === 'character' && hit.e.parent != null) err(`${p}.target`, `${fmt(pa.target)} 是群众成员，不能单独有路径（请给所在组 ${fmt(hit.e.parent)} 加路径）`);
       else if (pathOf.has(pa.target)) err(`${p}.target`, `${fmt(pa.target)} 已有路径 ${pathOf.get(pa.target)}，每个实体最多一条`);
       else pathOf.set(pa.target, p);
-      if (posTracks.has(pa.target)) err(`${p}.target`, `${fmt(pa.target)} 已有 pos 轨道 ${posTracks.get(pa.target)}，路径与 pos 轨道不能共存`);
+      const prefix = posTracks.get(pa.target);
+      if (prefix) {
+        const last = prefix.track.keys?.at(-1);
+        const connected = hit.type === 'camera' && last && last.t <= pa.start && Array.isArray(last.value) && last.value.every((v, i) => Math.abs(v - pa.points?.[0]?.[i]) < 1e-6);
+        if (!connected) err(`${p}.target`, `${fmt(pa.target)} 已有 pos 轨道 ${prefix.path}，路径与 pos 轨道不能重叠；仅机位可在位置动画结束后从末端接续`);
+      }
     }
     if (pa.points !== undefined) {
       if (!Array.isArray(pa.points) || pa.points.length < 2) err(`${p}.points`, `应为至少 2 个点的数组，实际为 ${Array.isArray(pa.points) ? `${pa.points.length} 个点` : fmt(pa.points)}`);
@@ -466,9 +471,12 @@ export function validate(doc) {
         let lastPoint = 0, lastEnd = 0;
         pa.timedSegments.forEach((s, j) => {
           const q = `${p}.timedSegments[${j}]`;
-          if (!checkKeys(s, q, ['from', 'to', 'start', 'end'])) return;
+          if (!checkKeys(s, q, ['from', 'to', 'start', 'end'], ['closed', 'speed'])) return;
           if (s.from !== lastPoint || !Number.isInteger(s.to) || s.to <= s.from || s.to >= pa.points?.length) err(q, '顶点区间应连续、递增并覆盖路径');
           if (!isNum(s.start) || !isNum(s.end) || s.start < lastEnd || s.end <= s.start || s.end > pa.duration) err(q, '时段应递增且位于路径时长内');
+          if (s.speed !== undefined) oneOf(s.speed, `${q}.speed`, PATH_SPEEDS, '速度曲线');
+          if (s.closed !== undefined) bool(s.closed, `${q}.closed`);
+          if (s.closed && (s.to - s.from < 3 || JSON.stringify(pa.points?.[s.from]) !== JSON.stringify(pa.points?.[s.to]))) err(q, '闭合段须至少三条边且首尾重合');
           lastPoint = s.to; lastEnd = s.end;
         });
         if (lastPoint !== pa.points?.length - 1) err(`${p}.timedSegments`, '最后一段须到达终点');
@@ -476,7 +484,7 @@ export function validate(doc) {
     }
     if (pa.waypointTimes !== undefined) {
       const times = pa.waypointTimes;
-      if (pa.closed || pa.timedSegments || pa.stops?.length) err(`${p}.waypointTimes`, '仅开放、连续路径可设置节点时间');
+      if (pa.closed || pa.timedSegments) err(`${p}.waypointTimes`, '仅开放且不含 timedSegments 的路径可设置节点时间');
       if (!Array.isArray(times) || times.length !== pa.points?.length) err(`${p}.waypointTimes`, '应为与路径顶点等长的时刻数组');
       else {
         times.forEach((value, j) => {

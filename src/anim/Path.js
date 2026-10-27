@@ -154,7 +154,10 @@ export class Path {
       const pts = json.closed ? [...json.points, json.points[0]] : json.points;
       const cuts = [0, ...stops, pts.length - 1];
       this.curves = [];
-      for (let i = 0; i + 1 < cuts.length; i++) this.curves.push(geometry(pts.slice(cuts[i], cuts[i + 1] + 1), false));
+      for (let i = 0; i + 1 < cuts.length; i++) {
+        const loop = !!timed?.[i].closed;
+        this.curves.push(geometry(pts.slice(cuts[i], cuts[i + 1] + (loop ? 0 : 1)), loop));
+      }
       this._vs = cuts.slice(0, -1); // 各段首顶点的索引
     }
     // 各段起点弧长 S[k] 与（相对 start 的）起点时刻 T[k]，末项为全长 / 时长
@@ -167,7 +170,7 @@ export class Path {
       const T = this.waypointTimes;
       this._waypointS = T.map((_, i) => this.vertexDistance(i));
       const slopes = T.slice(0, -1).map((v, i) => (this._waypointS[i + 1] - this._waypointS[i]) / (T[i + 1] - v));
-      this._waypointV = T.map((_, i) => i === 0 || i === T.length - 1 ? 0
+      this._waypointV = T.map((_, i) => i === 0 || i === T.length - 1 || json.stops?.includes(i) ? 0
         : slopes[i - 1] * slopes[i] <= 0 ? 0 : 2 * slopes[i - 1] * slopes[i] / (slopes[i - 1] + slopes[i]));
     }
     const D = json.duration;
@@ -261,7 +264,7 @@ export class Path {
       for (let k = 0; k < this.timedSegments.length; k++) {
         const seg = this.timedSegments[k];
         if (x < seg.start) return this._S[k];
-        if (x <= seg.end) return this._S[k] + profile(x - seg.start, seg.end - seg.start, this._S[k + 1] - this._S[k], this.json.speed, this.ramp)[0];
+        if (x <= seg.end) return this._S[k] + profile(x - seg.start, seg.end - seg.start, this._S[k + 1] - this._S[k], seg.speed || this.json.speed, this.ramp)[0];
       }
       return this.length;
     }
@@ -279,7 +282,7 @@ export class Path {
       const k = this.timedSegments.findIndex(s => x > s.start && x < s.end);
       if (k < 0) return 0;
       const seg = this.timedSegments[k];
-      return profile(x - seg.start, seg.end - seg.start, this._S[k + 1] - this._S[k], this.json.speed, this.ramp)[1];
+      return profile(x - seg.start, seg.end - seg.start, this._S[k + 1] - this._S[k], seg.speed || this.json.speed, this.ramp)[1];
     }
     const { start, duration, speed } = this.json;
     const x = (t - start) / duration;

@@ -190,7 +190,7 @@ export const OP_SPECS = {
   camera_move: { fields: { target: req(T.ref), preset: req(E.move), subject: opt(T.refOrPoint), amount: opt(T.amount), dir: opt(T.dir), sweep: opt(T.sweep), duration: opt(T.duration), append: opt(T.bool) }, note: '运镜：生成机位路径并注视主体（subject 默认最近的角色）；append=true 接在已有运镜之后，否则替换已有运镜' },
   clear_moves: { fields: { target: req(T.ref) }, note: '清除机位的运镜（路径 + 约束 + 旋转关键帧）' },
   look_at: { fields: { target: req(T.ref), subject: req(T.refOrPoint), start: opt(T.time), end: opt(T.time) }, note: '机位注视主体（start / end 省略 = 全程）' },
-  follow: { fields: { target: req(T.ref), subject: req(T.ref), offset: opt(T.pos), start: opt(T.time), end: opt(T.time) }, note: '机位刚性跟随主体；offset 默认 = 当前相对位置' },
+  follow: { fields: { target: req(T.ref), subject: req(T.ref), offset: opt(T.pos), start: opt(T.time), end: opt(T.time) }, note: '机位位置跟随主体；offset 默认 = 当前相对位置；不改变朝向或注视目标，注视另用 look_at' },
   keyframe: { fields: { target: req(T.ref), property: req(E.property), t: req(T.time), value: req(T.keyValue), ease: opt(E.ease) }, note: '打一个关键帧（同一时刻覆盖）' },
   timeline: { fields: { duration: opt(T.duration), fps: opt(T.fps), mainCamera: opt(T.nullableCamera) }, note: '时间轴时长 / 帧率 / 主机位（导出视频用主机位出画）' },
 };

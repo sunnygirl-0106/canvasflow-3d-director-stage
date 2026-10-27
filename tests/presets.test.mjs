@@ -55,7 +55,40 @@ test('主机位按节点时刻经过中间点，经过时仍有连续速度', ()
   const doc = createPresetScene(2);
   const cam = doc.entities.find(e => e.type === 'camera');
   const path = new Path(doc.paths.find(p => p.target === cam.id));
-  close(xz(path, 5), [5, 6], 0.04);
+  const json = path.json, i = json.waypointTimes.indexOf(5);
+  assert.ok(i > 0);
+  close(xz(path, 5), [json.points[i][0], json.points[i][2]], 1e-6);
   assert.ok(path.speedAt(5 - 0.001) > 0);
   assert.ok(Math.abs(path.speedAt(5 - 0.001) - path.speedAt(5 + 0.001)) < 0.02);
+});
+
+
+test('all camera phase boundaries hold or move continuously; append preserves every prefix sample', async () => {
+  const { appendMove, cameraMove } = await import('../src/anim/cameraMoves.js');
+  const holds = [[[0, 4.5], [10.5, 12]], [[0, 2], [6, 8], [12, 14]], [[10, 12]], [[5.5, 6.5], [11, 12]], [[0, 2], [8, 10]], [[10.5, 12]], [[0, 3], [11, 14]], [[10, 12]]];
+  for (let i = 0; i < 8; i++) {
+    const d = createPresetScene(i), cam = d.entities.find(e => e.type === 'camera');
+    const json = d.paths.find(p => p.target === cam.id), path = new Path(json);
+    for (const [a, b] of holds[i]) {
+      assert.ok(path.positionAt(path.distanceAt(a)).distanceTo(path.positionAt(path.distanceAt(b))) < 1e-6, `scene ${i} hold ${a}-${b}`);
+      assert.equal(path.speedAt((a + b) / 2), 0);
+    }
+    for (const t of json.waypointTimes) {
+      assert.ok(path.positionAt(path.distanceAt(t - .001)).distanceTo(path.positionAt(path.distanceAt(t + .001))) < .02);
+      assert.ok(Math.abs(path.speedAt(t - .00001) - path.speedAt(t + .00001)) < .01);
+    }
+    const next = appendMove(json, cameraMove('crane', { position: json.points.at(-1), aim: [0, 1, 0], params: { duration: 2, amount: .4 } }));
+    d.paths = d.paths.map(p => p.id === json.id ? next : p); d.timeline.duration += 2;
+    assert.deepEqual(validate(d).errors, []);
+    const appended = new Path(next);
+    for (let t = 0; t <= json.duration; t += .05) assert.ok(path.positionAt(path.distanceAt(t)).distanceTo(appended.positionAt(appended.distanceAt(t))) < 1e-7, `scene ${i} prefix ${t}`);
+    assert.equal(d.meta.cameraMoves, undefined);
+  }
+});
+
+test('timed custom prefix retains holds and times when appending', async () => {
+  const { appendMove, cameraMove } = await import('../src/anim/cameraMoves.js');
+  const json = { points: [[0, 1, 5], [1, 1, 5], [2, 1, 5]], start: 1, duration: 8, closed: false, speed: 'smooth', orient: 'keep', timedSegments: [{ from: 0, to: 1, start: 0, end: 2 }, { from: 1, to: 2, start: 4, end: 6 }] };
+  const path = new Path(json), next = new Path(appendMove(json, cameraMove('crane', { position: json.points.at(-1), aim: [0, 1, 0] })));
+  for (let t = 0; t <= 9; t += .05) assert.ok(path.positionAt(path.distanceAt(t)).distanceTo(next.positionAt(next.distanceAt(t))) < 1e-8);
 });

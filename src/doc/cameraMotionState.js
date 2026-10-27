@@ -11,3 +11,10 @@ export function cameraMotionState(doc, id) {
   const state = doc.meta.cameraMoves?.[id];
   return state?.signature === motionSignature(doc, id) ? state : null;
 }
+
+/** Only constraint edits may refresh a previously valid identity. Geometry edits stay invalid. */
+export function editCameraConstraints(doc, edit) {
+  const valid = Object.keys(doc.meta.cameraMoves || {}).filter(id => cameraMotionState(doc, id));
+  edit();
+  for (const id of valid) doc.meta.cameraMoves[id].signature = motionSignature(doc, id);
+}

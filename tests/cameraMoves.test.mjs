@@ -215,3 +215,32 @@ test('Path 停顿：无 stops 的数值与之前逐项相同；stops 无 stopTim
   assert.ok(close(S.positionAt(S.distanceAt(1 + T[1])).distanceTo(new THREE.Vector3(2, 0, 3)), 0, 1e-6));
   assert.ok(close(S.vertexDistance(2), 5, 1e-3));
 });
+
+test('appending retains closed tangents and linear custom prefix at every old frame', () => {
+  for (const name of ['circle', 'truck']) for (const speed of ['smooth', 'linear']) {
+    const move = cameraMove(name, { position: CAM, aim: AIM });
+    const json = { ...move, start: 1, speed, orient: 'keep' };
+    const path = new Path(json);
+    const appended = new Path(appendMove(json, cameraMove('circle', { position: pathEnd(json), aim: AIM })));
+    for (let t = 1; t <= 1 + move.duration; t += 1 / 30) {
+      assert.ok(path.positionAt(path.distanceAt(t)).distanceTo(appended.positionAt(appended.distanceAt(t))) < 1e-8, `${name}/${speed} at ${t}`);
+    }
+  }
+});
+
+test('timed appended loops still support stop editing and independent endpoint editing', async () => {
+  const { toggleStop, fitStops } = await import('../src/anim/pathGen.js');
+  const move = cameraMove('circle', { position: CAM, aim: AIM });
+  const prefix = { ...move, start: 0, speed: 'smooth', orient: 'keep' };
+  const json = appendMove(prefix, cameraMove('truck', { position: pathEnd(prefix), aim: AIM }));
+  const stopped = { ...json, ...toggleStop(json, 4, true) };
+  assert.equal(stopped.timedSegments.length, 3);
+  assert.equal(new Path(stopped).speedAt(stopped.timedSegments[0].end), 0);
+  assert.deepEqual(stopped.timedSegments.at(-1), json.timedSegments.at(-1));
+  const resumed = { ...stopped, ...toggleStop(stopped, 4, false) };
+  assert.equal(resumed.timedSegments.length, 2);
+  const points = structuredClone(json.points); points[0][0] += .5;
+  const edited = fitStops(json, { ...json, points }, { points });
+  assert.equal(edited.timedSegments[0].closed, false);
+  assert.deepEqual(edited.points.at(-1), json.points.at(-1));
+});

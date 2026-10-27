@@ -320,7 +320,7 @@ export class PathOverlay {
   _vertexMat(pathId, i, color = ACCENT) {
     const is = (h) => h && h.pathId === pathId && h.index === i;
     const sel = this.selection;
-    const index = sel?.kind === 'pos' ? this.source(pathId)?.keys.findIndex(k => k.t === sel.keyTime) : sel?.index;
+    const index = sel?.kind === 'pos' && sel.sourceId === pathId ? this.source(pathId)?.keys.findIndex(k => k.t === sel.keyTime) : sel?.index;
     return discMat(color, sel?.sourceId === pathId && index === i ? 'selected' : is(this.hover) ? 'hover' : 'node');
   }
 

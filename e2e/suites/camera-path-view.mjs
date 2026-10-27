@@ -1,23 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { page, ok } from '../harness.mjs';
-import { settle, pickInOutliner, dragPath, scr } from '../helpers.mjs';
+import { settle, pickInOutliner, dragPath, scr, pathMenu as choose } from '../helpers.mjs';
 
 const OUT = 'test-output/camera-path-view';
 const modes = [['circle', '圆环路径'], ['line', '直线路径'], ['rectangle', '矩形路径'], ['freehand', '铅笔路径'], ['points', '钢笔路径']];
 
-async function choose(label) {
-  if (!await page.$('#inspector [data-sec="path"] .sec-btn')) {
-    await (await page.$('#inspector ::-p-text(运动轨迹)')).click();
-    await settle();
-  }
-  const advanced = await page.$('#inspector .motion-advanced:not([open]) > summary');
-  if (advanced) await advanced.click();
-  await page.click('#inspector [data-sec="path"] .sec-btn');
-  const item = await page.$(`::-p-text(${label})`);
-  await item.click();
-  await settle();
-}
 async function draw(mode) {
   const points = await Promise.all([[2, 0, 1], [3, 0, 2], [4, 0, 1]].map(scr));
   await page.mouse.move(...points[0]);

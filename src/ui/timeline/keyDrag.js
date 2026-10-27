@@ -202,7 +202,7 @@ function dragObjectBar(panel, e, barEl, edge) {
       }
       for (const pathBar of panel.rows.querySelectorAll('.tl-bar-path')) {
         const path = change?.after.paths.find(p => p.id === pathBar.dataset.id && p.target === id) || original.paths.find(p => p.id === pathBar.dataset.id && p.target === id);
-        if (path) pathBar.querySelector('.tl-bar-text').textContent = `位置路径 · ${path.duration.toFixed(1)} s`;
+        if (path && pathBar.querySelector('.tl-bar-text')) pathBar.querySelector('.tl-bar-text').textContent = `位置路径 · ${path.duration.toFixed(1)} s`;
       }
       barEl.querySelector('.tl-bar-text').textContent = length ? `对象动画 · ${(b - a).toFixed(1)} s` : `对象动画 · ${a.toFixed(2)} s（单点）`;
       panel.showDragTime(edge === 'end' ? b : a, ev.clientX);

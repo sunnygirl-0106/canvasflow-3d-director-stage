@@ -730,6 +730,7 @@ export class App extends Emitter {
     }
     this.pathOverlay.update();
     this.selection.update();
+    this.gizmo.updateSize();
     this.labels.update(this.entities, this.getRenderCamera(), {
       worldScale: this.stage.world.scale.y,
       hideCameras: this.cameraView,

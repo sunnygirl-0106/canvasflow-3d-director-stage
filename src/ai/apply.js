@@ -298,6 +298,9 @@ export async function applyOps(app, ops, { mode = 'modify', expectedRevision = a
     return { ok: false, applied: 0, renames: r.renames, warnings: r.warnings, errors: [`加载失败：${err?.message || err}`] };
   }
   app.history.capture(); // 一次 AI 应用 = 一步撤销
+  if (ops.some(o => o.op === 'look_at' || o.op === 'follow')) {
+    app.playback.seek(app.playback.time);
+  }
   if (mode !== 'modify') {
     app.setCameraView(false);
     app.rig.frameAll(app.entities, { overview: true });

@@ -246,7 +246,7 @@ export class TimelinePanel extends Emitter {
     const bar = e.target.closest('.tl-bar');
     if (bar) {
       const ent = bar.closest('.tl-row').dataset.ent;
-      this.app.emit('inspect', { id: ent, section: bar.dataset.kind });
+      this.app.emit('inspect', { id: ent, section: bar.dataset.kind, constraintId: bar.dataset.kind === 'constraint' ? bar.dataset.id : undefined });
     }
   }
 
@@ -582,6 +582,7 @@ export class TimelinePanel extends Emitter {
 
   _onKey(e) {
     if (e.target.closest?.('.ai-capsule, .ctxmenu, .tl-resize-handle')) return;
+    if ([' ', 'Enter'].includes(e.key) && e.target.closest?.('.tl-key, .tl-path-node')) return;
     if (!this.app.ready || e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
     const pb = this.app.playback;
     let handled = true;

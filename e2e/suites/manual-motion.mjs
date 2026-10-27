@@ -25,33 +25,46 @@ export async function run() {
   const before = await page.evaluate(() => JSON.stringify(window.__app.store.document));
   ok('选中摄像机默认属性页', !!await page.$('#inspector .cam-preview'));
   const tabs = await page.$$('#inspector .ptabs button'); await tabs[1].click(); await settle();
-  ok('打开运镜页不写文档、不生成虚线；七张主卡片', await page.evaluate(before => JSON.stringify(window.__app.store.document) === before && !window.__app.pathOverlay.movePreviewSize && document.querySelectorAll('.move-cards .move-card').length === 7, before));
+  ok('打开运镜页不写文档、不生成虚线；八张运镜卡片', await page.evaluate(before => JSON.stringify(window.__app.store.document) === before && !window.__app.pathOverlay.movePreviewSize && document.querySelectorAll('.move-cards .move-card').length === 8, before));
+  ok('摄像机运动页不显示轨迹编辑区域', !await page.$('#inspector .motion-advanced, #inspector [data-sec="path"]'));
   const view = await page.evaluate(() => ({ pos: window.__app.stage.camera.position.toArray(), target: window.__app.rig.controls.target.toArray() }));
   await page.click('[data-preset="half_orbit"]'); await settle();
   const applied = await page.evaluate(id => {
     const a = window.__app, state = a.cameraMoves.current(a.findCamera(id));
     return { state, count: a.pathOverlay.itemCount, pos: a.stage.camera.position.toArray(), target: a.rig.controls.target.toArray(), history: a.history.index, doc: JSON.stringify(a.store.document) };
   }, ids.c1);
-  ok('半弧点击即应用 6 秒，身份持久化、导演观察位置不变', applied.state?.segments[0].params.duration === 6 && applied.count === 1 && JSON.stringify(applied.pos) === JSON.stringify(view.pos) && JSON.stringify(applied.target) === JSON.stringify(view.target));
+  ok('半弧点击即应用 2 秒，身份持久化、导演观察位置不变', applied.state?.segments[0].params.duration === 2 && applied.count === 1 && JSON.stringify(applied.pos) === JSON.stringify(view.pos) && JSON.stringify(applied.target) === JSON.stringify(view.target));
+  ok('场景中有角色时预设仍默认使用手动注视坐标', await page.evaluate(({ id, applied }) => {
+    const subject = applied.state.segments[0].subject;
+    return Array.isArray(subject) && JSON.stringify(subject) === JSON.stringify(window.__app.findCamera(id).lookTarget.toArray()) && !document.querySelector('#inspector [data-sec="path"]');
+  }, { id: ids.c1, applied }));
   await page.click('[data-preset="half_orbit"]'); await settle();
-  ok('重复点击已应用项无文档变化、无新增撤销记录', await page.evaluate(a => window.__app.history.index === a.history && JSON.stringify(window.__app.store.document) === a.doc, applied));
+  ok('普通模式重复点击单段不新增历史、不改变文档或时长', await page.evaluate(applied => JSON.stringify(window.__app.store.document) === applied.doc && window.__app.history.index === applied.history, applied));
+  await page.click('.move-append'); await settle();
+  await page.screenshot({ path: 'test-output/manual-motion/append.png' });
+  await page.click('[data-preset="half_orbit"]'); await settle();
+  ok('显式追加继承参数并延长时间，完成后退出追加', await page.evaluate(({ applied, id }) => {
+    const a = window.__app, state = a.cameraMoves.current(a.findCamera(id));
+    return state.segments.length === 2 && JSON.stringify(state.segments[1].params) === JSON.stringify(state.segments[0].params) && state.segments[1].origin.time === 2 && a.timeline.duration >= 4 && a.history.index === applied.history + 1 && !document.querySelector('.move-cancel');
+  }, { applied, id: ids.c1 }));
+  await page.evaluate(async () => { await window.__app.history.undo(); }); await settle();
   await page.screenshot({ path: 'test-output/manual-motion/cards.png' });
   await page.evaluate(() => { const field = [...document.querySelectorAll('.camera-moves .field')].find(n => n.querySelector('label')?.textContent === '角度'); const input = field.querySelector('input'); input.value = '90'; input.dispatchEvent(new Event('change', { bubbles: true })); });
   await settle();
   ok('改参数保持原始起点；替换没有追加旧线路', await page.evaluate(({ ids, applied }) => {
     const a = window.__app, p = a.timeline.paths.find(p => p.target === ids.c1);
-    return p.duration === 6 && JSON.stringify(p.points[0]) === JSON.stringify(applied.state.segments[0].origin.position) && a.cameraMoves.current(a.findCamera(ids.c1)).segments[0].params.sweep === 90;
+    return p.duration === 2 && JSON.stringify(p.points[0]) === JSON.stringify(applied.state.segments[0].origin.position) && a.cameraMoves.current(a.findCamera(ids.c1)).segments[0].params.sweep === 90;
   }, { ids, applied }));
   const valid = await page.evaluate(() => JSON.stringify(window.__app.store.document));
   await page.evaluate(() => { const field = [...document.querySelectorAll('.camera-moves .field')].find(n => n.querySelector('label')?.textContent === '角度'); const input = field.querySelector('input'); input.value = '200'; input.dispatchEvent(new Event('change', { bubbles: true })); });
   ok('无效角度保留有效结果，并显示字段错误', await page.evaluate(valid => JSON.stringify(window.__app.store.document) === valid && !document.querySelector('.move-error').hidden, valid));
   await page.click('[data-preset="spiral"]'); await settle();
-  ok('螺旋真实升高；替换只有一个预设', await page.evaluate(id => { const a = window.__app, p = a.timeline.paths.find(p => p.target === id); return p.points.at(-1)[1] > p.points[0][1] && a.cameraMoves.current(a.findCamera(id)).segments.length === 1; }, ids.c1));
+  ok('普通模式替换为螺旋，真实升高且仅保留新段', await page.evaluate(id => { const a = window.__app, p = a.timeline.paths.find(p => p.target === id); return p.points.at(-1)[1] > p.points[0][1] && a.cameraMoves.current(a.findCamera(id)).segments.length === 1; }, ids.c1));
   await page.evaluate(async () => { await window.__app.history.undo(); }); await settle();
   ok('一次撤销完整恢复原预设和参数', await page.evaluate(id => window.__app.cameraMoves.current(window.__app.findCamera(id))?.segments[0].params.sweep === 90, ids.c1));
-  await (await page.$('::-p-text(追加一段)')).click(); await settle();
+  await page.click('.move-append'); await settle();
   await page.click('[data-preset="crane"]'); await settle();
-  ok('明确追加才拼接新段', await page.evaluate(id => { const a = window.__app; return a.cameraMoves.current(a.findCamera(id))?.segments.length === 2 && a.timeline.paths.find(p => p.target === id).duration === 10; }, ids.c1));
+  ok('显式追加异类预设保留前缀', await page.evaluate(id => { const a = window.__app; return a.cameraMoves.current(a.findCamera(id))?.segments.length === 2 && a.timeline.paths.find(p => p.target === id).duration === 4; }, ids.c1));
   const saved = await page.evaluate(() => window.__app.exportDocument());
   await page.reload({ waitUntil: 'networkidle0' }); await page.waitForFunction(() => window.__app?.ready);
   await page.evaluate(async saved => { const a = window.__app; await a.loadDocument(saved, { applyView: true }); }, saved);
@@ -97,13 +110,62 @@ export async function run() {
     const a = window.__app, cam = a.findCamera(ids.c1), tool = a.cameraMoves;
     a.select(cam.id, { user: true });
     const beforeFov = cam.fov;
+    tool.clear(cam); a.playback.stop();
     const first = tool.applyPreset(cam, 'pan');
     const noLine = a.pathOverlay.itemCount === 0;
     const panEnd = tool.current(cam).segments[0].params.duration;
-    const appended = tool.applyPreset(cam, 'crane', { append: true });
+    const appended = tool.applyPreset(cam, 'crane', { mode: 'append' });
     const correctStart = a.timeline.paths.find(p => p.target === cam.id)?.start === panEnd;
     return first && noLine && appended && correctStart && cam.fov === beforeFov;
   }, ids);
   ok('摇镜头不伪造位移路径；显式追加从摇镜头结束时刻开始，FOV 保留', pan);
 
+  await page.evaluate(id => {
+    const a = window.__app;
+    a.cameraMoves.clear(a.findCamera(id));
+    a.playback.seek(6.25);
+    a.history.reset();
+  }, ids.c2);
+  await pickInOutliner(names.c2);
+  await page.evaluate(() => document.querySelectorAll('#inspector .ptabs button')[1].click());
+  await settle();
+  await page.click('[data-preset="crane"]'); await settle();
+  ok('在 6.25 秒点击预设，从播放头插入且播放头不跳回开头', await page.evaluate(id => {
+    const a = window.__app, p = a.timeline.paths.find(p => p.target === id);
+    return p?.start === 6.25 && p.duration === 2 && a.playback.time === 6.25
+      && a.cameraMoves.current(a.findCamera(id)).segments[0].origin.time === 6.25;
+  }, ids.c2));
+  await page.evaluate(async () => { await window.__app.history.undo(); }); await settle();
+  ok('播放头插入可一步撤销', await page.evaluate(id => !window.__app.timeline.paths.some(p => p.target === id), ids.c2));
+  await page.evaluate(async () => { await window.__app.history.redo(); }); await settle();
+  ok('重做恢复插入时间', await page.evaluate(id => window.__app.timeline.paths.find(p => p.target === id)?.start === 6.25, ids.c2));
+  await page.evaluate(() => window.__app.playback.seek(7));
+  await page.evaluate(() => {
+    const field = [...document.querySelectorAll('.camera-moves .field')].find(n => n.querySelector('label')?.textContent === '时长');
+    const input = field.querySelector('input'); input.value = '3'; input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await settle();
+  ok('移动播放头后调参仍保留已插入的起点', await page.evaluate(id => {
+    const p = window.__app.timeline.paths.find(p => p.target === id);
+    return p.start === 6.25 && p.duration === 3;
+  }, ids.c2));
+  await page.click('.move-append'); await settle();
+  await page.click('[data-preset="truck"]'); await settle();
+  ok('显式追加仍接在已有运镜末尾', await page.evaluate(id => {
+    const a = window.__app, state = a.cameraMoves.current(a.findCamera(id));
+    return state.segments[1].origin.time === 9.25 && a.timeline.duration >= 11.25;
+  }, ids.c2));
+  await page.evaluate(id => {
+    const a = window.__app;
+    a.cameraMoves.clear(a.findCamera(id));
+    a.playback.seek(a.timeline.duration);
+    window.panInsertTime = a.playback.time;
+  }, ids.c2);
+  await settle();
+  await page.click('[data-preset="pan"]'); await settle();
+  ok('摇镜头也从播放头插入，超出末尾自动延长时间轴', await page.evaluate(id => {
+    const a = window.__app, keys = a.timeline.tracks.find(t => t.target === id && t.property === 'rot').keys;
+    return keys[0].t === window.panInsertTime && keys.at(-1).t === window.panInsertTime + 2
+      && a.timeline.duration >= keys.at(-1).t;
+  }, ids.c2));
 }

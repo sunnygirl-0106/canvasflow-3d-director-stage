@@ -1,3 +1,4 @@
+import { editCameraConstraints } from '../doc/cameraMotionState.js';
 import * as THREE from 'three';
 import { Emitter } from '../util/Emitter.js';
 import { updateDraft } from '../doc/Store.js';
@@ -87,7 +88,7 @@ export class Timeline extends Emitter {
       else if (ent) for (const m of ent.children) add(m.id, 'pose');
     }
     for (const c of this.constraints) {
-      if (c.type === 'follow') add(c.target, 'pos', 'rot');
+      if (c.type === 'follow') add(c.target, 'pos');
       else add(c.target, 'rot');
     }
     return map;
@@ -210,6 +211,8 @@ export class Timeline extends Emitter {
 
     // 2 路径轨道
     for (const json of paths) {
+      // An appended path takes over only after the existing position animation ends.
+      if (t < json.start && tracks.some(track => track.target === json.target && track.property === 'pos' && track.keys.length)) continue;
       const st = states.get(json.target);
       if (st) this._rt(json, (j) => new PathTrack(j, pathOptionsFor(st.ent.type))).apply(t, st);
     }
@@ -352,8 +355,8 @@ export class Timeline extends Emitter {
     }
     for (const c of this.constraints) {
       if (c.target !== entId || !constraintActive(c, t)) continue;
-      if (c.type === 'follow') { out.set('pos', '跟随'); out.set('rot', '跟随'); }
-      else if (!out.has('rot')) out.set('rot', '注视');
+      if (c.type === 'follow') out.set('pos', '跟随');
+      else out.set('rot', '注视');
     }
     return out;
   }
@@ -417,7 +420,8 @@ export class Timeline extends Emitter {
   _commit(next) {
     this.app.store.transact('编辑动画', (doc) => {
       for (const [key, value] of Object.entries(next)) {
-        if (key === 'paths' || key === 'constraints') updateDraft(doc[key], value);
+        if (key === 'constraints') editCameraConstraints(doc, () => updateDraft(doc.constraints, value));
+        else if (key === 'paths') updateDraft(doc.paths, value);
         else if (key === 'tracks') updateDraft(doc.timeline.tracks, value);
         else doc.timeline[key] = value;
       }
