@@ -3,7 +3,7 @@ import { Emitter } from '../../util/Emitter.js';
 import { nameWidth, GUTTER } from './layout.js';
 import { Transport } from './Transport.js';
 import { Ruler } from './Ruler.js';
-import { TrackRows, keyId, PROP_LABEL } from './TrackRows.js';
+import { TrackRows, keyId, PROP_LABEL, CAMERA_PROP_LABEL } from './TrackRows.js';
 import { dragKeys, dragBar } from './keyDrag.js';
 import { popupMenu } from '../popupMenu.js';
 import { toggleKey, propState } from './animState.js';
@@ -264,7 +264,7 @@ export class TimelinePanel extends Emitter {
       const data = tl.toJSON().timeline.tracks.find((t) => t.id === track);
       if (!data) return;
       items = [
-        { label: `删除轨道（${PROP_LABEL[data.property]}）`, onClick: run(() => tl.removeTrack(track)) },
+        { label: `删除轨道（${(this.app.findEntity(data.target)?.type === 'camera' ? CAMERA_PROP_LABEL : PROP_LABEL)[data.property]}）`, onClick: run(() => tl.removeTrack(track)) },
         { label: '清空键', disabled: !data.keys.length, onClick: run(() => { for (const k of data.keys) tl.removeKey(track, k.t); }) },
       ];
     } else if (path) items = [{ label: '删除路径', onClick: run(() => tl.removePath(path)) }];
@@ -346,7 +346,7 @@ export class TimelinePanel extends Emitter {
     const properties = ent.type === 'camera' ? ['pos', 'rot', 'fov'] : ['pos', 'rot', 'scale'];
     popupMenu(event.clientX, event.clientY, properties.map(property => {
       const state = propState(this.app, this.app.timeline.view(), ent.id, property, this.app.playback.time);
-      return { label: PROP_LABEL[property], disabled: !!state.forced || !!state.track, onClick: () => {
+      return { label: (ent.type === 'camera' ? CAMERA_PROP_LABEL : PROP_LABEL)[property], disabled: !!state.forced || !!state.track, onClick: () => {
         try { toggleKey(this.app, ent, property); this.trackRows.collapsedEnts.delete(ent.id); this.trackRows.expandedEnts.add(ent.id); this.rebuild(); } catch (err) { toastError(err); }
       } };
     }));

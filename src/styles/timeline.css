@@ -428,3 +428,10 @@ body.resizing-timeline, body.resizing-timeline * { cursor: ns-resize !important;
 
 #timeline .tl-track .tl-bar-path .tl-bar-end.start { left: -14px; }
 #timeline .tl-track .tl-bar-path .tl-bar-end.end { left: calc(100% + 14px); }
+
+/* 机位焦点 / 视角的状态范围：与位置同样使用细线，不显示全程约束色块。 */
+#timeline .tl-camera-span { position: absolute; top: 50%; height: 16px; transform: translateY(-50%); left: calc(var(--t0) * var(--pps) * 1px + var(--gutter)); width: calc((var(--t1) - var(--t0)) * var(--pps) * 1px); }
+#timeline .tl-camera-span::before { content: ''; position: absolute; top: 8px; left: 0; right: 0; height: 1px; background: #718c91; }
+#timeline .tl-state-node { position: absolute; top: 50%; left: calc(var(--t) * var(--pps) * 1px + var(--gutter)); width: 18px; height: 22px; padding: 0; transform: translate(-50%, -50%); border: 0; background: transparent; cursor: pointer; }
+#timeline .tl-state-node::before { content: ''; position: absolute; box-sizing: border-box; width: 9px; height: 9px; top: 7px; left: 5px; border: 1px solid #8daeb3; background: #283639; transform: rotate(45deg); }
+#timeline .tl-state-node:hover::before, #timeline .tl-state-node:focus-visible::before { border-color: #c8f9ff; }

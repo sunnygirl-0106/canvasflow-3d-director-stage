@@ -5,9 +5,11 @@ import { icon } from '../icons.js';
 import { toggleKey, propState, hitTime } from './animState.js';
 import { objectAnimationRange } from '../../anim/objectAnimation.js';
 import { toggleStop } from '../../anim/pathGen.js';
+import { aimPoint, constraintActive } from '../../anim/Constraint.js';
 
 /** 轨道行名（词汇表 → 中文）。 */
 export const PROP_LABEL = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视角（FOV）' };
+export const CAMERA_PROP_LABEL = { pos: '位置', rot: '焦点', fov: '视角' };
 const CONSTRAINT_LABEL = { lookAt: '注视', follow: '跟随' };
 const TYPE_ICON = { character: 'person', prop: 'cube', camera: 'video', group: 'group' };
 const PROP_ORDER = ['pos', 'rot', 'scale', 'fov'];
@@ -48,7 +50,8 @@ export class TrackRows {
     for (const e of app.entities) {
       for (const ent of [e, ...e.children]) {
         if (!['character', 'camera'].includes(ent.type) && !by.has(ent.id)) continue;
-        const rows = by.get(ent.id) || [];
+        // 机位的注视属于焦点属性，不再单列成延伸到场景末尾的约束色块。
+        const rows = (by.get(ent.id) || []).filter(r => ent.type !== 'camera' || r.kind !== 'constraint');
         const supported = ent.type === 'camera' ? ['pos', 'rot', 'fov'] : ['pos', 'rot', 'scale'];
         for (const property of supported) {
           if (rows.some(r => r.data.property === property || (property === 'pos' && r.kind === 'path'))) continue;
@@ -92,7 +95,7 @@ export class TrackRows {
     const removePath = !objectBar && pathRow;
     const remove = el('button', {
       class: 'tl-row-delete', title: removePath ? '删除此机位的轨迹' : ent.type === 'character' ? '删除此角色的全部动画' : '删除此对象的全部动画',
-      'aria-label': `删除${ent.name}的${removePath ? '轨迹' : '全部动画'}`, disabled: !rows.some(r => r.kind !== 'property') || undefined,
+      'aria-label': `删除${ent.name}的${removePath ? '轨迹' : '全部动画'}`, disabled: !(rows.some(r => r.kind !== 'property') || this.panel.app.timeline.constraints.some(c => c.target === ent.id)) || undefined,
       html: icon('trash', 13, 1.5), onclick: (e) => {
         e.stopPropagation();
         try {
@@ -137,7 +140,8 @@ export class TrackRows {
     let label, lane;
     const attrs = { 'data-ent': ent.id, 'data-property-row': data.property || kind };
     if (kind === 'track' || kind === 'property') {
-      label = PROP_LABEL[data.property];
+      label = (ent.type === 'camera' ? CAMERA_PROP_LABEL : PROP_LABEL)[data.property];
+      if (ent.type === 'camera' && data.property === 'rot') attrs['data-property-row'] = 'focus';
       if (data.id) attrs['data-track'] = data.id;
       lane = el('div', { class: 'tl-lane' }, data.keys.map((k) => vars(el('i', {
         class: 'tl-key ease-' + k.ease, tabindex: '0', role: 'button',
@@ -166,11 +170,39 @@ export class TrackRows {
         openStart: data.start == null, openEnd: data.end == null,
       })]);
     }
+    if (ent.type === 'camera') this._cameraPropertyLane(ent, kind === 'path' ? { property: 'pos', keys: [] } : data, lane);
     const empty = kind === 'track' && !data.keys.length;
     return el('div', { class: 'tl-row tl-track' + (empty ? ' is-empty' : ''), ...attrs }, [
       el('div', { class: 'tl-name' }, [el('span', { class: 'tl-label', text: label }), ...this._rowControls(ent, kind, data)]),
       lane,
     ]);
+  }
+
+  /** 恒定属性也显示运镜片段范围；端点是状态标记，不伪造可拖动的关键帧。 */
+  _cameraPropertyLane(ent, data, lane) {
+    const anim = this.panel.app.timeline.view();
+    const range = objectAnimationRange(anim, ent.id);
+    const constraints = anim.constraints.filter(c => c.target === ent.id && c.type === ({ rot: 'lookAt', pos: 'follow' })[data.property]);
+    const spans = constraints.length ? constraints.map(c => ({
+      start: Math.max(c.start ?? 0, range?.start ?? 0),
+      end: Math.min(c.end ?? this.panel.app.timeline.duration, range?.end ?? this.panel.app.timeline.duration), constraint: c,
+    })) : ['rot', 'fov'].includes(data.property) && !data.keys.length && range ? [range] : [];
+    for (const { start, end, constraint } of spans) {
+      if (end < start) continue;
+      const label = CAMERA_PROP_LABEL[data.property];
+      const title = `${label}状态 · ${start.toFixed(2)}–${end.toFixed(2)} 秒${constraint ? `；双击编辑${CONSTRAINT_LABEL[constraint.type]}` : ''}`;
+      lane.append(vars(el('div', {
+        class: 'tl-camera-span', title, 'data-constraint-span': constraint?.id,
+        ondblclick: constraint ? () => this.panel.app.emit('inspect', { id: ent.id, section: 'constraint', constraintId: constraint.id }) : undefined,
+      }), { '--t0': start, '--t1': end }));
+      for (const t of new Set([start, end])) {
+        if (hitTime(data.keys, t, this.panel.app.timeline.fps)) continue;
+        lane.append(vars(el('button', {
+          class: 'tl-state-node', title: `${label}状态 · ${t.toFixed(2)} 秒`, 'aria-label': `${label}状态，${t.toFixed(2)} 秒`,
+          onclick: () => this.panel.seek(t),
+        }), { '--t': t }));
+      }
+    }
   }
 
   _pathLane(ent, path) {
@@ -301,7 +333,16 @@ export class TrackRows {
   }
 
   _propertyControls(ent, property) {
-    return [...this._navigation(ent.id, property), el('span', { class: 'tl-value', 'data-value-ent': ent.id, 'data-property': property })];
+    return [...this._navigation(ent.id, property), el('span', { class: 'tl-value', 'data-value-ent': ent.id, 'data-property': ent.type === 'camera' && property === 'rot' ? 'focus' : property })];
+  }
+
+  _focusValue(ent) {
+    const app = this.panel.app, time = app.timeline.active ? app.playback.time : 0;
+    const look = app.timeline.constraints.findLast(c => c.target === ent.id && c.type === 'lookAt' && constraintActive(c, time));
+    const target = look && aimPoint(app, look.subject) || ent.lookTarget;
+    // 沿实际镜头朝向取焦点，混合注视和旋转关键帧期间也与预览一致。
+    const distance = ent.root.position.distanceTo(target) || 1;
+    return target.clone().set(0, 0, -distance).applyQuaternion(ent.root.quaternion).add(ent.root.position).toArray();
   }
 
   reflectValues() {
@@ -320,8 +361,8 @@ export class TrackRows {
     for (const node of this.panel.rows.querySelectorAll('[data-value-ent]')) {
       const ent = app.findEntity(node.dataset.valueEnt);
       if (!ent) continue;
-      const value = app.timeline.valueOf(ent, node.dataset.property);
-      node.textContent = (Array.isArray(value) ? value : [value]).map((v) => v.toFixed(1)).join(', ');
+      const value = node.dataset.property === 'focus' ? this._focusValue(ent) : app.timeline.valueOf(ent, node.dataset.property);
+      node.textContent = (Array.isArray(value) ? value : [value]).map((v) => ent.type === 'camera' ? String(+v.toFixed(2)) : v.toFixed(1)).join(', ');
     }
     const states = new Map();
     for (const node of this.panel.rows.querySelectorAll('[data-nav-ent]')) {

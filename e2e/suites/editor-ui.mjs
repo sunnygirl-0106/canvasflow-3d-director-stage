@@ -64,9 +64,9 @@ export async function run() {
     const a = window.__app; const c = a.timeline.constraints.filter(c => c.target === ids.cam)[1];
     window.__timelinePanel.trackRows.expandedEnts.add(ids.cam); window.__timelinePanel.rebuild(); return c.id;
   }, ids); await settle();
-  await page.$eval(`.tl-bar-constraint[data-id="${interval}"]`, n => n.scrollIntoView({ block: 'nearest' }));
-  await page.click(`.tl-bar-constraint[data-id="${interval}"]`, { count: 2 }); await settle();
-  ok('双击约束条打开属性并选中对应区间', await page.evaluate(interval => document.querySelector('#inspector .ptabs .on')?.textContent === '属性' && document.querySelector('[data-constraint-type="lookAt"]').dataset.interval === interval, interval));
+  await page.$eval(`.tl-camera-span[data-constraint-span="${interval}"]`, n => n.scrollIntoView({ block: 'nearest' }));
+  await page.click(`.tl-camera-span[data-constraint-span="${interval}"]`, { count: 2 }); await settle();
+  ok('双击焦点状态线打开属性并选中对应区间', await page.evaluate(interval => document.querySelector('#inspector .ptabs .on')?.textContent === '属性' && document.querySelector('[data-constraint-type="lookAt"]').dataset.interval === interval, interval));
   await page.evaluate(ids => {
     const a = window.__app; a.playback.seek(7); a.emit('inspect', { id: ids.cam, section: 'constraint' });
   }, ids); await settle();
