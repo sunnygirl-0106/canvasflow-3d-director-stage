@@ -29,7 +29,7 @@ export const CAMERA_MOVES = [
 export const MOVE_LABEL = Object.fromEntries(CAMERA_MOVES);
 export const PANEL_LABEL = { ...MOVE_LABEL, push_in: '推近', pull_out: '拉远', half_orbit: '半弧', pan: '摇镜头', spiral: '螺旋上升' };
 
-// Manual panel defaults are explicit; legacy AI defaults below stay unchanged.
+// 手动面板统一使用 2 秒；AI 未指定时长时使用 MOVE_DURATION 的预设时长。
 export const PANEL_MOVES = ['circle', 'half_orbit', 'push_in', 'pull_out', 'crane', 'truck', 'spiral'];
 export const PANEL_DURATION = { circle: 2, half_orbit: 2, push_in: 2, pull_out: 2, crane: 2, truck: 2, spiral: 2, pan: 2 };
 

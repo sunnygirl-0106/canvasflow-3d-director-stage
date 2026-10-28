@@ -24,10 +24,10 @@ const angleDiff = (a, b) => { const d = (b - a) % (2 * Math.PI); return d > Math
  * 把 { speed, distance } 记到状态上（st.motion），供 Locomotion 使用。
  */
 export class PathTrack {
-  /** @param {object} json @param {number|object} [options] Path 选项，兼容旧的 ramp 数值。 */
-  constructor(json, options = 0) {
+  /** @param {object} json @param {{ramp?:number, uniform?:boolean}} [options] Path 选项。 */
+  constructor(json, options = {}) {
     this.json = json;
-    this.path = new Path(json, typeof options === 'number' ? { ramp: options } : options);
+    this.path = new Path(json, options);
   }
 
   apply(t, st) {

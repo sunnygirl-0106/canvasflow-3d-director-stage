@@ -181,7 +181,6 @@ export class Path {
     this._T = stops
       ? [0, ...(json.stopTimes?.length === stops.length ? json.stopTimes : this._S.slice(1, -1).map((s) => (this.length > 0 ? D * s / this.length : 0))), D]
       : [0, D];
-    this.curve = this.curves[0].curve; // 兼容：无 stops 时就是整条曲线
   }
 
   /** 弧长 s 所在的段下标与段内弧长。 */
