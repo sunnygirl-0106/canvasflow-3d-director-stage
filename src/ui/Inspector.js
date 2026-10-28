@@ -71,7 +71,6 @@ export class Inspector {
     }
     this.entity = entity;
     this._reset();
-    this.app.pathOverlay.setMovePreview(null); // 运镜预览只跟着机位的运镜段走
     if (!entity) { this.container.replaceChildren(); return; }
 
     const root = el('div', { class: 'rp rp-pad' + (entity.type === 'camera' ? ' camera-panel' : '') });

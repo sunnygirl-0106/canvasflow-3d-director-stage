@@ -24,8 +24,9 @@ export async function run() {
   await pickInOutliner(names.c1);
   const before = await page.evaluate(() => JSON.stringify(window.__app.store.document));
   ok('选中摄像机默认属性页', !!await page.$('#inspector .cam-preview'));
+  const overlayObjects = await page.evaluate(() => window.__app.pathOverlay.group.children.map(o => o.uuid));
   const tabs = await page.$$('#inspector .ptabs button'); await tabs[1].click(); await settle();
-  ok('打开运镜页不写文档、不生成虚线；八张运镜卡片', await page.evaluate(before => JSON.stringify(window.__app.store.document) === before && !window.__app.pathOverlay.movePreviewSize && document.querySelectorAll('.move-cards .move-card').length === 8, before));
+  ok('打开运镜页不写文档、不产生额外预览对象；八张运镜卡片', await page.evaluate(({ before, overlayObjects }) => JSON.stringify(window.__app.store.document) === before && JSON.stringify(window.__app.pathOverlay.group.children.map(o => o.uuid)) === JSON.stringify(overlayObjects) && document.querySelectorAll('.move-cards .move-card').length === 8, { before, overlayObjects }));
   ok('摄像机运动页不显示轨迹编辑区域', !await page.$('#inspector .motion-advanced, #inspector [data-sec="path"]'));
   const view = await page.evaluate(() => ({ pos: window.__app.stage.camera.position.toArray(), target: window.__app.rig.controls.target.toArray() }));
   await page.click('[data-preset="half_orbit"]'); await settle();

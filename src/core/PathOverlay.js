@@ -81,10 +81,6 @@ export class PathOverlay {
     this.snapRing.visible = false;
     this.group.add(this.snapRing);
 
-    // 运镜预览（Inspector 运镜段写入）：将要生成的路径，虚线。不随 rebuild 清空。
-    this.moveGroup = new THREE.Group();
-    this.group.add(this.moveGroup);
-
     app.timeline.on('change', () => this.rebuild());
     app.playback.on('tick', () => this._placeDots());
     app.playback.on('state', () => { this._applyVisible(); app.emit('pathVisibility'); });
@@ -105,7 +101,7 @@ export class PathOverlay {
   reset() {
     this.selection = null; this.hover = null; this._hoverPathId = null; this._preview = null;
     this.nameHint.hidden = true;
-    this.setDraft(null); this.setMovePreview(null); this.setSnap(null);
+    this.setDraft(null); this.setSnap(null);
   }
 
   /** 当前显示来源及节点的只读快照；不暴露可变的渲染对象。 */
@@ -387,24 +383,6 @@ export class PathOverlay {
     this._applyVisible();
   }
 
-  /** 运镜预览：虚线画出将要生成的路径（points 为 null 清空）。 */
-  setMovePreview(points, { closed = false } = {}) {
-    for (const o of [...this.moveGroup.children]) { this.moveGroup.remove(o); this._disposeLine(o); }
-    if (points?.length >= 2) {
-      const path = new Path({ points, closed, start: 0, duration: 1, speed: 'linear' });
-      if (path.length > 1e-6) {
-        const line = this._line(this._sample(path), true, { color: COLOR.hover, opacity: 0.95 });
-        Object.assign(line.material, { dashed: true, dashSize: 0.12, gapSize: 0.08 });
-        line.material.needsUpdate = true;
-        this.moveGroup.add(line);
-      }
-    }
-    this.app.stage.invalidate();
-  }
-
-  /** 当前运镜预览的曲线采样点数（selftest 用；0 = 无预览）。 */
-  get movePreviewSize() { return this.moveGroup.children.length; }
-
   /** 吸附目标高亮环（局部坐标中心 + 半径；null 隐藏）。 */
   setSnap(center, radius = 0.5) {
     this.snapRing.visible = !!center;
@@ -436,7 +414,6 @@ export class PathOverlay {
   _applyVisible() {
     this.group.visible = !this._hidden && !this.app.playback.playing && (!this.app.cameraView || this.draftGroup.children.length > 0);
     for (const item of this._items) item.group.visible = !this.app.cameraView && this.editable(item.json);
-    this.moveGroup.visible = !this.app.cameraView;
     if (!this.group.visible || this.app.cameraView) { this.nameHint.hidden = true; this._hoverPathId = null; this.hover = null; }
     this.app.stage.invalidate();
   }

@@ -111,7 +111,6 @@ export class PathTool extends Emitter {
     this.cursor = null;
     app.playback.pause();
     app.gizmo.setVisible(false);
-    app.pathOverlay.setMovePreview(null);
     app.rig.controls.mouseButtons.LEFT = -1; // 左键归绘制；⌥ 左键在 _onDown 里临时恢复环绕
     const hint = ent.type === 'camera'
       ? this.pickPlaneY !== this.planeY ? `${HINTS[mode]} · 地面投影定位，轨迹保持机位高度` : HINTS[mode].replaceAll('地面', '机位高度平面')
