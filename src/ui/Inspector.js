@@ -8,7 +8,8 @@ import { PoseSliders } from './PoseSliders.js';
 import { POSE_PRESETS } from '../entities/posePresets.js';
 import { downloadURL } from '../app/ShotManager.js';
 import { propState, toggleKey, forcedReason } from './timeline/animState.js';
-import { arcPoints, pathLength, paceFor, defaultDuration, stopsAfterReverse, toggleStop, WALK_PACE } from '../anim/pathGen.js';
+import { arcPoints, pathLength, paceFor, defaultDuration, remapSchedule, WALK_PACE } from '../anim/pathGen.js';
+import { pathCurve, stopEntries, captionEntries, curveSchedule } from '../anim/schedule.js';
 import { rampFor, isWalker } from '../anim/Path.js';
 import { popupMenu } from './popupMenu.js';
 import { cameraMoveSection, cameraMoveActions, cameraConstraintSection } from './cameraMotionSections.js';
@@ -198,11 +199,11 @@ export class Inspector {
    */
   _pathSection(p, ent) {
     const upd = (patch) => this._tl((tl) => tl.updatePath(p.id, patch));
-    const len = pathLength(p.points, p.closed, p.stops, p.interpolation);
+    const len = pathLength(p.points, p.closed, p.schedule[0].segmented ? null : stopEntries(p).map(entry => entry.i), p.interpolation);
     const v = len / p.duration;
     const total = this.app.timeline.duration;
     const uniform = isWalker(ent.type);
-    const ramp = !uniform && p.speed === 'smooth' ? rampFor(ent.type) : 0;
+    const ramp = !uniform && pathCurve(p) === 'smooth' ? rampFor(ent.type) : 0;
     const natural = defaultDuration(p.points, { speed: paceFor(ent.type), closed: p.closed, interpolation: p.interpolation, ramp });
     const suggestedTotal = Math.ceil((p.start + natural) * 10 - 1e-9) / 10;
     const needsMoreTime = uniform && natural > total - p.start + 0.001;
@@ -221,7 +222,7 @@ export class Inspector {
       ]),
       el('div', { class: 'anim-info path-stats' }, [
         `顶点 ${p.points.length} · 总长 ${len.toFixed(2)} m · `,
-        el('span', { class: 'path-speed', text: `${uniform && !p.stops?.length ? '匀速' : '平均'} ${v.toFixed(2)} m/s` }),
+        el('span', { class: 'path-speed', text: `${uniform && !(p.schedule[0].segmented ? 0 : stopEntries(p).length) ? '匀速' : '平均'} ${v.toFixed(2)} m/s` }),
       ]),
       el('div', { class: 'anim-pair' }, [
         numberRow({ label: '开始', value: p.start, step: 0.1, min: 0, unit: 's', onChange: (x) => upd({ start: x }) }).el,
@@ -239,9 +240,9 @@ export class Inspector {
         }) : null,
       ]),
       uniform ? el('div', { class: 'anim-info', text: '从起步即匀速：按路径总长 ÷ 时长预先计算，途中保持一致。' }) : dropdownRow({
-        label: '速度变化', value: p.speed,
+        label: '速度变化', value: pathCurve(p),
         options: [{ value: 'linear', label: '匀速' }, { value: 'smooth', label: '缓入缓出' }],
-        onChange: (x) => upd({ speed: x }),
+        onChange: (x) => upd({ schedule: curveSchedule(p, x) }),
       }).el,
       this._stopRow(p, upd),
       dropdownRow({
@@ -254,7 +255,7 @@ export class Inspector {
       el('div', { class: 'anim-btns' }, [
         el('button', {
           class: 'minibtn', text: '反向', title: '顶点倒序（从终点走回起点）',
-          onclick: () => upd({ points: p.points.slice().reverse(), ...stopsAfterReverse(p) }),
+          onclick: () => upd(remapSchedule(p, { points: p.points.slice().reverse() }, { map: i => p.points.length - 1 - i, reverse: true })),
         }),
         tool.canDraw(ent) ? el('button', {
           class: 'minibtn', text: '起点对齐当前位置', title: '把第一个顶点移到对象当前（手动）位置',
@@ -275,13 +276,15 @@ export class Inspector {
     const n = p.points.length;
     const last = p.closed ? n - 1 : n - 2;
     const idx = sv?.pathId === p.id ? sv.index : -1;
-    const stops = p.timedSegments ? p.timedSegments.slice(0, -1).map(s => s.to) : p.stops || [];
+    const entries = stopEntries(p), stops = entries.map(entry => entry.i);
+    const captions = captionEntries(p);
+    const times = captions.length ? captions.map(entry => entry.t) : entries.some(entry => entry.captionTime) ? entries.map(entry => entry.t) : null;
     const list = stops.length
-      ? `停顿 ${stops.length} 处：${stops.map((i, j) => `顶点 ${i + 1}${p.stopTimes ? ` @${fmtS(p.start + p.stopTimes[j])} s` : ''}`).join('、')}（各段缓入缓出）`
+      ? `停顿 ${stops.length} 处：${stops.map((i, j) => `顶点 ${i + 1}${times ? ` @${fmtS(p.start + times[j])} s` : ''}`).join('、')}（各段缓入缓出）`
       : '';
     if (idx >= 1 && idx <= last) {
       return el('div', { 'data-row': 'stop' }, [
-        toggleRow({ label: `在选中顶点（${idx + 1}）处停顿`, checked: stops.includes(idx), onChange: (x) => upd(toggleStop(p, idx, x)) }).el,
+        toggleRow({ label: `在选中顶点（${idx + 1}）处停顿`, checked: stops.includes(idx), onChange: (x) => upd(remapSchedule(p, {}, { stop: { index: idx, on: x } })) }).el,
         list ? el('div', { class: 'anim-info', text: list }) : null,
       ]);
     }

@@ -1,5 +1,5 @@
 // @ts-check
-import { fitStops } from './pathGen.js';
+import { remapSchedule } from './pathGen.js';
 import { sameKeyTime } from './keyframes.js';
 import { round6 } from '../util/math.js';
 
@@ -26,7 +26,7 @@ export function objectAnimationRange(doc, target) {
   return hasAnimation ? { start, end } : null;
 }
 
-/** 在一次文档事务中统一变换时间；路径内部时间只由 fitStops 缩放一次。 */
+/** 在一次文档事务中统一变换时间；路径内部时间只由 remapSchedule 缩放一次。 */
 export function retimeObjectAnimation(doc, target, start, end) {
   const range = objectAnimationRange(doc, target);
   if (!range || (start === range.start && end === range.end)) return;
@@ -46,11 +46,9 @@ export function retimeObjectAnimation(doc, target, start, end) {
   });
   const paths = doc.paths.map(path => {
     if (path.target !== target) return path;
-    const next = fitStops(path, { ...path, start: time(path.start), duration: round6(path.duration * scale) }, {}, round6);
-    if (next.duration <= 0 || (path.stopTimes && !next.stopTimes)) precisionError();
-    if (next.waypointTimes?.some((t, i) => i && t <= next.waypointTimes[i - 1])) precisionError();
-    if (next.timedSegments?.some((s, i) => s.end <= s.start ||
-        (i && path.timedSegments[i].start > path.timedSegments[i - 1].end && s.start <= next.timedSegments[i - 1].end))) precisionError();
+    const next = remapSchedule(path, { start: time(path.start), duration: round6(path.duration * scale) }, { roundTime: round6 });
+    const entries = next.schedule.filter(entry => !entry.caption);
+    if (next.duration <= 0 || entries.some((entry, i) => i && entry.t <= entries[i - 1].t)) precisionError();
     return next;
   });
   doc.timeline.tracks = tracks;

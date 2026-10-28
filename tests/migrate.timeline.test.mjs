@@ -1,3 +1,5 @@
+import { markedSchedule } from '../src/anim/pathGen.js';
+import { oldFields } from './migrate/pathModel.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeApp, addProp, addCamera, closeVec, close, animatedPropFixture } from './helpers.mjs';
@@ -127,7 +129,7 @@ test('局部三维路径候选复用模型求值，不改变 Store、时长、�
   const p = app.timeline.addPath({ target: box.id, points: [[0,0,0],[1,0,0],[4,0,0]], start: 1, duration: 6, speed: 'linear', orient: 'keep', interpolation: 'polyline' });
   const tr = app.timeline.addTrack({ target: other.id, property: 'pos' });
   app.timeline.setKey(tr.id, 0, [0,0,0]); app.timeline.setKey(tr.id, 6, [6,0,0]);
-  app.timeline.updatePath(p.id, { stops:[1], stopTimes:[2] });
+  app.timeline.updatePath(p.id, { schedule: markedSchedule(p, [1], [2]) });
   const source = app.timeline.paths.find(j => j.id === p.id), doc = app.store.document, revision = app.store.revision;
   const candidate = { ...source, points: [[0,0,0],[1,2,0],[4,0,0]] };
   const model = app.timeline.pathModel(candidate), t = model.vertexTime(1);
@@ -138,7 +140,7 @@ test('局部三维路径候选复用模型求值，不改变 Store、时长、�
   assert.equal(app.store.document, doc); assert.equal(app.store.revision, revision);
   assert.equal(candidate.duration, source.duration);
   assert.ok(close(t, app.timeline.pathModel(source).vertexTime(1)));
-  assert.deepEqual(candidate.stopTimes, [2]);
+  assert.deepEqual(oldFields(candidate).stopTimes, [2]);
   app.timeline.evaluate(t);
   assert.equal(posOf(box)[1], 0);
 });
@@ -176,14 +178,14 @@ test('机位位置键前缀在接续路径开始前保持求值，衔接与随�
 test('translation moves path and base in the same local document space, preserves times and stops', () => {
   const {app, ent} = animatedPropFixture();
   const path = app.timeline.addPath({target:ent.id,points:[[0,0,0],[2,1,0],[4,2,0]],start:1,duration:6,interpolation:'polyline'});
-  app.timeline.updatePath(path.id, {stops:[1],stopTimes:[3]});
+  app.timeline.updatePath(path.id, {schedule:markedSchedule(path,[1],[3])});
   app.playback.seek(3); const before = structuredClone(app.timeline.paths[0]);
   const pos=app.timeline.valueOf(ent,'pos'); app.history.scheduled=0;
   app.timeline.translatePathTo(ent,pos.map((v,i)=>v+[3,2,-1][i]));
   const after=app.timeline.paths[0];
   assert.deepEqual(after.points,before.points.map(p=>p.map((v,i)=>v+[3,2,-1][i])));
   assert.deepEqual(app.store.document.entities[0].transform.pos,[3,2,-1]);
-  assert.deepEqual(after.stops,before.stops); assert.deepEqual(after.stopTimes,before.stopTimes);
+  assert.deepEqual(oldFields(after).stops,oldFields(before).stops); assert.deepEqual(oldFields(after).stopTimes,oldFields(before).stopTimes);
   assert.equal(after.duration,6); assert.equal(after.start,1); assert.equal(app.history.scheduled,1);
   app.timeline.valueOf(ent,'pos').forEach((v,i)=>assert.ok(Math.abs(v-pos[i]-[3,2,-1][i])<1e-6));
 });

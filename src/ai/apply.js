@@ -1,3 +1,5 @@
+import { markedSchedule } from '../anim/pathGen.js';
+import { pathCurve } from '../anim/schedule.js';
 // @ts-check
 // ops → 场景：validateOps → 在文档拷贝上逐条执行（src/doc/edit.js 的纯函数）→ 现有校验器 →
 // 全部通过才 loadDocument，History 记一步。任何一步失败都返回错误列表，场景不变。
@@ -190,9 +192,10 @@ export function compileOps(base, ops, { mode = 'modify', charSeq = 0 } = {}) {
       }
       if (pathLength(points, closed) < 0.05) throw new OpError('.path 路径太短（< 5 cm）');
       const set = {};
-      for (const k of ['start', 'duration', 'speed', 'orient']) if (o[k] !== undefined) set[k] = o[k];
-      if (pa.kind === 'points' && pa.stops?.length) set.stops = pa.stops.map((i) => i + 1); // points[i] 是路径第 i+1 个顶点（首点 = 当前位置）
-      edit.setPath(doc, e.id, points, { closed, start: 0, set });
+      for (const k of ['start', 'duration', 'orient']) if (o[k] !== undefined) set[k] = o[k];
+      const { path } = edit.setPath(doc, e.id, points, { closed, start: 0, curve: o.speed, set });
+      // AI points omit the entity's starting vertex; convert their indices here.
+      if (pa.kind === 'points' && pa.stops?.length) path.schedule = markedSchedule(path, pa.stops.map(i => i + 1), undefined, pathCurve(path));
     },
     clear_path(o) {
       if (!edit.removePath(doc, idOf(o.target))) warnings.push(`「${o.target}」本来就没有路径`);

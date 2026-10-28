@@ -1,3 +1,4 @@
+import { oldFields } from './migrate/pathModel.js';
 // ops 编译 / 场景摘要 / 提示词范例单元测试（阶段 H 第 3–4 步）：node 直接跑，不起浏览器。
 // 运行：npm run test:unit
 import { test } from 'node:test';
@@ -181,7 +182,7 @@ test('set_path 的 stops（收尾 1）：points 下标 → 路径顶点索引 +1
   const g = run(createEmptyDocument(), GEN, 'generate').doc;
   const { doc } = run(g, [{ op: 'set_path', target: '小王', path: { kind: 'points', points: [[0.8, 0, 2], [2, 0, 2], [2, 0, 0]], stops: [0, 1] } }]);
   const p = doc.paths.find((x) => x.target === byName(doc, '小王').id);
-  assert.deepEqual(p.stops, [1, 2]);
+  assert.deepEqual(oldFields(p).stops, [1, 2]);
   assert.ok(!('stopTimes' in p));
   const v = validateOps([{ op: 'set_path', target: '小王', path: { kind: 'points', points: [[1, 0, 1], [2, 0, 2]], stops: [1] } }], sceneIndex(g));
   assert.ok(v.errors.some((e) => e.includes('ops[0].path.stops[0]')), JSON.stringify(v.errors));

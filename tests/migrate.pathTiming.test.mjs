@@ -1,7 +1,10 @@
+import { upgradePath } from './migrate/pathModel.js';
+import { markedSchedule } from '../src/anim/pathGen.js';
+import { oldFields } from './migrate/pathModel.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeApp, addProp, addCamera, closeVec, animatedPropFixture } from './helpers.mjs';
-import { Path, WALK_RAMP } from '../src/anim/Path.js';
+import { Path, WALK_RAMP } from './migrate/pathModel.js';
 import { setPath, addCharacter, addCrowd } from '../src/doc/edit.js';
 import { createEmptyDocument } from '../src/doc/schema.js';
 import { fitPathToDuration } from '../src/anim/pathGen.js';
@@ -15,16 +18,16 @@ test('时间轴节点反映真实到达时刻，支持缓入缓出、停顿、�
     assert.equal(path.vertexTime(0), 3);
     assert.equal(path.vertexTime(extra.closed ? 3 : 2), 11);
     assert.ok(Math.abs(path.distanceAt(path.vertexTime(1)) - path.vertexDistance(1)) < 1e-7);
-    if (extra.stops) assert.ok(Math.abs(path.vertexTime(1) - 5) < 1e-5);
+    if (oldFields(extra).stops) assert.ok(Math.abs(path.vertexTime(1) - 5) < 1e-5);
   }
 });
 
 test('超时轨迹保留路线与起点时间，停顿按比例缩放；较短轨迹保持原速', () => {
   const path = { points, start: 2, duration: 20, stops: [1], stopTimes: [10], closed: false };
-  const fitted = fitPathToDuration(path, 10);
+  const fitted = fitPathToDuration(upgradePath(path), 10);
   assert.equal(fitted.start, 2);
   assert.equal(fitted.duration, 8);
-  assert.deepEqual(fitted.stopTimes, [4]);
+  assert.deepEqual(oldFields(fitted).stopTimes, [4]);
   assert.deepEqual(fitted.points, points);
   assert.equal(path.duration, 20);
   assert.equal(fitPathToDuration(fitted, 15), fitted);
@@ -46,9 +49,9 @@ test('新增 / 编辑 / 缩短总时长都适配轨迹，结束帧到达完整�
   const app = fakeApp(), ent = addProp(app);
   const path = app.timeline.addPath({ target: ent.id, points, start: 2, duration: 20 });
   assert.equal(path.duration, 8);
-  const edited = app.timeline.updatePath(path.id, { duration: 30, stops: [1], stopTimes: [15] });
+  const edited = app.timeline.updatePath(path.id, { duration: 30, schedule: markedSchedule({ ...path, duration: 30 }, [1], [15]) });
   assert.equal(edited.duration, 8);
-  assert.deepEqual(edited.stopTimes, [4]);
+  assert.deepEqual(oldFields(edited).stopTimes, [4]);
   app.timeline.setDuration(1);
   const fitted = app.timeline.paths[0];
   assert.ok(fitted.start < 1);
@@ -85,15 +88,15 @@ for (const [type, speed, initialDuration, redrawnDuration] of [
     }
 
     const first = setPath(doc, ent.id, [[0, 0, 0], [3, 0, 0]], { start: 1 }).path;
-    assert.deepEqual([first.speed, first.duration], [speed, initialDuration]);
+    assert.deepEqual([oldFields(first).speed, first.duration], [speed, initialDuration]);
     const longer = [[0, 0, 0], [6, 0, 0]];
     const redrawn = setPath(doc, ent.id, longer, { start: 2 }).path;
     assert.deepEqual([redrawn.id, redrawn.start, redrawn.duration], [first.id, 1, redrawnDuration]);
 
-    const override = setPath(doc, ent.id, longer, { set: { start: 2, duration: 6, speed: 'smooth' } }).path;
-    assert.deepEqual([override.start, override.duration, override.speed], [2, 6, speed]);
-    const linear = setPath(doc, ent.id, longer, { set: { speed: 'linear' } }).path;
-    assert.deepEqual([linear.speed, linear.duration], ['linear', type === 'character' || type === 'group' ? 6 : 5]);
+    const override = setPath(doc, ent.id, longer, { curve: 'smooth', set: { start: 2, duration: 6 } }).path;
+    assert.deepEqual([override.start, override.duration, oldFields(override).speed], [2, 6, speed]);
+    const linear = setPath(doc, ent.id, longer, { curve: 'linear' }).path;
+    assert.deepEqual([oldFields(linear).speed, linear.duration], ['linear', type === 'character' || type === 'group' ? 6 : 5]);
   });
 }
 
@@ -107,5 +110,5 @@ test('20% faster defaults only affect new character paths; saved timing and came
   assert.equal(doc.paths[0].duration,50);
   const {app,ent}=animatedPropFixture();
   const propDoc=structuredClone(app.store.document); propDoc.timeline.duration=100;
-  assert.equal(setPath(propDoc,ent.id,[[0,0,0],[12,0,0]],{set:{speed:'linear'}}).path.duration,10);
+  assert.equal(setPath(propDoc,ent.id,[[0,0,0],[12,0,0]],{curve:'linear'}).path.duration,10);
 });

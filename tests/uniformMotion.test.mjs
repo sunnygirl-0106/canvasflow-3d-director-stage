@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { Path, pathOptionsFor } from '../src/anim/Path.js';
-import { PathTrack } from '../src/anim/PathTrack.js';
+import { Path, pathOptionsFor } from './migrate/pathModel.js';
+import { PathTrack } from './migrate/pathModel.js';
 
 test('人物及群众从首帧到末帧匀速，旧 smooth 路径也按总长 / 时长计算，步频固定', () => {
   for (const type of ['character', 'group']) {

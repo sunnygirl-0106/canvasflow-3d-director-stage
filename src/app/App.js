@@ -51,11 +51,7 @@ export class App extends Emitter {
     this.transformMode = 'translate';
     this.transformEditing = false; // 程序默认选择只显示属性；明确选取/工具操作才激活手柄。
     this.defaultCameraId = null;
-    this.directorDetached = true;
-    this.cameraView = false;
-    this.povCameraId = null;       // 机位视角下此刻实际出画的机位
-    this.mainPreview = false;     // 正透过主机位看成片（gizmo 隐藏）
-    this.povUnset = false;        // 机位视角 active 但没设主机位（视口提示）
+    this.view = { mode: 'director', director: 'free' };
     this._cleanDepth = 0;          // 洁净渲染嵌套层数（>0 时 gizmo 等不显示）
 
     this.charSeq = 0; // 下一个自动角色名的序号（edit.charName）；AI 编译也从这里接着起名
@@ -72,7 +68,7 @@ export class App extends Emitter {
     this.loadingDocument = false;       // 加载期间为 true：history 据此屏蔽
     this.history = new History(this);
     // 时间轴只驱动实体；导演相机从此保持用户的观察位置。
-    this.timeline.on('active', () => { if (this.timeline.active) this.directorDetached = true; this._syncPov(); });
+    this.timeline.on('active', () => { if (this.timeline.active) this.setView({ director: 'free' }); this._syncPov(); });
     this.playback.on('state', (state) => {
       if (state !== 'playing') this.endPreview();
       if (state === 'playing') this.pathTool?.cancel();
@@ -104,7 +100,7 @@ export class App extends Emitter {
     rig.controls.addEventListener('start', () => { orbitGesture = true; });
     rig.controls.addEventListener('end', () => { orbitGesture = false; });
     rig.controls.addEventListener('change', () => {
-      if (orbitGesture && !this.cameraView) this.directorDetached = true;
+      if (orbitGesture && !this.cameraView) this.setView({ director: 'free' });
       stage.invalidate();
     });
     this.pathOverlay = new PathOverlay(this); // 视口路径可视化
@@ -312,6 +308,14 @@ export class App extends Emitter {
     toast('取景比例：' + label);
   }
 
+  // 编辑视角和导演绑定意图仅存一份；出画机位沿用文档 / 播放会话的机位 id。
+  setView(patch) { this.view = { ...this.view, ...patch }; }
+  get cameraView() { return this.view.mode === 'camera'; }
+  get directorDetached() { return this.view.director === 'free'; }
+  get povCameraId() { return this.findCamera(this.preview ? this.playbackCameraId : this.cameraView ? this.activeCameraId : null)?.id ?? null; }
+  get mainPreview() { return !!this.povCameraId && this.timeline.active && this.povCameraId === this.timeline.mainCameraId; }
+  get povUnset() { return this.cameraView && this.timeline.active && !this.findCamera(this.timeline.mainCameraId); }
+
   /** 渲染相机变化时（进/出 POV、切换出画机位）把 gizmo 与拾取同步到当前渲染相机。 */
   _syncEditCamera() {
     const cam = this.getRenderCamera();
@@ -328,22 +332,19 @@ export class App extends Emitter {
    * 播放出画独立于用户选择的编辑视角，退出临时预览后回导演观察。
    */
   _syncPov() {
-    const tl = this.timeline;
     if (this.playback.playing && !this.findCamera(this.playbackCameraId)) this.playback.stop();
-    const ent = this.preview ? this.findCamera(this.playbackCameraId) : this.cameraView ? this.findCamera(this.activeCameraId) : null;
-    const main = ent && tl.active && ent.id === tl.mainCameraId;
+    const ent = this.findCamera(this.povCameraId);
+    const main = this.mainPreview;
     if (ent && this.stage.activeCamera !== ent.cam) {
       ent.cam.aspect = this.viewportAspect();
       ent.cam.updateProjectionMatrix();
       this.stage.activeCamera = ent.cam;
       this._syncEditCamera();
     }
-    const unset = this.cameraView && tl.active && !this.findCamera(tl.mainCameraId);
-    const id = ent?.id ?? null;
-    if (this.povCameraId === id && this.mainPreview === !!main && this.povUnset === unset) return;
-    this.povCameraId = id;
-    this.mainPreview = !!main;
-    this.povUnset = unset;
+    const unset = this.povUnset;
+    const key = JSON.stringify([ent?.id ?? null, !!main, unset]);
+    if (this._povKey === key) return;
+    this._povKey = key; // 仅去重通知，视角状态由 view 和文档推导。
     this.gizmo.setVisible(this.gizmoShouldShow()); // 只在出画状态变化时同步（绘制 / 顶点拖动期间工具自己藏 gizmo）
     this.emit('pov', { camera: ent, main: !!main, unset });
   }
@@ -372,7 +373,7 @@ export class App extends Emitter {
     camera.position.copy(this._playbackDirector.pos);
     camera.quaternion.copy(this._playbackDirector.quaternion);
     this.playbackCameraId = target.id;
-    this.directorDetached = true;
+    this.setView({ director: 'free' });
     this.rig.controls.enabled = false;
     this.preview = true;
     this.beginCleanRender();
@@ -459,7 +460,7 @@ export class App extends Emitter {
     if (!this.preview) return;
     this.preview = false;
     this.playbackCameraId = null;
-    this.cameraView = false;
+    this.setView({ mode: 'director' });
     this.stage.activeCamera = null;
     const saved = this._playbackDirector;
     this._playbackDirector = null;
@@ -498,14 +499,14 @@ export class App extends Emitter {
         this.emit('view', false); // 没机位：UI 退回导演视角标签
         return;
       }
-      this.cameraView = true;
+      this.setView({ mode: 'camera' });
       this.rig.controls.enabled = false; // POV 固定，不可环绕
       this.setCameraHelpersVisible(false);
       this._usePovCamera(target);
       this._applyFrame();
       this.select(target.id, { activateTransform: false });
     } else {
-      this.cameraView = false;
+      this.setView({ mode: 'director' });
       this.stage.activeCamera = null;
       this.rig.controls.enabled = true;
       this.setCameraHelpersVisible(true);
@@ -597,7 +598,7 @@ export class App extends Emitter {
   }
 
   /** 自动对准主体；AI 胶囊和选项不改变取景区域。 */
-  frameSubjects() { this.directorDetached = true; this.rig.frameAll(this.entities); }
+  frameSubjects() { this.setView({ director: 'free' }); this.rig.frameAll(this.entities); }
 
   /** 仅在载入时识别保存的同构图；不逐帧比较浮点位置猜测用户意图。 */
   restoreDirectorSync(view) {
@@ -610,7 +611,7 @@ export class App extends Emitter {
     if (position.distanceTo(this.stage.camera.position) > 1e-5 || direction.distanceTo(savedDirection) > 1e-5 || Math.abs(ent.fov - view.fov) > 1e-6) return;
     // 仅同构图存档绑定机位；独立导演视角的 reset 应回到自己的 home。
     this.defaultCameraId = ent.id;
-    this.directorDetached = false;
+    this.setView({ director: 'camera' });
     this.syncDirectorCamera();
   }
 
@@ -636,7 +637,7 @@ export class App extends Emitter {
     if (this.playback.playing) { this.showPlaybackHint(); return; }
     if (this.cameraView) this.setCameraView(false);
     if (this.findCamera(this.defaultCameraId)) {
-      this.directorDetached = false;
+      this.setView({ director: 'camera' });
       this.syncDirectorCamera();
       this.rig.saveHome();
     }

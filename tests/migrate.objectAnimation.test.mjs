@@ -1,3 +1,5 @@
+import { migratePath } from '../src/doc/migrate.js';
+import { oldFields } from './migrate/pathModel.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { objectAnimationRange, retimeObjectAnimation } from '../src/anim/objectAnimation.js';
@@ -5,7 +7,7 @@ import { createPresetScene } from '../src/ai/presets.js';
 import { validate } from '../src/doc/schema.js';
 import { newId } from '../src/doc/edit.js';
 import { DocumentStore } from '../src/doc/Store.js';
-import { Path, pathOptionsFor } from '../src/anim/Path.js';
+import { Path, pathOptionsFor } from './migrate/pathModel.js';
 import { Channel } from '../src/anim/Channel.js';
 
 const fixture = () => {
@@ -77,14 +79,17 @@ test('整体平移、左右缩放只调整目标时间；关键帧值/缓动/路
 test('路径 stopTimes / waypointTimes / timedSegments 只缩放一次，平移保持相对时间', () => {
   for (const timing of [{ stops: [1], stopTimes: [2] }, { waypointTimes: [0, 2, 5] }, { timedSegments: [{ from: 0, to: 1, start: 0, end: 2 }, { from: 1, to: 2, start: 3, end: 5 }] }]) {
     const { doc, id, path } = fixture(); doc.timeline.duration = 20;
-    delete path.timedSegments; delete path.waypointTimes;
-    path.points = [[0, 0, 0], [1, 0, 0], [2, 0, 1]]; Object.assign(path, timing);
+    delete oldFields(path).timedSegments; delete oldFields(path).waypointTimes;
+    path.points = [[0, 0, 0], [1, 0, 0], [2, 0, 1]]; const legacy = { ...oldFields(path), ...timing };
+    delete legacy.timedSegments; delete legacy.waypointTimes;
+    Object.assign(legacy, timing);
+    Object.assign(path, migratePath(legacy));
     retimeObjectAnimation(doc, id, 2, 14);
     const next = doc.paths.find(p => p.target === id);
     assert.equal(next.start, 2); assert.equal(next.duration, 10);
-    if (timing.stopTimes) assert.deepEqual(next.stopTimes, [4]);
-    if (timing.waypointTimes) assert.deepEqual(next.waypointTimes, [0, 4, 10]);
-    if (timing.timedSegments) assert.deepEqual(next.timedSegments.map(s => [s.start, s.end]), [[0, 4], [6, 10]]);
+    if (oldFields(timing).stopTimes) assert.deepEqual(oldFields(next).stopTimes, [4]);
+    if (oldFields(timing).waypointTimes) assert.deepEqual(oldFields(next).waypointTimes, [0, 4, 10]);
+    if (oldFields(timing).timedSegments) assert.deepEqual(oldFields(next).timedSegments.map(s => [s.start, s.end]), [[0, 4], [6, 10]]);
     assert.deepEqual(validate(doc), { ok: true, errors: [] });
   }
 });

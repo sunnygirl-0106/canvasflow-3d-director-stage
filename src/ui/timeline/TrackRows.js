@@ -4,7 +4,8 @@ import { el, toast, toastError } from '../../util/dom.js';
 import { icon } from '../icons.js';
 import { toggleKey, propState, hitTime, forcedReason } from './animState.js';
 import { objectAnimationRange } from '../../anim/objectAnimation.js';
-import { toggleStop } from '../../anim/pathGen.js';
+import { remapSchedule } from '../../anim/pathGen.js';
+import { stopEntries } from '../../anim/schedule.js';
 import { aimPoint, constraintActive } from '../../anim/Constraint.js';
 
 /** 轨道行名（词汇表 → 中文）。 */
@@ -228,7 +229,7 @@ export class TrackRows {
     const nodes = Array.from({ length: count }, (_, i) => {
       const time = model.vertexTime(i);
       const index = i % path.points.length;
-      const stop = path.stops?.includes(index) || path.timedSegments?.slice(0, -1).some(s => s.to === index);
+      const stop = stopEntries(path).some(entry => entry.i === index);
       const select = () => {
         const app = this.panel.app;
         app.pathEditor.selectNode({ kind: 'path', sourceId: path.id, index, ...(i === path.points.length ? { arrival: 'end' } : {}) });
@@ -244,7 +245,7 @@ export class TrackRows {
           popupMenu(e.clientX, e.clientY, [
             { label: '定位到此节点', onClick: select },
             { label: stop ? '取消停顿' : '在此节点停顿', disabled: index === 0 || (!path.closed && index === path.points.length - 1), onClick: () => {
-              try { this.panel.app.timeline.updatePath(path.id, toggleStop(path, index, !stop)); } catch (err) { toastError(err); }
+              try { this.panel.app.timeline.updatePath(path.id, remapSchedule(path, {}, { stop: { index, on: !stop } })); } catch (err) { toastError(err); }
             } },
           ]);
         },

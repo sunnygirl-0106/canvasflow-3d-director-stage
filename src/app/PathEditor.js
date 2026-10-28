@@ -1,9 +1,9 @@
 // @ts-check
 import * as THREE from 'three';
 import { sameKeyTime } from '../anim/keyframes.js';
-import { framePlanePoint } from '../core/pathPicking.js';
-import { el, toast, toastError, isTyping, CLICK_PX, pointerNDC } from '../util/dom.js';
-import { stopsAfterInsert, stopsAfterDelete } from '../anim/pathGen.js';
+import { trackPointer } from './pathPointer.js';
+import { el, toast, toastError, isTyping, CLICK_PX } from '../util/dom.js';
+import { remapSchedule } from '../anim/pathGen.js';
 import { round4 } from '../util/math.js';
 import { onKey, KEY_PRIORITY } from '../util/keys.js';
 
@@ -25,16 +25,15 @@ export class PathEditor {
 
     const dom = app.stage.renderer.domElement;
     this.dom = dom;
-    // 捕获阶段：先于 TransformControls / OrbitControls（同一元素上捕获监听先执行）
-    dom.addEventListener('pointerdown', (e) => this._onDown(e), true);
-    dom.addEventListener('pointermove', (e) => this._onMove(e));
-    dom.addEventListener('pointerup', (e) => this._onUp(e), true);
+    this.pointer = trackPointer(app, {
+      down: e => this._onDown(e), move: e => this._onMove(e), up: e => this._onUp(e),
+      hover: e => { if (!this.drag) this._hoverAt(e); },
+      cancel: () => { this._lineDown = null; this._pathDeleteHeld = false; this.cancel(); },
+      leave: () => { if (!this.drag) this._setHover(null); },
+    });
     dom.addEventListener('dblclick', (e) => this._onDoubleClick(e));
-    dom.addEventListener('pointercancel', () => { this._lineDown = null; this.cancel(); });
-    dom.addEventListener('pointerleave', () => { if (!this.drag) this._setHover(null); });
     onKey((e) => this._onEscape(e), { priority: KEY_PRIORITY.pathDrag });                  // 拖动中 Esc：先于时间轴的 Esc = 停止
     window.addEventListener('keyup', e => { if (['Delete', 'Backspace'].includes(e.key)) this._pathDeleteHeld = false; });
-    window.addEventListener('blur', () => { this._pathDeleteHeld = false; this.cancel(); });
     onKey((e) => this._onDelete(e), { priority: KEY_PRIORITY.pathDrag }); // 轨迹聚焦时先于时间轴和实体删除
     this.barTitle = el('span', { class: 'path-edit-title' });
     this.bar = el('div', { class: 'path-edit-bar', hidden: true, role: 'toolbar', 'aria-label': '轨迹编辑' }, [
@@ -215,13 +214,6 @@ export class PathEditor {
     this._bindPoint();
   }
 
-  _plane(e, y) {
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(pointerNDC(this.dom, e.clientX, e.clientY), this.app.getRenderCamera());
-    this.proxy.parent.updateWorldMatrix(true, false);
-    return framePlanePoint(ray.ray, this.proxy.parent, y, this.app.rig.controls.target);
-  }
-
   // ---- 指针 ----
   _onDown(e) {
     if (this.drag) return;
@@ -249,7 +241,7 @@ export class PathEditor {
   _beginDrag(e) {
     const v = this.point();
     if (!v) return;
-    const g = this._plane(e, v[1]);
+    const g = this.pointer.plane(e, v[1], this.proxy.parent);
     const d = this.begin('direct', e.shiftKey);
     Object.assign(d, { offset: g ? [v[0] - g[0], v[2] - g[2]] : [0, 0], x: e.clientX, y: e.clientY, pointerId: e.pointerId });
     this.dom.setPointerCapture(e.pointerId);
@@ -257,10 +249,10 @@ export class PathEditor {
 
   _onMove(e) {
     const d = this.drag;
-    if (!d) { if (!e.buttons) this._hoverAt(e); return; }
+    if (!d) return;
     if (d.kind === 'gizmo') { if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > CLICK_PX) d.pointerMoved = true; return; }
     if (d.kind !== 'direct' || Math.hypot(e.clientX - d.x, e.clientY - d.y) <= CLICK_PX && !d.moved) return;
-    const v = d.orig[d.index], g = this._plane(e, v[1]);
+    const v = d.orig[d.index], g = this.pointer.plane(e, v[1], this.proxy.parent);
     if (!g) return;
     this.dom.style.cursor = 'grabbing';
     this.proxy.position.set(g[0] + d.offset[0], v[1], g[2] + d.offset[1]);
@@ -350,7 +342,7 @@ export class PathEditor {
     const index = path.edgeAt(s) + 1;
     const pts = json.points.slice();
     pts.splice(index, 0, [round4(p.x), round4(p.y), round4(p.z)]);
-    if (!this._write(pathId, { points: pts, ...stopsAfterInsert(json, index) })) return null;
+    if (!this._write(pathId, remapSchedule(json, { points: pts }, { map: i => i >= index ? i + 1 : i }))) return null;
     this.app.pathOverlay.setSelectedVertex({ pathId, index });
     return { index, inserted: true };
   }
@@ -361,7 +353,7 @@ export class PathEditor {
     if (json.points.length <= 2) { toast('路径至少需要 2 个顶点（Backspace 可删除整条轨迹）'); return; }
     const pts = json.points.filter((_, i) => i !== index);
     this.app.pathOverlay.setSelectedVertex(null);
-    this._write(pathId, { points: pts, ...stopsAfterDelete(json, index) });
+    this._write(pathId, remapSchedule(json, { points: pts }, { map: i => i === index ? null : i > index ? i - 1 : i }));
   }
 
   _write(pathId, patch) {

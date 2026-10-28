@@ -11,6 +11,7 @@ import { MOVE_PARAMS, MOVE_DIRS } from '../anim/cameraMoves.js';
 import { paceFor } from '../anim/pathGen.js';
 import { CROWD_LIMITS, CROWD_SPACING } from '../doc/edit.js';
 import { isObj, isNum } from '../util/math.js';
+import { num, vec3, hex, enumOf, obj, fmt } from '../util/validate.js';
 
 /** 三种模式：生成新场景 / 修改当前场景 / 识图导入。 */
 export const MODES = ['generate', 'modify', 'image'];
@@ -30,8 +31,6 @@ export const LIMITS = {
 export const TYPE_LABEL = { character: '角色', prop: '道具', camera: '机位', group: '组' };
 
 const isName = (v) => typeof v === 'string' && v.trim() !== '';
-const fmt = (v) => (v === undefined ? 'undefined' : JSON.stringify(v));
-const HEX_RE = /^#[0-9a-f]{6}$/i;
 
 // ---- 字段类型：{ doc（提示词里的写法）, check(v, path, err) } ----
 const nameType = (doc) => ({
@@ -42,35 +41,16 @@ const nameType = (doc) => ({
   },
 });
 
-/** @param {{doc?:string,min?:number,max?:number,gt?:number,int?:boolean}} [options] */
-const numType = ({ doc = '数', min = -Infinity, max = Infinity, gt, int = false } = {}) => ({
-  doc,
-  check(v, p, err) {
-    if (!isNum(v)) { err(p, `应为数，实际为 ${fmt(v)}`); return; }
-    if (int && !Number.isInteger(v)) err(p, `应为整数，实际为 ${v}`);
-    else if (gt != null && (!(v > gt) || v > max)) err(p,`应大于 ${gt}${max < Infinity ? ` 且不超过 ${max}` : ''}，实际为 ${v}`);
-    else if (v < min || v > max) err(p, `超出范围 ${min}..${max}，实际为 ${v}`);
-  },
-});
-
-const vec3Check = (v, p, err, { limit = LIMITS.pos, positive = false } = {}) => {
-  if (!Array.isArray(v) || v.length !== 3 || !v.every(isNum)) { err(p, `应为 [x, y, z] 三个数，实际为 ${fmt(v)}`); return; }
-  if (positive && v.some((x) => !(x > 0) || x > LIMITS.scale)) err(p, `各分量应在 (0, ${LIMITS.scale}] 内，实际为 ${fmt(v)}`);
-  else if (v.some((x) => Math.abs(x) > limit)) err(p, `各分量绝对值应 ≤ ${limit}，实际为 ${fmt(v)}`);
-};
-const vec3Type = (opts) => ({ doc: '[x,y,z]', check: (v, p, err) => vec3Check(v, p, err, opts) });
-
-const enumType = (list, what, label) => ({
-  doc: `<${label}>`,
-  check(v, p, err) {
-    if (!list.includes(v)) err(p, `未知${what} ${fmt(v)}，可选 ${list.join(' / ')}`);
-  },
-});
+/** @param {import('../util/validate.js').Bounds & {doc?:string}} [options] */
+const numType = ({ doc = '数', ...bounds } = {}) => ({ doc, ...num(bounds) });
+const vec3Check = (v, p, err, { limit = LIMITS.pos, positive = false } = {}) =>
+  vec3({ components: false, min: -limit, max: positive ? LIMITS.scale : limit, ...(positive ? { gt: 0 } : {}) }).check(v, p, err);
+const enumType = (list, label) => ({ doc: `<${label}>`, ...enumOf(list) });
 
 const T = {
   name: nameType('"名字"'),
   ref: nameType('"实体名"'),
-  pos: vec3Type(),
+  pos: { doc: '[x,y,z]', check: vec3Check },
   yaw: numType({ doc: '度', min: -3600, max: 3600 }),
   time: numType({ doc: '秒', min: 0, max: LIMITS.duration }),
   duration: numType({ doc: '秒', gt: 0, max: LIMITS.duration }),
@@ -78,7 +58,7 @@ const T = {
   sweep: numType({ doc: '度', gt: 0, max: 360 }),
   fov: numType({ doc: '度', min: FOV_RANGE[0], max: FOV_RANGE[1] }),
   bool: { doc: 'true|false', check: (v, p, err) => { if (typeof v !== 'boolean') err(p, `应为 true 或 false，实际为 ${fmt(v)}`); } },
-  color: { doc: '"#rrggbb"', check: (v, p, err) => { if (typeof v !== 'string' || !HEX_RE.test(v)) err(p, `应为 #rrggbb 颜色，实际为 ${fmt(v)}`); } },
+  color: { doc: '"#rrggbb"', ...hex },
   refOrPoint: {
     doc: '"实体名"|[x,y,z]',
     check(v, p, err) {
@@ -118,15 +98,7 @@ const req = (type) => ({ type, required: true });
 const opt = (type) => ({ type, required: false });
 
 /** 嵌套对象（严格：缺必填 / 多余键都报）。 */
-function checkFields(v, p, fields, err) {
-  if (!isObj(v)) { err(p, `应为对象，实际为 ${fmt(v)}`); return false; }
-  for (const [k, f] of Object.entries(fields)) {
-    if (v[k] === undefined) { if (f.required) err(`${p}.${k}`, '缺少字段'); }
-    else f.type.check(v[k], `${p}.${k}`, err);
-  }
-  for (const k of Object.keys(v)) if (!(k in fields)) err(`${p}.${k}`, `是未知字段（可用：${Object.keys(fields).join(' / ') || '无'}）`);
-  return true;
-}
+const checkFields = (v, p, fields, err) => obj(fields).check(v, p, err);
 
 const fieldsDoc = (fields) => Object.entries(fields).map(([k, f]) => `${k}${f.required ? '' : '?'}:${f.type.doc}`).join(', ');
 
@@ -145,7 +117,7 @@ export const PATH_FIELDS = {
     });
   } }) },
   line: { to: req(T.refOrPoint) },
-  arc: { center: req(T.refOrPoint), sweep: opt(T.sweep), dir: opt(enumType(VOCAB.arcDir, '环绕方向', '环绕 dir')) },
+  arc: { center: req(T.refOrPoint), sweep: opt(T.sweep), dir: opt(enumType(VOCAB.arcDir, '环绕 dir')) },
   toward: { target: req(T.ref), stop: opt(T.amount) },
 };
 T.path = {
@@ -159,15 +131,15 @@ T.path = {
 };
 
 const E = {
-  body: enumType(VOCAB.body, '体型', '体型 body'),
-  pose: enumType(VOCAB.pose, '姿势', '姿势 pose'),
-  prop: enumType(VOCAB.prop, '道具', '道具 kind'),
-  move: enumType(VOCAB.move, '运镜', '运镜 preset'),
-  speed: enumType(VOCAB.speed, '速度曲线', '路径速度 speed'),
-  orient: enumType(VOCAB.orient, '朝向方式', '路径朝向 orient'),
-  property: enumType(VOCAB.property, '关键帧属性', '关键帧属性 property'),
-  ease: enumType(VOCAB.ease, '缓动', '缓动 ease'),
-  ratio: enumType(VOCAB.ratio, '取景比例', '取景比例 ratio'),
+  body: enumType(VOCAB.body, '体型 body'),
+  pose: enumType(VOCAB.pose, '姿势 pose'),
+  prop: enumType(VOCAB.prop, '道具 kind'),
+  move: enumType(VOCAB.move, '运镜 preset'),
+  speed: enumType(VOCAB.speed, '路径速度 speed'),
+  orient: enumType(VOCAB.orient, '路径朝向 orient'),
+  property: enumType(VOCAB.property, '关键帧属性 property'),
+  ease: enumType(VOCAB.ease, '缓动 ease'),
+  ratio: enumType(VOCAB.ratio, '取景比例 ratio'),
   panorama: { doc: "'none'", check: (v, p, err) => { if (v !== 'none') err(p, `只能是 'none'（清除全景），实际为 ${fmt(v)}`); } },
 };
 const GROUND = {
@@ -366,7 +338,7 @@ export function validateOps(ops, scene = [], { mode = 'modify' } = {}) {
         if (!shapeOk) break;
         need(`${p}.target`, o.target, ['camera']);
         if (o.subject !== undefined) refOrPoint(`${p}.subject`, o.subject, { not: o.target });
-        const params = MOVE_PARAMS[o.preset];
+        const params = MOVE_PARAMS[/** @type {string} */ (o.preset)]; // shapeOk 已通过 preset 枚举校验。
         for (const k of ['amount', 'dir', 'sweep']) {
           if (o[k] !== undefined && !params.includes(k)) err(`${p}.${k}`, `运镜 ${o.preset} 没有参数 ${k}（可用：${params.join(' / ') || '无'}）`);
         }

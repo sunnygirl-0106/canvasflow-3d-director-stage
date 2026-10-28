@@ -1,3 +1,5 @@
+import { endpointSchedule } from '../anim/schedule.js';
+import { intervalSchedule } from '../anim/pathGen.js';
 // @ts-check
 import { Path, pathOptionsFor } from '../anim/Path.js';
 import { createEmptyDocument, validate } from '../doc/schema.js';
@@ -60,11 +62,11 @@ export function createPresetScene(index, { ratio = '16:9' } = {}) {
   const walk = (ent, legs) => {
     routes.set(ent.id, legs);
     const points = [ent.transform.pos.slice()];
-    const timedSegments = [];
+    const sections = [];
     for (const leg of legs) {
       const from = points.length - 1;
       for (const p of leg.points) points.push(p3(p));
-      timedSegments.push({ from, to: points.length - 1, start: leg.start, end: leg.end });
+      sections.push({ from, to: points.length - 1, start: leg.start, end: leg.end, curve: 'smooth' });
       const previous = from ? [points[from][0], points[from][2]] : [ent.transform.pos[0], ent.transform.pos[2]];
       const next = leg.points[0];
       const angle = yawTo(previous, next);
@@ -80,9 +82,11 @@ export function createPresetScene(index, { ratio = '16:9' } = {}) {
     }
     const continuous = legs.length > 1 && legs.every((leg, i) => !i || leg.start === legs[i - 1].end);
     const path = { id: newId(doc), target: ent.id, points, closed: false, start: continuous ? legs[0].start : 0,
-      duration: continuous ? legs.at(-1).end - legs[0].start : doc.timeline.duration, speed: 'smooth', orient: 'keep' };
-    if (continuous) path.waypointTimes = [0, ...legs.flatMap(leg => leg.points.map((_, i) => leg.start - legs[0].start + (leg.end - leg.start) * (i + 1) / leg.points.length))];
-    else path.timedSegments = timedSegments;
+      duration: continuous ? legs.at(-1).end - legs[0].start : doc.timeline.duration, orient: 'keep' };
+    path.schedule = endpointSchedule(points, false, path.duration, 'smooth');
+    if (continuous) path.schedule = [0, ...legs.flatMap(leg => leg.points.map((_, i) => leg.start - legs[0].start + (leg.end - leg.start) * (i + 1) / leg.points.length))]
+      .map((t, i) => ({ i, t, ...(i === 0 ? { curve: 'cubic', baseCurve: 'smooth' } : {}) }));
+    else path.schedule = intervalSchedule(path, sections).map((entry, i) => i && entry.curve ? { ...entry, inherited: true } : entry);
     doc.paths.push(path);
   };
   // Compose existing generators into a single explicitly timed position path. Zero-length
@@ -107,7 +111,7 @@ export function createPresetScene(index, { ratio = '16:9' } = {}) {
       const aim = focus(start);
       const models = moves.map(([name, params]) => {
         const move = cameraMove(name, { position, aim, params: { ...params, duration: end - start } });
-        return new Path({ ...move, start: 0, speed: 'linear', orient: 'keep' });
+        return new Path({ ...move, start: 0, schedule: endpointSchedule(move.points, move.closed, move.duration), orient: 'keep' });
       });
       const count = Math.max(2, Math.ceil((end - start) * 6));
       for (let i = 1; i <= count; i++) {
@@ -121,7 +125,7 @@ export function createPresetScene(index, { ratio = '16:9' } = {}) {
       position = points.at(-1); start = end;
     }
     const json = { id: newId(doc), target: '', points, closed: false, start: 0, duration: doc.timeline.duration,
-      speed: 'smooth', orient: 'keep', interpolation: 'polyline', waypointTimes: times };
+      orient: 'keep', interpolation: 'polyline', schedule: times.map((t, i) => ({ i, t, ...(i === 0 ? { curve: 'cubic', baseCurve: 'smooth' } : {}) })) };
     const path = new Path(json), aim = focus(0);
     const cam = { type: 'camera', id: newId(doc), name: '机位1', visible: true,
       transform: { pos: points[0], rot: aimRotation(points[0], aim, 0), scale: [1, 1, 1] }, fov, roll: 0, lookAt: aim };

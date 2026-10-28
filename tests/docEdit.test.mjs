@@ -1,3 +1,4 @@
+import { oldFields } from './migrate/pathModel.js';
 // 文档纯函数单元测试（阶段 H 第 2 步）：src/doc/edit.js —— 界面入口与 AI 共用的"数据部分"。
 // 运行：npm run test:unit
 import { test } from 'node:test';
@@ -99,7 +100,7 @@ test('setPath：新建删 pos 轨道并取默认值；替换保留 start / speed
   const r1 = edit.setPath(doc, a.id, [[0, 0, 0], [2.6, 0, 0]], { start: 1 });
   assert.equal(r1.replaced, false);
   assert.deepEqual(doc.timeline.tracks, []);
-  assert.deepEqual([r1.path.start, r1.path.duration, r1.path.speed, r1.path.orient], [1, 1.9, 'linear', 'tangent']);
+  assert.deepEqual([r1.path.start, r1.path.duration, oldFields(r1.path).speed, r1.path.orient], [1, 1.9, 'linear', 'tangent']);
   const r2 = edit.setPath(doc, a.id, [[0, 0, 0], [1.3, 0, 0]], { start: 3 });
   assert.equal(r2.replaced, true);
   assert.equal(r2.path.id, r1.path.id);

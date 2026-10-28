@@ -1,3 +1,4 @@
+import { migratePath } from '../src/doc/migrate.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { summarize } from '../src/ai/context.js';
@@ -46,6 +47,7 @@ test('实体与动画概览保留文本、顺序、数值精度及组员/关键�
   doc.entities.push(characterJSON({ id: 'solo0001', name: '独立角色', body: 'female', pos: [-0.001, 1.234, -2.345], rot: [0, 45, 0], pose: 'wave' }));
   const camera = doc.entities.find((e) => e.type === 'camera');
   doc.constraints.push({ id: 'follow01', type: 'follow', target: camera.id, subject: [1.234, 0, -0.001], offset: [0, 0, 0], start: 2, end: 4 });
+  doc.paths[0].schedule = [{ i: 0, t: 0, curve: 'linear', allocation: 'distance' }, { i: 2, t: 4 }];
   assert.deepEqual(validate(doc).errors, []);
   const before = structuredClone(doc);
   const prefixes = ['- 独立角色', '- 道具68号', '- 长镜头', '- 远处群众'];
@@ -67,7 +69,7 @@ test('无预设姿势区分站立与自定义，闭合路径的终点是首点',
   assert.equal(summarize(doc).split('\n').at(-1), '- 角色 · 角色 female · pos (0, 0, 0) · yaw 0 · 姿势 stand');
   character.pose.values = { lArmFwd: 10 };
   assert.equal(summarize(doc).split('\n').at(-1), '- 角色 · 角色 female · pos (0, 0, 0) · yaw 0 · 姿势 自定义');
-  doc.paths.push({ id: 'path0001', target: character.id, points: [[0, 0, 0], [3, 0, 0], [3, 0, 4]], closed: true, interpolation: 'polyline', start: 0, duration: 6, speed: 'linear', orient: 'tangent' });
+  doc.paths.push(migratePath({ id: 'path0001', target: character.id, points: [[0, 0, 0], [3, 0, 0], [3, 0, 4]], closed: true, interpolation: 'polyline', start: 0, duration: 6, speed: 'linear', orient: 'tangent' }));
   assert.deepEqual(validate(doc).errors, []);
   assert.equal(summarize(doc).split('\n').at(-1), '- 角色 · 角色 female · pos (0, 0, 0) · yaw 0 · 姿势 自定义 · 路径 3 点 长 12 m 0–6 s 终点 (0, 0, 0)');
 });

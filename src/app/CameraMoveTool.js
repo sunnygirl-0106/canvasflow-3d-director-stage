@@ -92,7 +92,7 @@ export class CameraMoveTool {
     if (!needsDefaultLook && editing && JSON.stringify(next) === JSON.stringify(last.params) && JSON.stringify(subject) === JSON.stringify(last.subject)) { this.error = null; return true; }
     const detached = this.app.directorDetached;
     try {
-      this.app.directorDetached = true;
+      this.app.setView({ director: 'free' });
       this.app.history.capture();
       this.app.store.transact(append ? '追加运镜' : editing ? '编辑运镜参数' : '替换运镜', doc => {
         if (editTail) removeCameraMoveTail(doc, cam.id, last);
@@ -121,7 +121,7 @@ export class CameraMoveTool {
       this.app.stage.invalidate();
       return true;
     } catch (err) {
-      this.app.directorDetached = detached;
+      this.app.setView({ director: detached ? 'free' : 'camera' });
       return this._presetError(err.errors?.[0] || err.message);
     }
   }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Path, WALK_RAMP } from '../src/anim/Path.js';
+import { Path, WALK_RAMP } from './migrate/pathModel.js';
 import { rectangle, arcPoints, defaultDuration, line, arc, polar, toward, simplify, pathLength, WALK_PACE } from '../src/anim/pathGen.js';
 import { createEmptyDocument, validate } from '../src/doc/schema.js';
 import { addCharacter, setPath } from '../src/doc/edit.js';

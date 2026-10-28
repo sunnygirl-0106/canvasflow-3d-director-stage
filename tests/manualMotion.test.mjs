@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { fakeApp, addCamera } from './helpers.mjs';
+import { App } from '../src/app/App.js';
 import { CameraMoveTool } from '../src/app/CameraMoveTool.js';
 import { aimRotation } from '../src/anim/cameraMoves.js';
 
@@ -17,6 +18,8 @@ for (const name of ['pan', 'circle']) {
     app.playback = { time: 0, pause() {} };
     app.history.capture = () => {};
     app.stage = { invalidate() {} };
+    app.view = { mode: 'director', director: 'free' };
+    app.setView = App.prototype.setView;
     const tool = new CameraMoveTool(app);
     assert.equal(tool.applyPreset(cam, name, { subject: aim, params: { duration: 2 } }), true);
     const origin = tool.current(cam).segments[0].origin;
