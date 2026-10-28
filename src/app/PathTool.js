@@ -1,8 +1,8 @@
 // @ts-check
 import * as THREE from 'three';
-import { el, toast, toastError, isTyping, CLICK_PX, pointerNDC } from '../util/dom.js';
+import { el, toast, toastError, isTyping, CLICK_PX } from '../util/dom.js';
 import { Emitter } from '../util/Emitter.js';
-import { framePlanePoint } from '../core/pathPicking.js';
+import { trackPointer } from './pathPointer.js';
 import { pickEntityId, footprintRadius } from '../core/Selection.js';
 import { worldBox } from '../util/measure.js';
 import { line, polar, toward, simplify, PATH_MODES, rectangle, TOWARD_STOP, ARC_SWEEP, arcPoints, pathLength } from '../anim/pathGen.js';
@@ -56,18 +56,17 @@ export class PathTool extends Emitter {
     this.draft = [];    // 已落的点（含首点）
     this._down = null;  // { x, y, button }
     this._orbiting = false;
-    this._ray = new THREE.Raycaster();
 
     this.hintEl = el('div', { class: 'path-hint', hidden: true });
     app.stage.viewport.appendChild(this.hintEl);
 
     const dom = app.stage.renderer.domElement;
-    dom.addEventListener('pointerdown', (e) => this._onDown(e), true); // 捕获：先于 OrbitControls
-    dom.addEventListener('pointermove', (e) => this._onMove(e));
-    window.addEventListener('pointerup', (e) => this._onUp(e));
+    this.pointer = trackPointer(app, {
+      down: e => this._onDown(e), move: e => this._onMove(e), up: e => this._onUp(e),
+      hover: e => { if (this.mode && !this._orbiting && this.mode !== 'freehand') this._hover(e); },
+      cancel: () => this.cancel(),
+    }, window);
     dom.addEventListener('dblclick', (e) => this._onDblClick(e));
-    dom.addEventListener('pointercancel', () => this.cancel());
-    window.addEventListener('blur', () => this.cancel());
     onKey((e) => this._onKey(e), { priority: KEY_PRIORITY.pathDraw }); // 先于时间轴 / 全局快捷键
     app.on('selection', (ent) => { if (this.mode && ent !== this.ent) this.cancel(); });
     app.on('view', () => this.cancel());
@@ -155,10 +154,6 @@ export class PathTool extends Emitter {
     return pathStartPoint(ent.type, ent.transformJSON(this.app.timeline.baseOf(ent) || ent.root).pos, this.groundY);
   }
 
-  _setRay(e) {
-    this._ray.setFromCamera(pointerNDC(this.app.stage.renderer.domElement, e.clientX, e.clientY), this.app.getRenderCamera());
-  }
-
   /** 光标处的绘制平面点（文档口径：角色 / 道具 / 组 = 地面，机位 = 机位高度）；看不到平面时 null。 */
   groundPoint(e) {
     const point = this.planePoint(e, this.mode ? this.pickPlaneY : this.groundY);
@@ -174,18 +169,15 @@ export class PathTool extends Emitter {
 
   /** 光标射线与 world 局部坐标里水平面 y 的交点（[x, y, z]，相机背后 / 平行时 null）。 */
   planePoint(e, y) {
-    this._setRay(e);
-    const world = this.app.stage.world;
-    world.updateMatrixWorld(true);
-    return framePlanePoint(this._ray.ray, world, y, this.app.rig.controls.target);
+    return this.pointer.plane(e, y);
   }
 
   /** 光标处的实体（不含绘制对象本身；群众成员归到组）。 */
   pickEntity(e) {
     const { app } = this;
-    this._setRay(e);
+    const ray = this.pointer.ray(e);
     const roots = app.entities.filter((en) => en.visible && en !== this.ent).map((en) => en.root);
-    const id = pickEntityId(this._ray, roots);
+    const id = pickEntityId(ray, roots);
     const ent = id != null ? app.findEntity(id) : null;
     return ent && ent !== this.ent ? ent : null;
   }
@@ -233,7 +225,7 @@ export class PathTool extends Emitter {
       }
       return;
     }
-    this._hover(e);
+    if (e.buttons) this._hover(e);
   }
 
   _onUp(e) {
