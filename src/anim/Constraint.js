@@ -1,3 +1,4 @@
+// @ts-check
 import * as THREE from 'three';
 import { EASE, clamp01 } from './ease.js';
 import { aimPointWith, anchorWith } from './subject.js';

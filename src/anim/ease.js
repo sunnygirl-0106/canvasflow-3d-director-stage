@@ -1,3 +1,4 @@
+// @ts-check
 // 缓动函数：u ∈ [0,1] → [0,1]。名字是 AI 词汇表（文档 keys[].ease / paths[].speed），定了就不改。
 export const EASE = {
   linear: (u) => u,

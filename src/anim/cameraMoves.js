@@ -1,3 +1,4 @@
+// @ts-check
 import * as THREE from 'three';
 import { line, arc, polar } from './pathGen.js';
 import { Path } from './Path.js';

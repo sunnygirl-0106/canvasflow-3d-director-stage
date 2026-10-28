@@ -1,3 +1,4 @@
+// @ts-check
 // 程序化步态（贴地方式："脚踩点 + 腿部 IK"）。纯函数，无状态。
 //
 // - 相位只按路径内经过的时间推进：每秒固定 1.6 个完整周期（左右各一步）。
@@ -46,6 +47,7 @@ export const strideScale = (speed) => Math.min(1, Math.max(STRIDE_MIN, speed / S
 
 /** σ = 起步短步缩放（周期、支撑行程、抬脚同比缩，支撑期占比不变）。 */
 function params(sigma = 1) {
+  /** @type {typeof GAIT.walk & {stance?:number}} */
   const P = { ...GAIT.walk };
   P.cycle *= sigma;
   P.reach *= sigma;
@@ -188,6 +190,7 @@ export function gaitPose(geom, phase, speed = Infinity) {
   const feet = feetAt(phase);
   const drop = pelvisDrop(S, feetAt, phase);
 
+  /** @type {Record<string, number>} */
   const values = {};
   S.forEach((L, i) => {
     const side = i ? 'r' : 'l';
@@ -220,6 +223,7 @@ export function gaitPose(geom, phase, speed = Infinity) {
 export function locomotionPose(base, geom, { speed, phase, blend = 1 }) {
   const w = gaitWeight(speed) * clamp01(blend);
   const g = geom ? gaitPose(geom, phase, speed) : { values: {}, drop: 0 };
+  /** @type {Record<string, number>} */
   const values = {};
   for (const key of JOINT_KEYS) values[key] = lerp(base[key] || 0, g.values[key] || 0, w);
   return { values, drop: g.drop * w, w };
@@ -232,7 +236,7 @@ export function locomotionPose(base, geom, { speed, phase, blend = 1 }) {
  * @param {import('../entities/Character.js').Character} ch
  * @param {Object<string,number>} base 原姿势 values
  * @param {{speed:number, gaitTime:number, blend?:number}} motion 来自 PathTrack
- * @param {number} scale 角色相对素体自然尺寸的缩放（含所在组的缩放）
+ * @param {number} _scale 角色相对素体自然尺寸的缩放（含所在组的缩放）
  * @param {number} [phaseOffset] 相位偏移（周期数；群众成员错开步伐）
  * @returns {{w:number, phase:number}}
  */

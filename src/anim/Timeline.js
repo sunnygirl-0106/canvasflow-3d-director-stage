@@ -1,3 +1,4 @@
+// @ts-check
 import { editCameraConstraints } from '../doc/cameraMotionState.js';
 import * as THREE from 'three';
 import { Emitter } from '../util/Emitter.js';

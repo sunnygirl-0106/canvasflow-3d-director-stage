@@ -1,3 +1,4 @@
+// @ts-check
 import * as THREE from 'three';
 import { Path, isWalker } from './Path.js';
 import { EASE, clamp01 } from './ease.js';

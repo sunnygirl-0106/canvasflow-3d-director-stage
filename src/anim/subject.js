@@ -1,3 +1,4 @@
+// @ts-check
 import * as THREE from 'three';
 
 // 注视点 / 锚点的唯一定义。运行时（Constraint，读场景对象）与 AI 编译（ai/apply，读文档）共用这两个函数，

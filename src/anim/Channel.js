@@ -1,3 +1,4 @@
+// @ts-check
 import * as THREE from 'three';
 import { EASE } from './ease.js';
 import { D2R } from '../util/math.js';
@@ -17,7 +18,7 @@ export const quatFromDeg = (v, out = new THREE.Quaternion()) => out.setFromEuler
  * t 在首键前取首键，末键后取末键；ease 作用于"从该键出发"的那一段。纯函数，无内部状态。
  */
 export class Channel {
-  /** @param {{t:number, value:any, ease:string}[]} keys 严格递增（已校验） @param {'vec3'|'quat'|'number'} kind */
+  /** @param {{t:number, value:number|number[], ease:string}[]} keys 严格递增（已校验） @param {'vec3'|'quat'|'number'} kind */
   constructor(keys, kind) {
     this.keys = keys;
     this.kind = kind;
@@ -52,7 +53,10 @@ export class Channel {
       return out.slerpQuaternions(_qa.copy(this._quats[a]), _qb.copy(this._quats[b]), u);
     }
     const va = k[a].value, vb = k[b].value;
-    if (this.kind === 'number') return va + (vb - va) * u;
+    if (this.kind === 'number') {
+      const na = /** @type {number} */ (va), nb = /** @type {number} */ (vb);
+      return na + (nb - na) * u;
+    }
     return [0, 1, 2].map((n) => va[n] + (vb[n] - va[n]) * u);
   }
 }

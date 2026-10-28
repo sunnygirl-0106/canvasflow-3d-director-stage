@@ -1,3 +1,4 @@
+// @ts-check
 import { Path, WALK_RAMP, isWalker } from './Path.js';
 import { D2R, R2D, round6, round4 } from '../util/math.js';
 

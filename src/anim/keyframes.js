@@ -1,3 +1,4 @@
+// @ts-check
 import { clone } from '../util/math.js';
 
 /** 文档编辑使用的同刻容差；UI 命中容差由界面自行决定。 */

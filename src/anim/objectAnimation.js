@@ -1,3 +1,4 @@
+// @ts-check
 import { fitStops } from './pathGen.js';
 import { sameKeyTime } from './keyframes.js';
 import { round6 } from '../util/math.js';

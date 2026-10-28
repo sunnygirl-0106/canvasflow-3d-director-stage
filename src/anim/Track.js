@@ -1,3 +1,4 @@
+// @ts-check
 import { Channel } from './Channel.js';
 
 const KIND = { pos: 'vec3', scale: 'vec3', rot: 'quat', fov: 'number' };
