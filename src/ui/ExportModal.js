@@ -1,7 +1,6 @@
 import { el, toast } from '../util/dom.js';
 import { icon } from './icons.js';
 import { downloadURL } from '../app/ShotManager.js';
-import { onKey, KEY_PRIORITY } from '../util/keys.js';
 import {
   EXPORT_RESOLUTIONS, exportSize, frameCount, exportCamera, hasWebCodecs, isExportSupported, UNSUPPORTED_MSG,
 } from '../app/exportSpec.js';
@@ -23,16 +22,7 @@ export class ExportModal {
     this.overlay = null;
     this.form = { short: 1080, fps: null, whole: true, t0: 0, t1: null, labels: true };
     this._abort = null;
-    this._onKey = (e) => {
-      if (!this.app.exporting && !this.overlay) return;
-      if (e.key === 'Escape') {
-        if (this._abort) this._abort.abort(); else this.close();
-      }
-      // 导出中 / 弹层打开时快捷键（撤销、删除、变换模式…）一律不响应
-      e.stopImmediatePropagation();
-      if (this.app.exporting) e.preventDefault();
-    };
-    onKey(this._onKey, { priority: KEY_PRIORITY.modal });
+
   }
 
   get busy() { return !!this._abort; }
@@ -41,16 +31,22 @@ export class ExportModal {
     if (this.overlay) return;
     const tl = this.app.timeline;
     if (this.form.fps == null || !FPS_OPTIONS.includes(this.form.fps)) this.form.fps = FPS_OPTIONS.includes(tl.fps) ? tl.fps : 30;
-    this.overlay = el('div', { class: 'hm-overlay export-overlay' });
+    this.overlay = el('dialog', { class: 'hm-overlay export-overlay', 'aria-label': '导出视频' });
     this.overlay.addEventListener('click', (e) => { if (e.target === this.overlay && !this.busy) this.close(); });
     this.box = el('div', { class: 'hm-box export-box' });
     this.overlay.appendChild(this.box);
     document.body.appendChild(this.overlay);
     this._render();
+    this.overlay.addEventListener('cancel', e => {
+      e.preventDefault();
+      if (this._abort) this._abort.abort(); else this.close();
+    });
+    this.overlay.showModal();
   }
 
   close() {
     if (this.busy) return;
+    this.overlay?.close();
     this.overlay?.remove();
     this.overlay = null;
   }

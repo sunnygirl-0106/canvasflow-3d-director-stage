@@ -1,5 +1,5 @@
 import { el, toast } from '../util/dom.js';
-import { DockMenu } from './dockMenu.js';
+import { createMenu, closePopup } from './popupMenu.js';
 import { HistoryModal } from './HistoryModal.js';
 import { CAMERA_PRESETS } from '../core/cameraPresets.js';
 import { listCanvasAssets } from '../util/assetLibrary.js';
@@ -69,7 +69,7 @@ export class Dock {
     c.innerHTML = '';
 
     // 1 变换（移动/旋转/缩放）
-    const tf = this._btn(this._modeIcon(app.transformMode), '移动（点击选择移动 / 旋转 / 缩放）', (e) => { e.stopPropagation(); this.transformMenu.toggle(); });
+    const tf = this._btn(this._modeIcon(app.transformMode), '移动（点击选择移动 / 旋转 / 缩放）', undefined);
     tf.classList.add('on');
     this.transformBtn = tf;
 
@@ -87,7 +87,7 @@ export class Dock {
     shot.dataset.tooltip = '截图：拍下当前画面，保存到摄像机截图列表';
 
     // 7 场景：撤销 / 重做 / 导出 / 导入 / 导出视频
-    const scene = this._btn('scene', '场景（撤销 / 重做 / 导出 / 导入 / 导出视频）', (e) => { e.stopPropagation(); this.sceneMenu.toggle(); });
+    const scene = this._btn('scene', '场景（撤销 / 重做 / 导出 / 导入 / 导出视频）', undefined);
 
     // 8 时间轴（展开 / 折叠底部面板）
     const tlp = this.timelinePanel;
@@ -105,13 +105,12 @@ export class Dock {
     const image = this._btn('imageScan', '识图导入', () => { this._showPanel('image'); this.aiPanel.openImageImport(); });
     rail.replaceChildren(sceneTab, addBtn, camAdd, pano, ratio, image);
     document.getElementById('sceneActions').replaceChildren(scene);
-    // ---- 菜单（统一由 DockMenu 管理）----
-    this.menu = new DockMenu(document.body);
+    // ---- 菜单（统一使用原生自动弹层）----
 
-    this.transformMenu = this.menu.create({
+    this.transformMenu = createMenu({
       anchor: tf, minWidth: '150px',
       build: () => TF_MODES.map(([mode, icon, label]) =>
-        this._item(icon, label, () => { app.setTransformMode(mode); this.menu.close(); }, app.transformMode === mode)),
+        this._item(icon, label, () => { app.setTransformMode(mode); closePopup(); }, app.transformMode === mode)),
     });
 
     this.panelButtons = { scene: sceneTab, characters: addBtn, cameras: camAdd, panorama: pano, ratio, image };
@@ -122,13 +121,13 @@ export class Dock {
     sidebar.append(this.sceneContent, this.panelContent);
     this.activePanel = 'scene';
     this._showPanel('scene');
-    this.sceneMenu = this.menu.create({ anchor: scene, minWidth: '170px', build: () => this._buildSceneItems() });
+    this.sceneMenu = createMenu({ anchor: scene, minWidth: '170px', build: () => this._buildSceneItems() });
 
   }
 
   _showPanel(key) {
     this.activePanel = key;
-    this.menu.close();
+    closePopup();
     document.getElementById('app').classList.remove('left-collapsed');
     for (const [name, button] of Object.entries(this.panelButtons)) {
       button.classList.toggle('on', name === key); button.setAttribute('aria-pressed', String(name === key));
@@ -233,7 +232,7 @@ export class Dock {
       const f = e.target.files && e.target.files[0];
       if (f) app.panorama.setFromFile(f);
       e.target.value = '';
-      this.menu.close();
+      closePopup();
     });
     items.push(el('label', { class: 'menu-item' }, [
       el('span', { class: 'mi-ic', html: svg('upload', 17) }),
@@ -244,7 +243,7 @@ export class Dock {
     items.push(el('div', { class: 'menu-hint', text: '仅支持 2:1 全景图（如 2048×1024）' }));
 
     // 历史记录 → 打开全屏历史记录弹层（含预设全景资产）
-    items.push(el('div', { class: 'menu-item', onclick: () => { this.menu.close(); this._openHistory(); } }, [
+    items.push(el('div', { class: 'menu-item', onclick: () => { closePopup(); this._openHistory(); } }, [
       el('span', { class: 'mi-ic', html: svg('history', 17) }),
       el('span', { class: 'mi-label', text: '历史记录' }),
       el('span', { class: 'mi-arrow', html: svg('chevron', 14) }),
@@ -252,7 +251,7 @@ export class Dock {
 
     if (app.panorama.active) {
       items.push(el('div', { class: 'menu-sep' }));
-      items.push(this._item(null, '移除全景', () => { app.panorama.clear(); this.menu.close(); }));
+      items.push(this._item(null, '移除全景', () => { app.panorama.clear(); closePopup(); }));
     }
     return items;
   }
@@ -279,14 +278,14 @@ export class Dock {
   _buildSceneItems() {
     const h = this.app.history;
     return [
-      this._item('undo', '撤销', () => { this.menu.close(); h.undo(); }, false, 17, { key: KEY_UNDO, disabled: !h.canUndo }),
-      this._item('redo', '重做', () => { this.menu.close(); h.redo(); }, false, 17, { key: KEY_REDO, disabled: !h.canRedo }),
+      this._item('undo', '撤销', () => { closePopup(); h.undo(); }, false, 17, { key: KEY_UNDO, disabled: !h.canUndo }),
+      this._item('redo', '重做', () => { closePopup(); h.redo(); }, false, 17, { key: KEY_REDO, disabled: !h.canRedo }),
       el('div', { class: 'menu-sep' }),
-      this._item('download', '导出场景', () => { this.menu.close(); exportScene(this.app); }),
-      this._item('upload', '导入场景', () => { this.menu.close(); pickAndImportScene(this.app); }),
+      this._item('download', '导出场景', () => { closePopup(); exportScene(this.app); }),
+      this._item('upload', '导入场景', () => { closePopup(); pickAndImportScene(this.app); }),
       el('div', { class: 'menu-sep' }),
       this._exportItem(),
-      this._item('expand', '全屏', () => { this.menu.close(); this._toggleFullscreen(); }),
+      this._item('expand', '全屏', () => { closePopup(); this._toggleFullscreen(); }),
     ];
   }
 
@@ -294,7 +293,7 @@ export class Dock {
   _exportItem() {
     const ok = hasWebCodecs();
     const item = this._item('video', '导出视频…', () => {
-      this.menu.close();
+      closePopup();
       if (!ok) { toast(UNSUPPORTED_MSG); return; }
       this.exportModal?.open();
     });

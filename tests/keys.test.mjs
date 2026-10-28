@@ -12,11 +12,11 @@ test('按优先级从高到低收到，与注册先后无关；捕获阶段先�
   const offs = [
     onKey(() => seen.push('global'), { priority: KEY_PRIORITY.global, phase: 'bubble' }),
     onKey(() => seen.push('timeline'), { priority: KEY_PRIORITY.timeline }),
-    onKey(() => seen.push('modal'), { priority: KEY_PRIORITY.modal }),
+    onKey(() => seen.push('popup'), { priority: KEY_PRIORITY.popup }),
     onKey(() => seen.push('pathDraw'), { priority: KEY_PRIORITY.pathDraw }),
   ];
   press('a');
-  assert.deepEqual(seen, ['modal', 'pathDraw', 'timeline', 'global']);
+  assert.deepEqual(seen, ['popup', 'pathDraw', 'timeline', 'global']);
   offs.forEach((off) => off());
 });
 

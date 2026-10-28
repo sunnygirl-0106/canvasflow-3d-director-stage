@@ -5,7 +5,6 @@
 /** 优先级（大的先收到）。 */
 export const KEY_PRIORITY = {
   // 捕获阶段
-  modal: 100,      // 导出弹层：打开 / 导出中拦下全部按键（Esc = 取消 / 关闭）
   popup: 90,       // 弹出菜单：Esc 关闭
   pathDraw: 80,    // 路径绘制态：回车 / Backspace / Esc
   transformDrag: 75, // gizmo 拖动：Esc 取消预览
@@ -20,6 +19,8 @@ const lists = { capture: [], bubble: [] };
 let installed = false;
 
 function dispatch(list, e) {
+  // 原生顶层弹层自己接收按键，避免场景快捷键抢走 Esc 或方向键。
+  if (globalThis.document?.querySelector(':modal, [popover]:popover-open')) return;
   for (const h of list.slice()) {
     h.fn(e);
     if (e.cancelBubble) break;
