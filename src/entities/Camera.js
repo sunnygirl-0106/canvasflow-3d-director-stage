@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Entity } from './Entity.js';
-import { round6, xyz } from '../util/math.js';
+import { round6, xyz, D2R, R2D } from '../util/math.js';
 import { CAMERA_FOV } from '../config.js';
 
 const FRUSTUM_COLOR = 0x8297a6; // 低强调蓝灰视锥线
@@ -224,14 +224,14 @@ export class CameraEntity extends Entity {
     return {
       type: 'camera', id: this.id, name: this.name, visible: this.root.visible,
       transform: this.transformJSON(base || this.root), fov: round6(base ? base.fov : this.cam.fov),
-      roll: round6(this.rollRad * 180 / Math.PI), lookAt: xyz(this.lookTarget),
+      roll: round6(this.rollRad * R2D), lookAt: xyz(this.lookTarget),
     };
   }
 
   static async fromJSON(json, { app }) {
     const c = new CameraEntity(json.name, { fov: json.fov, aspect: app.viewportAspect(), id: json.id });
     c.applyTransform(json.transform);
-    c.rollRad = json.roll * Math.PI / 180;
+    c.rollRad = json.roll * D2R;
     c.lookTarget.fromArray(json.lookAt);
     c.setVisible(json.visible);
     return c;
@@ -243,7 +243,7 @@ export class CameraEntity extends Entity {
     this.name = json.name;
     if (this.cam.fov !== json.fov) this.setFov(json.fov);
     this.applyTransform(json.transform);
-    this.rollRad = json.roll * Math.PI / 180;
+    this.rollRad = json.roll * D2R;
     this.lookTarget.fromArray(json.lookAt);
     this.setVisible(json.visible);
     this.update();

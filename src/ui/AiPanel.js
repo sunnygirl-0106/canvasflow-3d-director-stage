@@ -233,12 +233,13 @@ export class AiPanel {
   renderSettings() {
     const s = this.settings;
     clear(this.settingsEl);
+    const testResult = this.testState ? el('div', { class: 'ai-test ' + (this.testState.ok ? 'ok' : 'err'), text: this.testState.text }) : null;
     if (s.local) {
-      this.settingsEl.append(
+      this.settingsEl.append(...[
         el('div', { class: 'ai-privacy', text: `已自动加载本机配置 · ${s.model}。无需重复填写，密钥仅保存在本机服务端。` }),
         el('button', { class: 'minibtn', text: '测试连接', onclick: () => this._testConnection() }),
-      );
-      if (this.testState) this.settingsEl.append(el('div', { class: 'ai-test ' + (this.testState.ok ? 'ok' : 'err'), text: this.testState.text }));
+        testResult,
+      ].filter(Boolean));
       return;
     }
     const field = (label, key, type = 'text', placeholder = '') => {
@@ -255,7 +256,7 @@ export class AiPanel {
         el('button', { class: 'minibtn primary', text: '保存', onclick: () => this._saveSettings() }),
         el('button', { class: 'minibtn', text: '测试连接', onclick: () => this._testConnection() }),
       ]),
-      this.testState ? el('div', { class: 'ai-test ' + (this.testState.ok ? 'ok' : 'err'), text: this.testState.text }) : null,
+      testResult,
       el('div', { class: 'ai-privacy', text: 'OpenAI 兼容接口（/chat/completions）。设置只保存在本机浏览器（localStorage），不写进场景文件、不上传；识图会把图片发给该接口。' }),
     ].filter(Boolean));
   }

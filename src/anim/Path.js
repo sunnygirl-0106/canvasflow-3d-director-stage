@@ -15,8 +15,11 @@ export const WALK_RAMP = 0.4;
 /** 实体类型 → Path 的 ramp 选项。 */
 export const rampFor = (type) => (type === 'camera' ? 0 : WALK_RAMP);
 
+/** 角色 / 组沿路径步行：整段匀速，默认按步速估算时长。 */
+export const isWalker = (type) => type === 'character' || type === 'group';
+
 /** 人物整段按「总弧长 / 时长」匀速；旧文档的 smooth 也不再使人物加减速。 */
-export const pathOptionsFor = (type) => ({ ramp: rampFor(type), uniform: ['character', 'group'].includes(type) });
+export const pathOptionsFor = (type) => ({ ramp: rampFor(type), uniform: isWalker(type) });
 
 /**
  * 一段时长 dt、长 L 的位移曲线：x ∈ [0,dt] 秒 → [已走路程, 瞬时速度]。

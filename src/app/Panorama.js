@@ -17,6 +17,12 @@ async function loadEquirect(loader, src) {
   return tex;
 }
 
+/** 资源的图片地址：同源 url 或内嵌 dataURL。 */
+const assetSrc = (asset) => asset.url || asset.dataURL;
+
+/** 设置全景失败的提示：2:1 校验错误原样显示，其余统一文案。 */
+const toastPanoError = (err) => toast(err?.message?.startsWith('仅支持') ? err.message : '全景图加载失败');
+
 function readAsDataURL(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -56,19 +62,19 @@ export class Panorama {
       const dataURL = await readAsDataURL(file);
       await this._setAsset({ type: 'image', name: file.name || '本地全景图', dataURL });
       toast('已设置全景背景');
-    } catch (err) { toast(err?.message?.startsWith('仅支持') ? err.message : '全景图加载失败'); }
+    } catch (err) { toastPanoError(err); }
   }
 
   async setFromAsset(asset) {
     try {
       await this._setAsset({ type: 'image', name: asset.title || '全景图', url: asset.url });
       toast('已设置全景背景：' + (asset.title || ''));
-    } catch (err) { toast(err?.message?.startsWith('仅支持') ? err.message : '全景图加载失败'); }
+    } catch (err) { toastPanoError(err); }
   }
 
   async _setAsset(asset) {
     const revision = this.getRevision();
-    const tex = await loadEquirect(this._loader, asset.url || asset.dataURL);
+    const tex = await loadEquirect(this._loader, assetSrc(asset));
     if (revision !== this.getRevision()) { tex.dispose(); throw new Error('场景已改变，请重新设置全景'); }
     this._apply(tex, genId(), asset, { silent: false });
   }
@@ -94,8 +100,8 @@ export class Panorama {
   async prepare(ref) {
     if (!ref) return { kind: 'none', discard() {} };
     const { id, ...asset } = ref;
-    const src = asset.url || asset.dataURL;
-    if (this.active && this.asset && (this.asset.url || this.asset.dataURL) === src) {
+    const src = assetSrc(asset);
+    if (this.active && this.asset && assetSrc(this.asset) === src) {
       return { kind: 'reuse', id, asset, discard() {} };
     }
     const tex = await loadEquirect(this._loader, src);
@@ -109,12 +115,7 @@ export class Panorama {
     this.stage.setPanoramaRotation(rotation);
     this.stage.setPanoramaRadius(radius);
     if (handle.kind === 'none') { if (this.active) this.clear({ silent: true }); return; }
-    if (handle.kind === 'reuse') {
-      this.assetId = handle.id;
-      this.asset = handle.asset;
-      this.info = { thumb: resolveAssetURL(handle.asset.url || handle.asset.dataURL), title: handle.asset.name };
-      return;
-    }
+    if (handle.kind === 'reuse') { this._setCurrent(handle.id, handle.asset); return; }
     this._apply(handle.tex, handle.id, handle.asset, { silent: true });
   }
 
@@ -123,9 +124,13 @@ export class Panorama {
     this.stage.setPanoramaRadius(this.radius);
     this.stage.setPanorama(tex);
     this.active = true;
+    this._setCurrent(assetId, asset);
+    this.onChange(true, { silent });
+  }
+
+  _setCurrent(assetId, asset) {
     this.assetId = assetId;
     this.asset = asset;
-    this.info = { thumb: resolveAssetURL(asset.url || asset.dataURL), title: asset.name };
-    this.onChange(true, { silent });
+    this.info = { thumb: resolveAssetURL(assetSrc(asset)), title: asset.name };
   }
 }

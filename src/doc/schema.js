@@ -62,6 +62,7 @@
 import { BODY_TYPES, PROP_KINDS, RATIO_OPTIONS } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
 import { JOINT_SCHEMA } from '../rig/jointSchema.js';
+import { PANEL_LABEL, MOVE_DIRS } from '../anim/cameraMoves.js';
 import { clone, isObj, isNum } from '../util/math.js';
 
 export const SCHEMA_VERSION = 'director-stage/0.1';
@@ -89,6 +90,9 @@ const JOINT_MAP = Object.fromEntries(JOINT_SCHEMA.map((j) => [j.key, j]));
 const PROP_KIND_SET = new Set(PROP_KINDS.map(([k]) => k));
 const RATIO_SET = new Set(RATIO_OPTIONS.map(([k]) => k));
 const HEX_RE = /^#[0-9a-f]{6}$/i;
+// 手动运镜面板持久化的预设名与方向（与 anim/cameraMoves.js 同一份词汇）
+const MOVE_NAMES = Object.keys(PANEL_LABEL);
+const MOVE_DIR_VALUES = new Set(Object.values(MOVE_DIRS).flat().map(([value]) => value));
 
 // ---- 默认值 ----
 export const DEFAULT_SCENE = Object.freeze({
@@ -202,7 +206,7 @@ export function validate(doc) {
         state.segments.forEach((segment, i) => {
           const q = `${p}.segments[${i}]`;
           if (!checkKeys(segment, q, ['name', 'params', 'subject', 'aim', 'origin'])) return;
-          if (!['circle', 'half_orbit', 'push_in', 'pull_out', 'truck', 'crane', 'spiral', 'pan'].includes(segment.name)) err(`${q}.name`, '未知运镜');
+          if (!MOVE_NAMES.includes(segment.name)) err(`${q}.name`, '未知运镜');
           vec3(segment.aim, `${q}.aim`);
           if (Array.isArray(segment.subject)) vec3(segment.subject, `${q}.subject`); else str(segment.subject, `${q}.subject`);
           if (checkKeys(segment.origin, `${q}.origin`, ['position', 'rot', 'roll', 'time'])) {
@@ -211,7 +215,7 @@ export function validate(doc) {
           }
           if (checkKeys(segment.params, `${q}.params`, ['duration'], ['amount', 'sweep', 'rise', 'dir', 'minSubjectDist'])) {
             for (const k of ['duration', 'amount', 'sweep', 'rise', 'minSubjectDist']) num(segment.params[k], `${q}.params.${k}`, { gt: 0 });
-            if (segment.params.dir != null && !['ccw', 'cw', 'left', 'right', 'up', 'down'].includes(segment.params.dir)) err(`${q}.params.dir`, '无效方向');
+            if (segment.params.dir != null && !MOVE_DIR_VALUES.has(segment.params.dir)) err(`${q}.params.dir`, '无效方向');
           }
         });
       }

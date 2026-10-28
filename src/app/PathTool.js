@@ -1,12 +1,14 @@
 import * as THREE from 'three';
-import { el, toast, toastError, isTyping, CLICK_PX } from '../util/dom.js';
+import { el, toast, toastError, isTyping, CLICK_PX, pointerNDC } from '../util/dom.js';
 import { Emitter } from '../util/Emitter.js';
-import { safePathPlanePoint } from '../core/pathPicking.js';
+import { framePlanePoint } from '../core/pathPicking.js';
+import { pickEntityId, footprintRadius } from '../core/Selection.js';
 import { worldBox } from '../util/measure.js';
 import { line, polar, toward, simplify, PATH_MODES, rectangle, TOWARD_STOP, ARC_SWEEP, arcPoints, pathLength } from '../anim/pathGen.js';
 import { PathTrack } from '../anim/PathTrack.js';
+import { isWalker } from '../anim/Path.js';
 import { pathStartPoint, setPath } from '../doc/edit.js';
-import { round4, clone } from '../util/math.js';
+import { round4, clone, D2R, R2D } from '../util/math.js';
 import { onKey, KEY_PRIORITY } from '../util/keys.js';
 
 /** 某实体的绘制方式文案：机位的「走到」叫「推到」（同一个 toward）。 */
@@ -154,9 +156,7 @@ export class PathTool extends Emitter {
   }
 
   _setRay(e) {
-    const r = this.app.stage.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-    this._ray.setFromCamera(ndc, this.app.getRenderCamera());
+    this._ray.setFromCamera(pointerNDC(this.app.stage.renderer.domElement, e.clientX, e.clientY), this.app.getRenderCamera());
   }
 
   /** 光标处的绘制平面点（文档口径：角色 / 道具 / 组 = 地面，机位 = 机位高度）；看不到平面时 null。 */
@@ -177,11 +177,7 @@ export class PathTool extends Emitter {
     this._setRay(e);
     const world = this.app.stage.world;
     world.updateMatrixWorld(true);
-    const inv = world.matrixWorld.clone().invert();
-    const o = this._ray.ray.origin.clone().applyMatrix4(inv);
-    const d = this._ray.ray.direction.clone().transformDirection(inv);
-    const focus = this.app.rig.controls.target.clone().applyMatrix4(inv);
-    return safePathPlanePoint(o, d, y, focus, o.distanceTo(focus));
+    return framePlanePoint(this._ray.ray, world, y, this.app.rig.controls.target);
   }
 
   /** 光标处的实体（不含绘制对象本身；群众成员归到组）。 */
@@ -189,13 +185,8 @@ export class PathTool extends Emitter {
     const { app } = this;
     this._setRay(e);
     const roots = app.entities.filter((en) => en.visible && en !== this.ent).map((en) => en.root);
-    const hit = this._ray.intersectObjects(roots, true).find((h) => {
-      for (let o = h.object; o; o = o.parent) if (o.visible === false) return false;
-      return true;
-    });
-    let o = hit?.object;
-    while (o && o.userData.entityId == null) o = o.parent;
-    const ent = o ? app.findEntity(o.userData.entityId) : null;
+    const id = pickEntityId(this._ray, roots);
+    const ent = id != null ? app.findEntity(id) : null;
     return ent && ent !== this.ent ? ent : null;
   }
 
@@ -210,7 +201,7 @@ export class PathTool extends Emitter {
     world.worldToLocal(c);
     const ws = world.getWorldScale(new THREE.Vector3()).y || 1;
     const size = box.isEmpty() ? new THREE.Vector3(0.6, 0, 0.6) : box.getSize(new THREE.Vector3());
-    const radius = Math.max(0.4, 0.5 * Math.hypot(size.x, size.z) + 0.12) / ws;
+    const radius = footprintRadius(size) / ws;
     return { point: [round4(c.x), this.groundY, round4(c.z)], radius };
   }
 
@@ -404,12 +395,12 @@ export class PathTool extends Emitter {
         doc.timeline.duration = Math.max(10, doc.timeline.duration);
         ({ path, replaced: old } = clone(setPath(doc, ent.id, points, { closed, set: { start: 0, duration: 10, ...(interpolation ? { interpolation } : {}) } })));
         // 同一事务保存出发朝向：idle 立即可见，撤销路径时也恢复原朝向。
-        if (['character', 'group'].includes(ent.type) && path.orient === 'tangent') {
+        if (isWalker(ent.type) && path.orient === 'tangent') {
           const transform = doc.entities.find((e) => e.id === ent.id).transform;
-          const quaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...transform.rot.map((v) => v * Math.PI / 180)));
+          const quaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...transform.rot.map((v) => v * D2R)));
           new PathTrack(path).apply(path.start, { ent, quaternion, position: new THREE.Vector3(), opts: { posOffset: [0, 0, 0] } });
           const rotation = new THREE.Euler().setFromQuaternion(quaternion);
-          transform.rot = [rotation.x, rotation.y, rotation.z].map((v) => round4(v * 180 / Math.PI));
+          transform.rot = [rotation.x, rotation.y, rotation.z].map((v) => round4(v * R2D));
         }
       });
     } catch (err) { toastError(err); return null; }

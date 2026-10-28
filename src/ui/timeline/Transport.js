@@ -1,5 +1,6 @@
 import { el, toastError } from '../../util/dom.js';
 import { icon } from '../icons.js';
+import { MAX_PPS } from './layout.js';
 
 const FPS_OPTIONS = [24, 25, 30, 60];
 
@@ -40,7 +41,7 @@ export class Transport {
 
     this.removeBtn = el('button', { class: 'tl-track-action', title: '新建轨道', text: '＋ 新建轨道', onclick: (e) => panel.selectedAnimation ? panel.removeSelectedAnimation() : panel.addTrackMenu(e) });
     this.zoom = el('input', { type: 'range', min: 0, max: 100, value: 0, title: '时间轴缩放：向右拖动放大，查看更精细的时间和关键帧', class: 'tl-zoom' });
-    this.zoom.addEventListener('input', () => panel.setZoom(panel._fitPps() * Math.pow(1500 / panel._fitPps(), +this.zoom.value / 100)));
+    this.zoom.addEventListener('input', () => panel.setZoom(panel._fitPps() * Math.pow(MAX_PPS / panel._fitPps(), +this.zoom.value / 100)));
     const fit = el('button', { class: 'tl-addkey', text: '显示全长', title: '适配完整时长', onclick: () => panel.setZoom(panel._fitPps()) });
     const exp = el('button', { class: 'tl-export', text: '导出视频', onclick: () => app.emit('exportVideo') });
     this.tools = el('div', { class: 'tl-tools' }, [fit, this.zoom, this.fpsSel, exp]);

@@ -202,28 +202,7 @@ export async function dragPath(points, { steps = 3, hold, shift } = {}) {
 
 export function hdist(a, b) { return Math.hypot(a[0] - b[0], a[2] - b[2]); }
 
-/**
- * 单角色姿势截图：隐藏其余实体与名牌，角色放原点，固定相机出 正面 + 3/4 侧面 两视图拼一张。
- * 渲染走 Stage.snapshot（主渲染器），保证与应用内画面一致且确定。
- */
 // ---- 阶段 F：机位运镜 ----
-/** Inspector 运镜段：按标签找下拉 / 输入并设值（触发 change）。 */
-export async function moveField(label, value) {
-  await page.evaluate(()=>[...document.querySelectorAll('.ptabs button')].find(b=>b.textContent==='运动轨迹')?.click());
-  await page.evaluate((label, value) => {
-    const f = [...document.querySelectorAll('#inspector [data-sec="move"] .field')].find((x) => x.querySelector('label')?.textContent === label);
-    const n = f.querySelector('select, input');
-    n.value = String(value);
-    n.dispatchEvent(new Event('change'));
-  }, label, value);
-  await settle();
-}
-
-export async function moveBtn(text) {
-  await page.evaluate((t) => [...document.querySelectorAll('#inspector [data-sec="move"] .anim-btns button')].find((b) => b.textContent === t).click(), text);
-  await settle(120);
-}
-
 /** 机位 −Z 与主体注视点方向的夹角（度）+ 注视点投影到画面的偏差（占画幅比例）。 */
 export function camAim(camId, subjectId) {
   return page.evaluate(async (camId, subjectId) => {

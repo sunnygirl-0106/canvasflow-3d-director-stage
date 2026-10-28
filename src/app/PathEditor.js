@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { sameKeyTime } from '../anim/keyframes.js';
-import { safePathPlanePoint } from '../core/pathPicking.js';
-import { el, toast, toastError, isTyping, CLICK_PX } from '../util/dom.js';
+import { framePlanePoint } from '../core/pathPicking.js';
+import { el, toast, toastError, isTyping, CLICK_PX, pointerNDC } from '../util/dom.js';
 import { stopsAfterInsert, stopsAfterDelete } from '../anim/pathGen.js';
 import { round4 } from '../util/math.js';
 import { onKey, KEY_PRIORITY } from '../util/keys.js';
@@ -215,13 +215,10 @@ export class PathEditor {
   }
 
   _plane(e, y) {
-    const ray = new THREE.Raycaster(), rect = this.dom.getBoundingClientRect();
-    ray.setFromCamera(new THREE.Vector2((e.clientX - rect.left) / rect.width * 2 - 1, 1 - (e.clientY - rect.top) / rect.height * 2), this.app.getRenderCamera());
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(pointerNDC(this.dom, e.clientX, e.clientY), this.app.getRenderCamera());
     this.proxy.parent.updateWorldMatrix(true, false);
-    const inv = this.proxy.parent.matrixWorld.clone().invert();
-    const origin = ray.ray.origin.applyMatrix4(inv), direction = ray.ray.direction.transformDirection(inv);
-    const focus = this.app.rig.controls.target.clone().applyMatrix4(inv);
-    return safePathPlanePoint(origin, direction, y, focus, origin.distanceTo(focus));
+    return framePlanePoint(ray.ray, this.proxy.parent, y, this.app.rig.controls.target);
   }
 
   // ---- 指针 ----

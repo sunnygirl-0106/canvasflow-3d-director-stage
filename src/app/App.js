@@ -10,7 +10,7 @@ import { DocumentController } from './DocumentController.js';
 import { EntityActions } from './EntityActions.js';
 import { updateDraft } from '../doc/Store.js';
 import { Emitter } from '../util/Emitter.js';
-import { el, toast } from '../util/dom.js';
+import { el, toast, pointerNDC } from '../util/dom.js';
 import { worldBox } from '../util/measure.js';
 import { ShotManager } from './ShotManager.js';
 import { Panorama } from './Panorama.js';
@@ -249,14 +249,7 @@ export class App extends Emitter {
   // ---- 批量操作（Outliner 右键菜单）----
   duplicateMany(ids) { return this.entityActions.duplicateMany(ids); }
 
-  removeMany(ids) {
-    this.store.transact('批量删除', (doc) => {
-      for (const id of [...new Set(ids || [])]) edit.removeEntity(doc, id);
-      if (this.cameraView && !doc.scene.activeCameraId) doc.scene.activeCameraId = doc.entities.find((e) => e.type === 'camera')?.id ?? null;
-    });
-    this.shots.pruneOrphans();
-    if (this.cameraView && !this.cameras.length) this.setCameraView(false);
-  }
+  removeMany(ids) { this._removeEntities('批量删除', [...new Set(ids || [])]); }
 
   /** 批量显隐：有任一可见则全部隐藏，否则全部显示。 */
   toggleVisibleMany(ids) {
@@ -285,13 +278,18 @@ export class App extends Emitter {
   remove(id) {
     const ent = this.findEntity(id);
     if (!ent) return;
-    this.store.transact('删除实体', (doc) => {
-      edit.removeEntity(doc, id);
+    this._removeEntities('删除实体', [id]);
+    toast('已删除：' + ent.name);
+  }
+
+  /** 删除实体（连同引用它们的动画）；机位视角下改用剩余的第一个机位出画，没有机位则退出机位视角。 */
+  _removeEntities(label, ids) {
+    this.store.transact(label, (doc) => {
+      for (const id of ids) edit.removeEntity(doc, id);
       if (this.cameraView && !doc.scene.activeCameraId) doc.scene.activeCameraId = doc.entities.find((e) => e.type === 'camera')?.id ?? null;
     });
     this.shots.pruneOrphans();
     if (this.cameraView && !this.cameras.length) this.setCameraView(false);
-    toast('已删除：' + ent.name);
   }
 
   // ---- 变换模式 ----
@@ -423,9 +421,10 @@ export class App extends Emitter {
 
   _bindDirectorZoom() {
     const ray = new THREE.Raycaster(), pointer = new THREE.Vector2(), offset = new THREE.Vector3();
+    const canvas = this.stage.renderer.domElement;
     let lastHint = 0;
     this.stage.viewport.addEventListener('wheel', e => {
-      if (this.playback.playing || this.cameraView || e.target !== this.stage.renderer.domElement) return;
+      if (this.playback.playing || this.cameraView || e.target !== canvas) return;
       e.preventDefault(); e.stopPropagation();
       const controls = this.rig.controls;
       const camera = this.stage.camera;
@@ -436,9 +435,7 @@ export class App extends Emitter {
         return;
       }
       if (e.deltaY === 0) return;
-      const rect = this.stage.renderer.domElement.getBoundingClientRect();
-      pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, 1 - (e.clientY - rect.top) / rect.height * 2);
-      ray.setFromCamera(pointer, camera);
+      ray.setFromCamera(pointerNDC(canvas, e.clientX, e.clientY, pointer), camera);
       const subjects = this.entities.filter(ent => ent.visible && (ent.type === 'character' || ent.type === 'group')).map(ent => ent.root);
       const hit = ray.intersectObjects(subjects, true)[0];
       const anchor = hit?.point || controls.target;

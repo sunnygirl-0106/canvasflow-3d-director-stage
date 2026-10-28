@@ -1,5 +1,5 @@
 import { defaultDuration, paceFor, stopsAfterReverse } from '../anim/pathGen.js';
-import { rampFor } from '../anim/Path.js';
+import { rampFor, isWalker } from '../anim/Path.js';
 import { toastError } from '../util/dom.js';
 import { pathModes } from '../app/PathTool.js';
 import { popupMenu } from './popupMenu.js';
@@ -26,7 +26,7 @@ export function openPathMenu(app, anchor, targetId) {
       popupMenu(r.left, r.top, [
         { label: '反向', onClick: () => update(p => ({ points: p.points.slice().reverse(), ...stopsAfterReverse(p) })) },
         { label: current()?.closed ? '取消闭合' : '闭合路径', onClick: () => update(p => ({ closed: !p.closed })) },
-        { label: '按步速调整', onClick: () => update(p => ({ duration: defaultDuration(p.points, { speed: paceFor(ent.type), closed: p.closed, interpolation: p.interpolation, ramp: ['character', 'group'].includes(ent.type) ? 0 : rampFor(ent.type) }) })) },
+        { label: '按步速调整', onClick: () => update(p => ({ duration: defaultDuration(p.points, { speed: paceFor(ent.type), closed: p.closed, interpolation: p.interpolation, ramp: isWalker(ent.type) ? 0 : rampFor(ent.type) }) })) },
         { label: '起点对齐当前位置', onClick: () => update(p => ({ points: [app.pathTool.startPoint(ent), ...p.points.slice(1)] })) },
       ], { anchor: r });
     } });

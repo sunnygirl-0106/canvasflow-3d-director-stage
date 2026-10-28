@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Emitter } from '../util/Emitter.js';
 import { updateDraft } from '../doc/Store.js';
 import { genId } from '../entities/Entity.js';
-import { dropTransformAnim, pruneAnim, usedIds, newId } from '../doc/edit.js';
+import { pruneAnim, usedIds, newId } from '../doc/edit.js';
 import { Pose } from '../rig/Pose.js';
 import { Track } from './Track.js';
 import { sameKeyTime, upsertKeys } from './keyframes.js';
@@ -12,7 +12,7 @@ import { pathOptionsFor } from './Path.js';
 import { fitStops, fitPathToDuration } from './pathGen.js';
 import { applyLocomotion } from './Locomotion.js';
 import { applyConstraint, constraintActive } from './Constraint.js';
-import { round6, clone } from '../util/math.js';
+import { round6, clone, D2R } from '../util/math.js';
 
 const GOLDEN = 0.6180339887; // 群众成员步伐错开：第 i 个成员相位偏移 frac(i·φ)
 
@@ -118,7 +118,7 @@ export class Timeline extends Emitter {
     const { pos, rot, scale } = json.transform;
     return {
       position: new THREE.Vector3(...pos.map((v, i) => v + opts.posOffset[i])),
-      rotation: new THREE.Euler(...rot.map((v) => v * Math.PI / 180)),
+      rotation: new THREE.Euler(...rot.map((v) => v * D2R)),
       scale: new THREE.Vector3(...scale.map((v, i) => v * opts.scaleDiv[i])),
       fov: json.fov,
       values: json.type === 'character' ? Pose.fromJSON(json.pose).values : undefined,
@@ -180,11 +180,13 @@ export class Timeline extends Emitter {
     if (st.fov !== undefined && ent.cam.fov !== st.fov) ent.setFov(st.fov);
   }
 
-  pathModel(json) {
-    return this._rt(json, j => new PathTrack(j, pathOptionsFor(this.app.findEntity(j.target)?.type))).path;
-  }
+  /** 文档路径 / 轨道对应的运行时对象（按文档对象缓存）。 */
+  _pathTrack(json) { return this._rt(json, j => new PathTrack(j, pathOptionsFor(this.app.findEntity(j.target)?.type))); }
+  _track(json) { return this._rt(json, j => new Track(j)); }
 
-  positionChannel(json) { return this._rt(json, j => new Track(j)).channel; }
+  pathModel(json) { return this._pathTrack(json).path; }
+
+  positionChannel(json) { return this._track(json).channel; }
 
   /**
    * 求 t 时刻的场景状态并写入实体（纯函数语义：结果只取决于文档与 t）。
@@ -206,7 +208,7 @@ export class Timeline extends Emitter {
     for (const json of tracks) {
       const st = states.get(json.target);
       if (!st || !json.keys.length) continue;
-      this._rt(json, (j) => new Track(j)).apply(t, st);
+      this._track(json).apply(t, st);
     }
 
     // 2 路径轨道
@@ -214,7 +216,7 @@ export class Timeline extends Emitter {
       // An appended path takes over only after the existing position animation ends.
       if (t < json.start && tracks.some(track => track.target === json.target && track.property === 'pos' && track.keys.length)) continue;
       const st = states.get(json.target);
-      if (st) this._rt(json, (j) => new PathTrack(j, pathOptionsFor(st.ent.type))).apply(t, st);
+      if (st) this._pathTrack(json).apply(t, st);
     }
 
     for (const st of states.values()) this._write(st);
@@ -304,7 +306,7 @@ export class Timeline extends Emitter {
   translatePathTo(ent, value) {
     const path = this.paths.find(p => p.target === ent.id);
     if (!path) return false;
-    const model = this._rt(path, p => new PathTrack(p, pathOptionsFor(ent.type))).path;
+    const model = this.pathModel(path);
     const from = this.active
       ? model.positionAt(model.distanceAt(this.time)).toArray()
       : this.app.store.document.entities.find(e => e.id === ent.id).transform.pos;
@@ -437,12 +439,6 @@ export class Timeline extends Emitter {
     return x;
   }
 
-  /**
-   * 整体提交 tracks / paths / constraints（src/doc/edit.js 的纯函数在文档拷贝上算好的结果）：
-   * 校验 + 'change' + 一次撤销，与逐个调用下面的编辑 API 等价。
-   */
-  commitAnim({ timeline, paths, constraints }) { this._commit({ tracks: timeline.tracks, paths, constraints }); }
-
   setDuration(s) { this._commit({ duration: s }); }
   setFps(n) { this._commit({ fps: n }); }
   setMainCamera(id) { this._commit({ mainCameraId: id ?? null }); }
@@ -517,6 +513,16 @@ export class Timeline extends Emitter {
 
   // ---- 实体增删联动 ----
   /**
+   * 实体被删除：引用它的轨道 / 路径 / 约束（target 或 subject）与主机位一并删除（一次提交）。
+   * @param {Iterable<string>} ids
+   */
+  pruneEntities(ids) {
+    const dead = new Set(ids);
+    const anim = pruneAnim(this, dead);
+    return this._commit({ ...anim, mainCameraId: dead.has(this.mainCameraId) ? null : this.mainCameraId });
+  }
+
+  /**
    * 结构变化（打组 / 解组改父节点）之前调用：这些实体写回手动值并退出 base，
    * 之后在新坐标系下若仍被驱动，下次求值会重新记 base。
    */
@@ -527,20 +533,5 @@ export class Timeline extends Emitter {
       this._restore(ent, base);
       this._base.delete(ent);
     }
-  }
-
-  /**
-   * 实体被删除：引用它的轨道 / 路径 / 约束（target 或 subject）与主机位一并删除。
-   * 由 App 在删除实体的同一同步流程里调用，因此与删除记在同一次补丁历史里。
-   * @param {Iterable<string>} ids
-   */
-  pruneEntities(ids) {
-    const dead = new Set(ids);
-    const anim = pruneAnim(this, dead);
-    return this._commit({ ...anim, mainCameraId: dead.has(this.mainCameraId) ? null : this.mainCameraId });
-  }
-
-  dropTransformAnimation(ids) {
-    return this._commit(dropTransformAnim(this, ids));
   }
 }

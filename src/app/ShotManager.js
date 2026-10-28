@@ -84,11 +84,6 @@ export class ShotManager {
     toast('已删除截图');
   }
 
-  /** 机位被删除时一并清理其截图（否则成为 UI 不可见、却仍可被发送的孤儿）。 */
-  removeForCamera(cameraId) {
-    if (this._drop((s) => s.cameraId === cameraId)) this.app.emit('shots');
-  }
-
   /** 清掉找不到所属机位的截图（导入别的场景后）。 */
   pruneOrphans() {
     if (this._drop((s) => !this.app.findCamera(s.cameraId))) this.app.emit('shots');

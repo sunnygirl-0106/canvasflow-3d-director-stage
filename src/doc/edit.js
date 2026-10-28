@@ -10,9 +10,9 @@ import { genId, hexColor } from '../entities/Entity.js';
 import { BODY_TYPES, CROWD_PALETTE, CHARACTER_COLOR, CHARACTER_COLORS, CHARACTER_PALETTE } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
 import { paceFor, defaultDuration, fitStops, fitPathToDuration } from '../anim/pathGen.js';
-import { rampFor } from '../anim/Path.js';
+import { rampFor, isWalker } from '../anim/Path.js';
 import { cameraMove, appendMove, lookAtWindows, pathEnd, MoveError } from '../anim/cameraMoves.js';
-import { round6, clone, round4 } from '../util/math.js';
+import { round6, clone, round4, D2R, R2D } from '../util/math.js';
 import { upsertKeys } from '../anim/keyframes.js';
 import { unusedTrailColor } from './trailColor.js';
 
@@ -21,7 +21,7 @@ export const CROWD_LIMITS = { size: [1, 6], spacing: [0.5, 5] };
 export const CROWD_SPACING = 1.2;
 /** 新路径默认速度曲线；朝向：机位保持手动朝向，其余跟随切线。 */
 export const PATH_DEFAULTS = {
-  speed: (type) => (['character', 'group'].includes(type) ? 'linear' : 'smooth'),
+  speed: (type) => (isWalker(type) ? 'linear' : 'smooth'),
   orient: (type) => (type === 'camera' ? 'keep' : 'tangent'),
 };
 
@@ -169,9 +169,9 @@ export function dropTransformAnim({ tracks, paths }, ids) {
  * 与界面打组以往的 Object3D.attach 结果一致（attach 会把局部矩阵分解成四元数再转欧拉）。
  */
 function canonicalRot(rot) {
-  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot.map((d) => d * Math.PI / 180)));
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot.map((d) => d * D2R)));
   const e = new THREE.Euler().setFromQuaternion(q);
-  return [e.x, e.y, e.z].map((r) => round6(r * 180 / Math.PI));
+  return [e.x, e.y, e.z].map((r) => round6(r * R2D));
 }
 
 /**
@@ -253,7 +253,7 @@ export function setPath(doc, target, points, { closed = false, start = 0, set = 
   const ent = findEntity(doc, target);
   if (!ent) throw new Error(`实体不存在：${target}`);
   const old = doc.paths.find((p) => p.target === target);
-  const uniform = ['character', 'group'].includes(ent.type);
+  const uniform = isWalker(ent.type);
   const speed = uniform ? 'linear' : set.speed ?? old?.speed ?? PATH_DEFAULTS.speed(ent.type);
   // 显式时长优先；角色 / 组重画时沿用旧时长，其余情况按步速估算。
   let duration = set.duration ?? (uniform ? old?.duration : undefined);
@@ -316,7 +316,7 @@ export function moveContext(doc, camId, { time = 0, lastPan = null } = {}) {
 
 /** 机位前方 dist 米的点（主体缺省时用）：−Z 经机位朝向（XYZ 欧拉，度）旋转。 */
 export function aheadPoint(transform, dist = 3) {
-  const e = new THREE.Euler(...transform.rot.map((d) => d * Math.PI / 180));
+  const e = new THREE.Euler(...transform.rot.map((d) => d * D2R));
   const dir = new THREE.Vector3(0, 0, -1).applyEuler(e);
   return new THREE.Vector3(...transform.pos).addScaledVector(dir, dist).toArray().map(round4);
 }

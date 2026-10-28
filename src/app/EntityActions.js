@@ -7,7 +7,7 @@ import { CAMERA_PRESETS } from '../core/cameraPresets.js';
 import { BODY_TYPES, PROP_LABEL, CAMERA_FOV } from '../config.js';
 import { worldBox } from '../util/measure.js';
 import { toast } from '../util/dom.js';
-import { xyz, round6, clone } from '../util/math.js';
+import { xyz, round6, clone, R2D } from '../util/math.js';
 import * as edit from '../doc/edit.js';
 
 /** 实体创建、复制及父子结构变更。先准备资源，再提交文档。 */
@@ -18,7 +18,7 @@ export class EntityActions {
   /** A…Z，之后 A2…Z2，依此类推（不会溢出成标点符号）。 */
   _nextCharName() { return edit.charName(this.app.charSeq++); }
 
-  /** 加载一个角色（不入场）。所有角色都经此创建，保证 spec 完整、可复制。 */
+  /** 按 spec 加载一个角色（不入场；自测用它构造缺关节的骨骼档案）。 */
   _loadCharacter(spec) { return Character.load(this._nextCharName(), spec); }
 
   /** 骨骼兼容性校验：缺关节时 console.warn 列出并返回提示文案；完整兼容返回 null。 */
@@ -27,6 +27,12 @@ export class EntityActions {
     if (!miss.length) return null;
     console.warn(`[rig] ${c.profile?.id || '?'}（${c.spec.url}）缺少 ${miss.length} 个关节：`, miss.join(', '));
     return `该模型缺少 ${miss.length} 个关节，相关姿势滑条已禁用`;
+  }
+
+  /** 实体 root 相对场景根（stage.world）的当前变换矩阵：组成员也换算到场景根坐标，不修改实体。 */
+  _sceneMatrix(ent) {
+    ent.root.updateWorldMatrix(true, false);
+    return new THREE.Matrix4().copy(this.app.stage.world.matrixWorld).invert().multiply(ent.root.matrixWorld);
   }
 
   /** 默认落点（edit.spawnPoint）：只改水平位置，y 保留站立基准偏移。入场时按当时的实体数算（并发添加不重叠）。 */
@@ -137,10 +143,8 @@ export class EntityActions {
     this.app.timeline.release([crowd.id, ...crowd.members.map((m) => m.id)]); // 先写回手动值，再改父节点
     // 先在独立变换上计算解组后的条目并校验，不能在校验失败前改动父子树。
     const members = crowd.members.map((m) => {
-      m.root.updateWorldMatrix(true, false);
-      const matrix = new THREE.Matrix4().copy(this.app.stage.world.matrixWorld).invert().multiply(m.root.matrixWorld);
       const root = new THREE.Object3D();
-      matrix.decompose(root.position, root.quaternion, root.scale);
+      this._sceneMatrix(m).decompose(root.position, root.quaternion, root.scale);
       return { ...m.toJSON(), transform: m.transformJSON(root) };
     });
     const change = this._prepareStructure(() => this.app.store.prepare('解组', (doc) => {
@@ -200,12 +204,10 @@ export class EntityActions {
     const json = sources.map((ent) => {
       const value = clone(this.app.store.document.entities.find((e) => e.id === ent.id));
       // 复制当前可见的变换；组成员换算到场景根坐标，不修改源实体。
-      ent.root.updateWorldMatrix(true, false);
-      const matrix = new THREE.Matrix4().copy(this.app.stage.world.matrixWorld).invert().multiply(ent.root.matrixWorld);
       const pos = new THREE.Vector3(), rot = new THREE.Quaternion(), scale = new THREE.Vector3();
-      matrix.decompose(pos, rot, scale);
+      this._sceneMatrix(ent).decompose(pos, rot, scale);
       const opts = ent.docTransformOpts();
-      value.transform = { pos: xyz(pos).map((v, i) => round6(v - opts.posOffset[i] + (i === 1 ? 0 : 0.6))), rot: xyz(new THREE.Euler().setFromQuaternion(rot), 180 / Math.PI), scale: xyz(scale).map((v, i) => round6(v / opts.scaleDiv[i])) };
+      value.transform = { pos: xyz(pos).map((v, i) => round6(v - opts.posOffset[i] + (i === 1 ? 0 : 0.6))), rot: xyz(new THREE.Euler().setFromQuaternion(rot), R2D), scale: xyz(scale).map((v, i) => round6(v / opts.scaleDiv[i])) };
       value.id = edit.newId(this.app.store.document);
       value.name = ent.type === 'character' ? this._nextCharName() : ent.name + '副本';
       if (value.type === 'character') value.parent = null;

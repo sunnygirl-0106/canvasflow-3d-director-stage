@@ -65,13 +65,16 @@ export const isTyping = (t) => !!t && (t.isContentEditable || ['INPUT', 'TEXTARE
 /** 指针按下到松开移动不超过它（px）算点击，否则算拖动（视口拾取 / 路径绘制 / 顶点编辑共用）。 */
 export const CLICK_PX = 4;
 
+/** 指针位置 → 元素内的标准化设备坐标（x、y ∈ [-1, 1]，y 向上），写入 out 并返回（可传 THREE.Vector2）。 */
+export function pointerNDC(element, clientX, clientY, out = { x: 0, y: 0 }) {
+  const r = element.getBoundingClientRect();
+  out.x = (clientX - r.left) / r.width * 2 - 1;
+  out.y = 1 - (clientY - r.top) / r.height * 2;
+  return out;
+}
+
 /** timeline API 抛出的错误 → toast（DocumentError 逐条列出字段路径）。 */
 export function toastError(err) {
   console.warn(err);
   toast(err?.errors?.length ? err.errors.slice(0, 3).join('\n') : (err?.message || String(err)));
-}
-
-/** 确认类提示：[ok / 取消]；不点 = 取消。 */
-export function confirmToast(msg, okLabel, onOk) {
-  toast(msg, { actions: [{ label: okLabel, onClick: onOk }, { label: '取消', secondary: true }] });
 }

@@ -1,4 +1,4 @@
-import { toast, toastError, confirmToast } from '../util/dom.js';
+import { toast, toastError } from '../util/dom.js';
 import { aimPoint } from '../anim/Constraint.js';
 import { cameraMove, defaultParams, MoveError, MOVE_LABEL, PANEL_LABEL, PANEL_DURATION } from '../anim/cameraMoves.js';
 import { cameraAnimation, moveContext, aheadPoint, nearestSubject, applyCameraMove, clearCameraMoves, removeCameraMoveTail } from '../doc/edit.js';
@@ -6,14 +6,16 @@ import { cameraMotionState, motionSignature } from '../doc/cameraMotionState.js'
 import { round4, clone, R2D } from '../util/math.js';
 
 const fmt = (s) => (Math.round(s * 10) / 10).toString();
+/** 机位当前朝向（XYZ 欧拉角，度；不舍入）。 */
+const rotationDeg = (cam) => [cam.root.rotation.x, cam.root.rotation.y, cam.root.rotation.z].map(v => v * R2D);
 
 /**
  * 机位运镜：手动卡片写入路径 / 旋转，缺省时补充注视，保留已有约束；一次撤销。
  * Inspector「运镜」段只管显示，写操作全在这里（selftest 也直接调）。
  *
  * 手动卡片使用 doc.meta.cameraMoves 保存参数、主体、生成起始位姿与结果签名；
- * 节点编辑使签名失效后显示为自定义轨迹。旧 build/commit 段接口仍供现有集成调用，
- * 它的追加段逆操作与表单使用 app.moveMeta / this.form 会话状态。
+ * 节点编辑使签名失效后显示为自定义轨迹。旧 build/commit 段接口仍供自测场景搭建调用（e2e/helpers.mjs），
+ * 它的表单与段列表使用 this.form / app.moveMeta 会话状态。
  */
 export class CameraMoveTool {
   constructor(app) {
@@ -32,7 +34,7 @@ export class CameraMoveTool {
     const time = round4(this.app.playback.time);
     return this.atTime(time, () => ({
       position: cam.root.position.toArray(),
-      rot: [cam.root.rotation.x, cam.root.rotation.y, cam.root.rotation.z].map(v => v * R2D),
+      rot: rotationDeg(cam),
       roll: cam.roll || 0, time,
     }));
   }
@@ -204,7 +206,7 @@ export class CameraMoveTool {
     }
     this.atTime(ctx.time, () => {
       ctx.position = cam.root.position.toArray();
-      ctx.rot = [cam.root.rotation.x, cam.root.rotation.y, cam.root.rotation.z].map(v => v * R2D);
+      ctx.rot = rotationDeg(cam);
     });
     return ctx;
   }
@@ -250,18 +252,6 @@ export class CameraMoveTool {
   }
 
   // ---- 写入 ----
-  /** 「应用 / 追加」：先处理冲突（已有位置关键帧 / 旋转关键帧 → 确认删除），再写入。 */
-  request(cam) {
-    const b = this.build(cam);
-    if (b.error) { toast(b.error); return; }
-    const { posTrack, rotTrack } = this._anim(cam);
-    const go = () => this.commit(cam, b);
-    const ownRot = this.segments(cam).some((s) => s.kind === 'pan');
-    if (b.move.points && posTrack && !b.ctx.path) confirmToast('该机位已有位置关键帧，应用运镜将删除它们', '删除并继续', go);
-    else if (b.move.rotKeys && rotTrack?.keys.length && !ownRot) confirmToast('该机位已有旋转关键帧，摇镜头将替换它们', '替换', go);
-    else go();
-  }
-
   /**
    * 写入一段运镜（一次撤销）。b = build() 的结果。数据由 edit.applyCameraMove 生成（与 AI 同一份）。
    * @returns {object|null} 新段（会话态），失败 null
@@ -283,9 +273,8 @@ export class CameraMoveTool {
       });
     } catch (err) { toastError(err); return null; }
     const { move, start, undo } = res;
-    const { rotEnd, ...rest } = undo;
-    const seg = { name, params, subject, start, duration: move.duration, kind: move.points ? 'path' : 'pan', undo: rest };
-    if (rotEnd) seg.rotEnd = rotEnd;
+    const seg = { name, params, subject, start, duration: move.duration, kind: move.points ? 'path' : 'pan' };
+    if (undo.rotEnd) seg.rotEnd = undo.rotEnd; // 摇镜头段：下一段从摇到的朝向接着生成（见 context）
 
     seg.sig = this._sig(this._anim(cam));
     this.meta[cam.id] = { segments: [...this._prefix(cam, this._sig(before)), seg] };
@@ -293,31 +282,6 @@ export class CameraMoveTool {
     const over = end > tl.duration ? `（结束于 ${fmt(end)} s，超出时间轴时长）` : '';
     toast(`${ctx.append ? '已追加' : '已应用'}运镜：${MOVE_LABEL[name]} ${fmt(start)}–${fmt(end)} s${over}`);
     return seg;
-  }
-
-  /** 删除最后一段：路径切回上一段、注视窗口还原（一次撤销）。 */
-  removeLast(cam) {
-    const segs = this.segments(cam);
-    const seg = segs[segs.length - 1];
-    if (!seg) return false;
-    const tl = this.app.timeline;
-    const cur = this._anim(cam);
-    const u = seg.undo;
-    try {
-      this.app.store.batch('删除运镜段', () => {
-        if (seg.kind === 'path') {
-          if (u.path) tl.updatePath(cur.path.id, u.path);
-          else tl.removePath(cur.path.id);
-        } else if (u.track) tl.removeTrack(u.track);
-        else for (const t of u.keys.times) tl.removeKey(u.keys.track, t);
-        if (u.added && cur.lookAts.some((c) => c.id === u.added)) tl.removeConstraint(u.added);
-        for (const p of u.patched) if (cur.lookAts.some((c) => c.id === p.id)) tl.updateConstraint(p.id, { end: p.end });
-        for (const c of u.removed) tl.addConstraint(c);
-      });
-    } catch (err) { toastError(err); return false; }
-    // 不截断 meta：签名回到上一段，段列表自然少一段；⌘Z 后签名又等于这一段，列表恢复
-    toast(`已删除运镜段：${MOVE_LABEL[seg.name]}`);
-    return true;
   }
 
   /** 清除运镜：删除位置与旋转动画，保留摄像机属性中的约束（一次撤销）。 */

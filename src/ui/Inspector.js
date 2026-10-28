@@ -7,9 +7,9 @@ import { tripleRow, sliderRow, colorRow, dropdownRow, infoTip, shotCard, toHex, 
 import { PoseSliders } from './PoseSliders.js';
 import { POSE_PRESETS } from '../entities/posePresets.js';
 import { downloadURL } from '../app/ShotManager.js';
-import { propState, toggleKey } from './timeline/animState.js';
+import { propState, toggleKey, forcedReason } from './timeline/animState.js';
 import { arcPoints, pathLength, paceFor, defaultDuration, stopsAfterReverse, toggleStop, WALK_PACE } from '../anim/pathGen.js';
-import { rampFor } from '../anim/Path.js';
+import { rampFor, isWalker } from '../anim/Path.js';
 import { popupMenu } from './popupMenu.js';
 import { cameraMoveSection, cameraMoveActions, cameraConstraintSection } from './cameraMotionSections.js';
 import { D2R, R2D } from '../util/math.js';
@@ -18,6 +18,7 @@ const FOV_TIP = '控制镜头视野范围。数值越小，画面越近、越聚
 const PREVIEW_W = 248, PREVIEW_H = 140;
 const PACES = [[0.8, '慢走'], [WALK_PACE, '走'], [1.8, '快走'], [3.5, '加速走']];
 const fmtS = (x) => (Math.round(x * 10) / 10).toFixed(1);
+const fovText = (fov) => `FOV ${Math.round(fov)}°`;
 
 // 每种实体的标签页：[key, 文案]
 const TABS = {
@@ -201,11 +202,11 @@ export class Inspector {
     const len = pathLength(p.points, p.closed, p.stops, p.interpolation);
     const v = len / p.duration;
     const total = this.app.timeline.duration;
-    const uniform = ['character', 'group'].includes(ent.type);
+    const uniform = isWalker(ent.type);
     const ramp = !uniform && p.speed === 'smooth' ? rampFor(ent.type) : 0;
     const natural = defaultDuration(p.points, { speed: paceFor(ent.type), closed: p.closed, interpolation: p.interpolation, ramp });
     const suggestedTotal = Math.ceil((p.start + natural) * 10 - 1e-9) / 10;
-    const needsMoreTime = ['character', 'group'].includes(ent.type) && natural > total - p.start + 0.001;
+    const needsMoreTime = uniform && natural > total - p.start + 0.001;
     const tool = this.app.pathTool;
     const pace = (e) => {
       const r = e.currentTarget.getBoundingClientRect();
@@ -326,7 +327,7 @@ export class Inspector {
       r.dia.className = 'kf-dia ' + state;
       r.dia.disabled = !!st.forced;
       r.dia.innerHTML = icon(st.key ? 'diamondFilled' : 'diamond', 14);
-      r.dia.title = st.forced ? (r.prop === 'rot' && st.forced === '路径' ? '请先关闭沿路径朝向' : `由${st.forced}驱动，不能打键`)
+      r.dia.title = st.forced ? forcedReason(r.prop, st.forced)
         : st.key ? '删除当前时刻的关键帧' : app.timeline.active ? '在当前时刻打关键帧' : '在 0 秒打关键帧（进入时间轴）';
       r.row.classList.toggle('driven', st.driven);
     }
@@ -497,7 +498,7 @@ export class Inspector {
     const fovField = sliderRow({
       label: 'FOV', editable: true, min: FOV_RANGE[0], max: FOV_RANGE[1], step: 1, value: ent.cam.fov,
       format: (v) => Math.round(v) + '°',
-      onInput: (v) => { ent.setFov(v); this._previewBadge.textContent = 'FOV ' + Math.round(v) + '°'; changed(); },
+      onInput: (v) => { ent.setFov(v); this._previewBadge.textContent = fovText(v); changed(); },
       onChange: commit('fov'),
     });
     fovField.el.querySelector('label')?.appendChild(infoTip(FOV_TIP));
@@ -519,7 +520,7 @@ export class Inspector {
       }
       controlHint.textContent = [forced('pos') ? '此时段位置由跟随控制' : '', forced('rot') ? `旋转由${forced('rot')}控制；请在上方调整目标或生效时间` : ''].filter(Boolean).join(' · ');
       fovField.set(ent.cam.fov);
-      this._previewBadge.textContent = 'FOV ' + Math.round(ent.cam.fov) + '°';
+      this._previewBadge.textContent = fovText(ent.cam.fov);
       this.schedulePreview();
     };
   }
@@ -548,11 +549,10 @@ export class Inspector {
     ]));
   }
 
-  _shotGrid(list, compact = false) {
+  _shotGrid(list) {
     const shots = this.app.shots;
     return el('div', { class: 'shot-grid' }, list.map((shot) => shotCard({
       shot,
-      compact,
       selected: shots.selectedShotIds.has(shot.id),
       onToggle: () => shots.toggleShotSelected(shot.id),
       onDelete: () => shots.removeShot(shot.id),
@@ -564,7 +564,7 @@ export class Inspector {
   // ---- 相机预览框（主渲染器离屏出图，画进 canvas）----
   _buildPreview(ent) {
     const canvas = el('canvas', { width: PREVIEW_W, height: PREVIEW_H });
-    const badge = el('div', { class: 'cam-fov-badge', text: 'FOV ' + Math.round(ent.cam.fov) + '°' });
+    const badge = el('div', { class: 'cam-fov-badge', text: fovText(ent.cam.fov) });
     const expand = el('button', { class: 'cam-expand', title: '放大机位画面', 'aria-label': '放大机位画面', html: icon('expand', 14), onclick: () => this._openPreviewModal(ent) });
     this._previewEnt = ent;
     this._previewCanvas = canvas;
@@ -623,7 +623,7 @@ export class Inspector {
     snap.className = 'modal-img';
     this._modal([
       snap,
-      el('div', { class: 'modal-bar' }, [el('span', { class: 'modal-title', text: ent.name + '：FOV ' + Math.round(ent.cam.fov) + '°' })]),
+      el('div', { class: 'modal-bar' }, [el('span', { class: 'modal-title', text: `${ent.name}：${fovText(ent.cam.fov)}` })]),
     ]);
   }
 

@@ -1,9 +1,9 @@
 import { el, isTyping, toastError } from '../../util/dom.js';
 import { Emitter } from '../../util/Emitter.js';
-import { nameWidth, GUTTER } from './layout.js';
+import { nameWidth, GUTTER, MAX_PPS } from './layout.js';
 import { Transport } from './Transport.js';
 import { Ruler } from './Ruler.js';
-import { TrackRows, keyId, PROP_LABEL, CAMERA_PROP_LABEL } from './TrackRows.js';
+import { TrackRows, keyId, parseKeyId, propLabel } from './TrackRows.js';
 import { dragKeys, dragBar } from './keyDrag.js';
 import { popupMenu } from '../popupMenu.js';
 import { toggleKey, propState } from './animState.js';
@@ -12,7 +12,6 @@ import { clone } from '../../util/math.js';
 
 const RULER_H = 30;
 const PAD_R = 44;            // 时长之后留白（末尾的键 / 播放头不贴边）
-const MAX_PPS = 1500;        // 最大缩放（px / 秒）
 const PREF_KEY = 'director-stage.timeline';
 
 /** 会话偏好（高度 / 折叠 / 自动打键 / 吸附 / 循环）：只存 localStorage，不进场景文档。 */
@@ -69,34 +68,29 @@ export class TimelinePanel extends Emitter {
     });
     app.on('motionFocus', ref => {
       const source = app.pathEditor.source(ref);
-      if (this.trackRows._folded(source.target)) {
-        this.trackRows.collapsedEnts.delete(source.target); this.trackRows.expandedEnts.add(source.target); this.rebuild();
-      }
+      if (this.trackRows._folded(source.target)) this.trackRows.expand(source.target);
       queueMicrotask(() => {
         if (this.collapsed) return;
         const selector = ref.kind === 'path' ? `[data-node-path="${ref.sourceId}"][data-node-index="${ref.arrival === 'end' ? source.points.length : ref.index}"]` : `.tl-key[data-track="${ref.sourceId}"][data-t="${ref.keyTime}"]`;
         this.rows.querySelector(selector)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       });
     });
+    // 路径节点按（预览中的）路径重新定位：拖动时只动被拖的路径，结束 / 取消后全部回到文档值。
+    const placeNode = (node, path) => {
+      const t = app.timeline.pathModel(path).vertexTime(+node.dataset.nodeIndex);
+      node.style.setProperty('--t', t); node.dataset.time = t;
+    };
     app.on('motionPreview', preview => {
       if (preview?.ref.kind === 'path') {
-        const model = app.timeline.pathModel(preview.source);
-        for (const node of this.rows.querySelectorAll(`[data-node-path="${preview.ref.sourceId}"]`)) {
-          const t = model.vertexTime(+node.dataset.nodeIndex);
-          node.style.setProperty('--t', t); node.dataset.time = t;
-        }
+        for (const node of this.rows.querySelectorAll(`[data-node-path="${preview.ref.sourceId}"]`)) placeNode(node, preview.source);
       } else if (!preview) {
         for (const node of this.rows.querySelectorAll('[data-node-path]')) {
           const path = app.timeline.paths.find(p => p.id === node.dataset.nodePath);
-          if (path) { const t = app.timeline.pathModel(path).vertexTime(+node.dataset.nodeIndex); node.style.setProperty('--t', t); node.dataset.time = t; }
+          if (path) placeNode(node, path);
         }
       }
     });
-    app.pathTool.on('commit', (path) => {
-      this.trackRows.collapsedEnts.delete(path.target);
-      this.trackRows.expandedEnts.add(path.target);
-      this.rebuild();
-    });
+    app.pathTool.on('commit', (path) => this.trackRows.expand(path.target));
     onKey((e) => this._onKey(e), { priority: KEY_PRIORITY.timeline }); // 先于全局快捷键（Del 删键而非删实体）
     // 点面板以外的地方 = 取消选键（之后 Del 删的是实体而不是键）
     window.addEventListener('pointerdown', (e) => {
@@ -218,10 +212,10 @@ export class TimelinePanel extends Emitter {
 
   syncMotionKey() {
     if (this.selKeys.size === 1) {
-      const id = [...this.selKeys][0], at = id.lastIndexOf('@');
-      const tr = this.app.timeline.tracks.find(t => t.id === id.slice(0, at));
+      const { trackId, t } = parseKeyId([...this.selKeys][0]);
+      const tr = this.app.timeline.tracks.find(track => track.id === trackId);
       if (tr?.property === 'pos') {
-        this.app.pathEditor.selectNode({ kind: 'pos', sourceId: tr.id, keyTime: +id.slice(at + 1) });
+        this.app.pathEditor.selectNode({ kind: 'pos', sourceId: tr.id, keyTime: t });
         return;
       }
     }
@@ -265,7 +259,7 @@ export class TimelinePanel extends Emitter {
       const data = tl.tracks.find((t) => t.id === track);
       if (!data) return;
       items = [
-        { label: `删除轨道（${(this.app.findEntity(data.target)?.type === 'camera' ? CAMERA_PROP_LABEL : PROP_LABEL)[data.property]}）`, onClick: run(() => tl.removeTrack(track)) },
+        { label: `删除轨道（${propLabel(this.app.findEntity(data.target)?.type, data.property)}）`, onClick: run(() => tl.removeTrack(track)) },
         { label: '清空键', disabled: !data.keys.length, onClick: run(() => { for (const k of data.keys) tl.removeKey(track, k.t); }) },
       ];
     } else if (path) items = [{ label: '删除路径', onClick: run(() => tl.removePath(path)) }];
@@ -287,8 +281,8 @@ export class TimelinePanel extends Emitter {
     this.selKeys.clear();
     try {
       for (const id of ids) {
-        const at = id.lastIndexOf('@');
-        tl.removeKey(id.slice(0, at), +id.slice(at + 1));
+        const { trackId, t } = parseKeyId(id);
+        tl.removeKey(trackId, t);
       }
     } catch (err) { toastError(err); }
   }
@@ -347,8 +341,8 @@ export class TimelinePanel extends Emitter {
     const properties = ent.type === 'camera' ? ['pos', 'rot', 'fov'] : ['pos', 'rot', 'scale'];
     popupMenu(event.clientX, event.clientY, properties.map(property => {
       const state = propState(this.app, this.app.timeline.view(), ent.id, property, this.app.playback.time);
-      return { label: (ent.type === 'camera' ? CAMERA_PROP_LABEL : PROP_LABEL)[property], disabled: !!state.forced || !!state.track, onClick: () => {
-        try { toggleKey(this.app, ent, property); this.trackRows.collapsedEnts.delete(ent.id); this.trackRows.expandedEnts.add(ent.id); this.rebuild(); } catch (err) { toastError(err); }
+      return { label: propLabel(ent.type, property), disabled: !!state.forced || !!state.track, onClick: () => {
+        try { toggleKey(this.app, ent, property); this.trackRows.expand(ent.id); } catch (err) { toastError(err); }
       } };
     }));
   }

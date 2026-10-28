@@ -1,7 +1,7 @@
 import { checkRequestState } from '../util/requestGuard.js';
 import { DocumentStore, updateDraft } from '../doc/Store.js';
 import { createEmptyDocument, APP_ID } from '../doc/schema.js';
-import { clone, xyz } from '../util/math.js';
+import { clone, xyz, D2R } from '../util/math.js';
 import { PROP_LABEL } from '../config.js';
 import { parseCharName } from '../doc/edit.js';
 import { loadDocument, APP_VERSION } from '../doc/serialize.js';
@@ -87,7 +87,7 @@ export class DocumentController {
     const a = this.app;
     a.stage.setWorldScale(s.scale);
     a.stage.setWorldPos(...s.pos);
-    a.stage.setWorldRot(...s.rot.map((v) => v * Math.PI / 180));
+    a.stage.setWorldRot(...s.rot.map((v) => v * D2R));
     a.stage.setSkyColor(s.sky);
     a.labels.setVisible(s.labels);
     a.stage.setGroundVisible(s.ground.visible);

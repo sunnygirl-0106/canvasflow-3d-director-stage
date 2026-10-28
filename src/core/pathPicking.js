@@ -15,3 +15,15 @@ export function safePathPlanePoint(origin, direction, y, focus, viewDistance) {
   if (Math.hypot(x - focus.x, z - focus.z) > radius) return null;
   return [round4(x), y, round4(z)];
 }
+
+/**
+ * 世界坐标射线换到 frame 的局部坐标后与水平面 y 求交（规则同 safePathPlanePoint）；focus 为世界坐标的观察中心。
+ * 调用方负责先更新 frame 的世界矩阵。
+ */
+export function framePlanePoint(ray, frame, y, focus) {
+  const inv = frame.matrixWorld.clone().invert();
+  const origin = ray.origin.clone().applyMatrix4(inv);
+  const direction = ray.direction.clone().transformDirection(inv);
+  const localFocus = focus.clone().applyMatrix4(inv);
+  return safePathPlanePoint(origin, direction, y, localFocus, origin.distanceTo(localFocus));
+}

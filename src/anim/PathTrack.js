@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Path } from './Path.js';
+import { Path, isWalker } from './Path.js';
 import { EASE, clamp01 } from './ease.js';
 
 const _p = new THREE.Vector3();
@@ -42,7 +42,7 @@ export class PathTrack {
         const back = st.ent.type === 'camera';
         const yaw = back ? Math.atan2(-_tan.x, -_tan.z) : Math.atan2(_tan.x, _tan.z);
         _e.setFromQuaternion(st.quaternion, 'YXZ');
-        const k = ['character', 'group'].includes(st.ent.type) ? 1 : Math.min(1, s / TURN_IN_DIST);
+        const k = isWalker(st.ent.type) ? 1 : Math.min(1, s / TURN_IN_DIST);
         _e.y = k >= 1 ? yaw : _e.y + angleDiff(_e.y, yaw) * k;
         st.quaternion.setFromEuler(_e);
         st.rotTouched = true;

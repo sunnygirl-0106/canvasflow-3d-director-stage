@@ -1,4 +1,4 @@
-import { Path, WALK_RAMP } from './Path.js';
+import { Path, WALK_RAMP, isWalker } from './Path.js';
 import { D2R, R2D, round6, round4 } from '../util/math.js';
 
 // 路径生成器：纯函数，不依赖 DOM。输入 / 输出都是文档口径的 [x,y,z]（实体父坐标系，角色 / 组的 y = 地面高度）。
@@ -131,7 +131,7 @@ export function fitStops(old, next, patch = {}, roundTime = round4) {
   delete out.stopTimes;
 
   // 未显式更新停顿时，顶点数变化会使旧索引失效。
-  if (old && !('stops' in patch) && patch.points && patch.points.length !== old.points.length) return out;
+  if (pointCountChanged && !('stops' in patch)) return out;
   if (!stops?.length) return out;
 
   const lastStopIndex = out.closed ? out.points.length - 1 : out.points.length - 2;
@@ -232,17 +232,10 @@ export function toggleStop(path, index, on) {
   const insertIndex = nextStopIndex < 0 ? stops.length : nextStopIndex;
   stops.splice(insertIndex, 0, index);
   if (!times) return { stops };
-  const curve = new Path(path);
-  const distance = curve.vertexDistance(index);
-  let lo = 0, hi = path.duration; // 到达该顶点的时刻：distanceAt 单调，二分
-  for (let n = 0; n < 50; n++) {
-    const mid = (lo + hi) / 2;
-    if (curve.distanceAt(path.start + mid) < distance) lo = mid;
-    else hi = mid;
-  }
+  const arrival = new Path(path).vertexTime(index) - path.start; // 当前时间分配下到达该顶点的时刻（相对 start）
   const previousTime = insertIndex ? times[insertIndex - 1] : 0;
   const nextTime = insertIndex < times.length ? times[insertIndex] : path.duration;
-  times.splice(insertIndex, 0, round4(Math.min(Math.max(hi, previousTime + 0.05), nextTime - 0.05)));
+  times.splice(insertIndex, 0, round4(Math.min(Math.max(arrival, previousTime + 0.05), nextTime - 0.05)));
   return { stops, stopTimes: times };
 }
 
@@ -250,7 +243,7 @@ export function toggleStop(path, index, on) {
 export const WALK_PACE = 1.44;
 
 /** 机位和道具沿用原速度；只调整新建角色/群众路径。 */
-export const paceFor = type => ['character', 'group'].includes(type) ? WALK_PACE : 1.2;
+export const paceFor = type => isWalker(type) ? WALK_PACE : 1.2;
 
 /**
  * 默认时长：让匀速段的速度 = speed（m/s）。smooth 角色路径有起步 / 收步（ramp 秒，Path 的 ramp 选项），

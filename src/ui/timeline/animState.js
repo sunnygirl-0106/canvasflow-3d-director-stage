@@ -19,6 +19,9 @@ export function propState(app, anim, entId, prop, t) {
   return { track, key, forced, driven };
 }
 
+/** 属性被强制驱动时不能打键的原因（菱形提示用）。 */
+export const forcedReason = (prop, forced) => (prop === 'rot' && forced === '路径' ? '请先关闭沿路径朝向' : `由${forced}驱动，不能打键`);
+
 /**
  * 菱形点击（Inspector 属性菱形与时间轴面板「◇ 打键」共用）：当前时刻无键 → 打键（无轨道先建）；有键 → 删键（轨道空了保留）。
  * 时间轴 idle 时 = 在 0 秒打键并 seek(0) 进入 active（"第一次打键"的入口）。出错抛给调用方（toast）。

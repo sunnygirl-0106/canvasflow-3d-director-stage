@@ -1,6 +1,23 @@
 import * as THREE from 'three';
 import { worldBox } from '../util/measure.js';
-import { CLICK_PX } from '../util/dom.js';
+import { CLICK_PX, pointerNDC } from '../util/dom.js';
+
+/**
+ * 射线命中的第一个可见对象所属的实体 id（向上回溯到挂 userData.entityId 的 root）；没有命中返回 null。
+ * Raycaster 不跳过 visible=false 的对象，须自行过滤：否则 POV 下被隐藏的出画相机 body / 视锥仍会被命中。
+ */
+export function pickEntityId(ray, roots) {
+  const hit = ray.intersectObjects(roots, true).find((h) => {
+    for (let o = h.object; o; o = o.parent) if (o.visible === false) return false;
+    return true;
+  });
+  let o = hit?.object;
+  while (o && o.userData.entityId == null) o = o.parent;
+  return o ? o.userData.entityId : null;
+}
+
+/** 地面高亮环半径：覆盖水平包围盒并留边（选中环与路径吸附环共用）。 */
+export const footprintRadius = (size) => Math.max(0.4, 0.5 * Math.hypot(size.x, size.z) + 0.12);
 
 // Raycaster 选择 + 高亮。
 // 点击画布 → 命中后向上回溯到挂 userData.entityId 的 root → onSelect(id)；点空白取消选中。
@@ -54,25 +71,9 @@ export class Selection {
   setSkipPredicate(fn) { this._shouldSkip = fn; }
 
   _pick(e) {
-    const dom = this.renderer.domElement;
-    const r = dom.getBoundingClientRect();
-    this.ndc.x = ((e.clientX - r.left) / r.width) * 2 - 1;
-    this.ndc.y = -((e.clientY - r.top) / r.height) * 2 + 1;
-    this.ray.setFromCamera(this.ndc, this.camera);
-
+    this.ray.setFromCamera(pointerNDC(this.renderer.domElement, e.clientX, e.clientY, this.ndc), this.camera);
     const roots = this.getEntities().filter((en) => en.visible).map((en) => en.root);
-    // Raycaster 不跳过 visible=false 的对象；须自行过滤，否则 POV 下被隐藏的
-    // 出画相机 body/视锥仍会被命中（且罩在视口里），把点击角色错判成选中相机。
-    const hits = this.ray.intersectObjects(roots, true).filter((h) => {
-      for (let o = h.object; o; o = o.parent) if (o.visible === false) return false;
-      return true;
-    });
-    if (!hits.length) { this.onSelect(null); return; }
-
-    // 向上回溯到带 entityId 的 root
-    let o = hits[0].object;
-    while (o && o.userData.entityId == null) o = o.parent;
-    this.onSelect(o ? o.userData.entityId : null);
+    this.onSelect(pickEntityId(this.ray, roots));
   }
 
   /** 设置高亮目标（null=隐藏环）。隐藏的实体不显示环。 */
@@ -88,9 +89,7 @@ export class Selection {
   _sizeRing(entity) {
     const box = worldBox(entity.root, { useBones: entity.type === 'character' });
     if (box.isEmpty()) return;
-    const size = box.getSize(new THREE.Vector3());
-    const rad = Math.max(0.4, 0.5 * Math.hypot(size.x, size.z) + 0.12);
-    this.ring.scale.setScalar(rad / 0.5);
+    this.ring.scale.setScalar(footprintRadius(box.getSize(new THREE.Vector3())) / 0.5);
   }
 
   /** 每帧把环跟随到选中实体脚下。 */

@@ -2,6 +2,7 @@ import { onKey, KEY_PRIORITY } from '../util/keys.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { Vector3, MathUtils } from 'three';
 import { worldBox } from '../util/measure.js';
+import { pointerNDC } from '../util/dom.js';
 
 // 单位手柄的屏幕尺度（CSS px）：平移箭头长约 0.6 单位，旋转外环直径 1.5 单位。
 const MIN_SIZE_PX = 48;
@@ -84,9 +85,8 @@ export class TransformGizmo {
   hitTest(clientX, clientY) {
     if (!this.visible || !this.control.enabled || this.dragging) return this.dragging;
     this.updateSize();
-    const r = this.control.domElement.getBoundingClientRect();
     this.control.updateMatrixWorld(true);
-    this.control.pointerHover({ x: (clientX - r.left) / r.width * 2 - 1, y: 1 - (clientY - r.top) / r.height * 2 });
+    this.control.pointerHover(pointerNDC(this.control.domElement, clientX, clientY));
     this.control.updateMatrixWorld(true);
     return this.overAxis;
   }

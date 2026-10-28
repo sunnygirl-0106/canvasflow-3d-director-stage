@@ -2,14 +2,16 @@ import { popupMenu } from '../popupMenu.js';
 import { openPathMenu } from '../pathMenu.js';
 import { el, toast, toastError } from '../../util/dom.js';
 import { icon } from '../icons.js';
-import { toggleKey, propState, hitTime } from './animState.js';
+import { toggleKey, propState, hitTime, forcedReason } from './animState.js';
 import { objectAnimationRange } from '../../anim/objectAnimation.js';
 import { toggleStop } from '../../anim/pathGen.js';
 import { aimPoint, constraintActive } from '../../anim/Constraint.js';
 
 /** 轨道行名（词汇表 → 中文）。 */
-export const PROP_LABEL = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视角（FOV）' };
-export const CAMERA_PROP_LABEL = { pos: '位置', rot: '焦点', fov: '视角' };
+const PROP_LABEL = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视角（FOV）' };
+const CAMERA_PROP_LABEL = { pos: '位置', rot: '焦点', fov: '视角' };
+/** 某类实体的属性行名（机位的旋转显示为「焦点」）。 */
+export const propLabel = (type, property) => (type === 'camera' ? CAMERA_PROP_LABEL : PROP_LABEL)[property];
 const CONSTRAINT_LABEL = { lookAt: '注视', follow: '跟随' };
 const TYPE_ICON = { character: 'person', prop: 'cube', camera: 'video', group: 'group' };
 const PROP_ORDER = ['pos', 'rot', 'scale', 'fov'];
@@ -19,6 +21,11 @@ const vars = (node, obj) => { for (const [k, v] of Object.entries(obj)) node.sty
 
 /** 选中键的标识：同一轨道同一时刻至多一键。 */
 export const keyId = (trackId, t) => `${trackId}@${t}`;
+/** keyId 的反解 → { trackId, t }。 */
+export function parseKeyId(id) {
+  const at = id.lastIndexOf('@');
+  return { trackId: id.slice(0, at), t: +id.slice(at + 1) };
+}
 
 /**
  * 按实体分组的轨道行：实体表头（名字 + 类型图标 + 删除全部动画）+ 轨道 / 路径 / 约束行。
@@ -81,13 +88,20 @@ export class TrackRows {
 
   _folded(id) { return this.collapsedEnts.has(id) || (!this.expandedEnts.has(id)); }
 
+  /** 展开某实体的属性行并重建。 */
+  expand(id) {
+    this.collapsedEnts.delete(id);
+    this.expandedEnts.add(id);
+    this.panel.rebuild();
+  }
+
   _headRow({ ent, rows }) {
     const folded = !rows.length || this._folded(ent.id);
     const caret = el('button', { class: 'tl-caret' + (folded ? ' folded' : ''), title: folded ? '展开此对象的动画属性' : '折叠此对象的动画属性', html: icon('chevron', 12, 2) });
     caret.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (folded) { this.collapsedEnts.delete(ent.id); this.expandedEnts.add(ent.id); } else { this.collapsedEnts.add(ent.id); this.expandedEnts.delete(ent.id); }
-      this.panel.rebuild();
+      if (folded) this.expand(ent.id);
+      else { this.collapsedEnts.add(ent.id); this.expandedEnts.delete(ent.id); this.panel.rebuild(); }
     });
     const pathRow = rows.find(r => r.kind === 'path');
     const objectBar = ent.type !== 'camera';
@@ -140,7 +154,7 @@ export class TrackRows {
     let label, lane;
     const attrs = { 'data-ent': ent.id, 'data-property-row': data.property || kind };
     if (kind === 'track' || kind === 'property') {
-      label = (ent.type === 'camera' ? CAMERA_PROP_LABEL : PROP_LABEL)[data.property];
+      label = propLabel(ent.type, data.property);
       if (ent.type === 'camera' && data.property === 'rot') attrs['data-property-row'] = 'focus';
       if (data.id) attrs['data-track'] = data.id;
       lane = el('div', { class: 'tl-lane' }, data.keys.map((k) => vars(el('i', {
@@ -209,7 +223,7 @@ export class TrackRows {
     const end = path.start + path.duration;
     const content = this._bar('path', path.id, path.start, end, null);
     content.ondblclick = () => this.panel.app.emit('inspect', { id: ent.id, section: 'path' });
-    const model = this._pathModel(path, ent);
+    const model = this.panel.app.timeline.pathModel(path);
     const count = path.points.length + (path.closed ? 1 : 0);
     const nodes = Array.from({ length: count }, (_, i) => {
       const time = model.vertexTime(i);
@@ -254,12 +268,8 @@ export class TrackRows {
     return [];
   }
 
-  _pathModel(path) {
-    return this.panel.app.timeline.pathModel(path);
-  }
-
-  _points(path, ent) {
-    const model = this._pathModel(path, ent);
+  _points(path) {
+    const model = this.panel.app.timeline.pathModel(path);
     // 缓存节点时刻；播放 tick 不构建 Path 或逐节点反求弧长。
     if (!model.nodeTimes) model.nodeTimes = Array.from({ length: path.points.length + (path.closed ? 1 : 0) }, (_, index) => ({ t: model.vertexTime(index), ordinal: index, index: index % path.points.length }));
     return model.nodeTimes;
@@ -299,14 +309,14 @@ export class TrackRows {
     let items, current, disabled = false, reason = '';
     if (property === 'path') {
       const path = tl.paths.find(p => p.id === pathId && p.target === entId), ent = app.findEntity(entId);
-      items = path && ent ? this._points(path, ent) : [];
+      items = path && ent ? this._points(path) : [];
       current = hitTime(items, t, tl.fps);
-      disabled = !path || t < path.start || t > path.start + path.duration || this._pathModel(path, ent).length < 1e-6;
+      disabled = !path || t < path.start || t > path.start + path.duration || tl.pathModel(path).length < 1e-6;
       reason = '在轨迹时间范围内插入控制点';
     } else {
       const st = propState(app, tl.view(), entId, property, t);
       items = st.track?.keys || []; current = st.key; disabled = !!st.forced;
-      reason = st.forced === '路径' && property === 'rot' ? '请先关闭沿路径朝向' : `由${st.forced}驱动，不能打键`;
+      reason = forcedReason(property, st.forced);
     }
     return { current, disabled, reason,
       previous: items.findLast(k => k.t < (current?.t ?? t) - 1e-6),
@@ -321,9 +331,9 @@ export class TrackRows {
     if (tl.active) app.playback.seek(t);
     const path = tl.paths.find(p => p.id === pathId && p.target === entId), ent = app.findEntity(entId);
     if (!path || !ent || t < path.start || t > path.start + path.duration) return;
-    const model = this._pathModel(path, ent);
+    const model = tl.pathModel(path);
     if (model.length < 1e-6) return;
-    const hit = hitTime(this._points(path, ent), t, tl.fps);
+    const hit = hitTime(this._points(path), t, tl.fps);
     const result = hit ? { index: hit.index, inserted: false } : app.pathEditor.insertAt(pathId, model.distanceAt(t));
     if (!result) return;
     const next = tl.paths.find(p => p.id === pathId);
@@ -352,7 +362,7 @@ export class TrackRows {
       const pathId = node.dataset.nodePath;
       if (!pathHits.has(pathId)) {
         const path = app.timeline.paths.find(p => p.id === pathId), ent = app.findEntity(path?.target);
-        pathHits.set(pathId, path && ent ? hitTime(this._points(path, ent), app.timeline.active ? app.playback.time : 0, app.timeline.fps) : null);
+        pathHits.set(pathId, path && ent ? hitTime(this._points(path), app.timeline.active ? app.playback.time : 0, app.timeline.fps) : null);
       }
       const ref = app.pathOverlay.selection;
       node.classList.toggle('is-selected', ref?.kind === 'path' && ref.sourceId === pathId && (ref.arrival === 'end' ? +node.dataset.nodeIndex === app.timeline.paths.find(p => p.id === pathId)?.points.length : ref.index === +node.dataset.nodeIndex));
