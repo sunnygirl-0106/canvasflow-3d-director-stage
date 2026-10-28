@@ -1,3 +1,4 @@
+// @ts-check
 import * as THREE from 'three';
 import { Character } from '../entities/Character.js';
 import { Prop } from '../entities/Prop.js';
@@ -40,6 +41,8 @@ export class EntityActions {
   }
 
   /** 入场登记：（可选）放置 → 加入场景 → 名牌 → 入列 → 选中 → 提示。 */
+  /** @param {Character|Prop|CameraEntity|Crowd} ent
+   * @param {{place?:boolean, msg?:string}} [options] */
   _registerEntity(ent, { place = true, msg } = {}) {
     if (place) this._placeNew(ent.root);
     const change = this.app.store.prepare('添加实体', (doc) => {

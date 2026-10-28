@@ -1,3 +1,4 @@
+// @ts-check
 // 导出视频：第 i 帧 = timeline.evaluate(t0 + i/fps) 后用主机位离屏渲染。
 // evaluate 是纯函数，所以导出完全离线、逐帧，与机器快慢无关；不动主 canvas 尺寸，不改文档。
 import * as THREE from 'three';
@@ -85,6 +86,7 @@ async function exportSession(app, { labels }, fn) {
 /**
  * 逐帧离屏渲染（不编码）：每帧调 onFrame(pixels, { i, t, n, width, height })，可返回 Promise。
  * 每帧之后让出主线程（进度条能动）；signal 取消时抛 AbortError，会话照常恢复。
+ * @param {import('./App.js').App} app
  * @param {{width:number, height:number, fps:number, range:[number,number], labels?:boolean,
  *          signal?:AbortSignal, onProgress?:(i:number, n:number)=>void}} opts
  */
@@ -123,6 +125,7 @@ function renderAt(app, off, camEnt, t) {
 /**
  * 导出 MP4：逐帧离屏渲染 → VideoEncoder（H.264）→ mp4-muxer（fastStart in-memory）→ Blob。
  * 取消（signal）时抛 AbortError，不产生文件。下载由调用方处理（返回 filename）。
+ * @param {import('./App.js').App} app
  * @param {{width:number, height:number, fps:number, range:[number,number], labels?:boolean,
  *          signal?:AbortSignal, onProgress?:(i:number, n:number)=>void}} opts
  * @returns {Promise<{blob:Blob, filename:string, frames:number, width:number, height:number, fps:number}>}
@@ -151,6 +154,9 @@ export async function exportVideo(app, { width, height, fps, range, labels = tru
 /**
  * 单帧（selftest 用）：与导出同一路径渲染 t 时刻，返回 canvas。会话结束后播放头恢复。
  */
+/** @param {import('./App.js').App} app
+ * @param {number} t
+ * @param {{width?:number, height?:number, labels?:boolean}} [options] */
 export async function renderFrame(app, t, { width, height, labels = true } = {}) {
   const cam = exportCamera(app);
   if (!cam) throw new ExportError('请先添加机位');

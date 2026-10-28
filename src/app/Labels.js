@@ -1,3 +1,4 @@
+// @ts-check
 import * as THREE from 'three';
 import { el } from '../util/dom.js';
 
@@ -82,7 +83,7 @@ export class Labels {
   _applyDisplay() { this.layer.style.display = this.visible && !this.suppressed ? 'block' : 'none'; }
 
   /**
-   * @param {Entity[]} entities 顶层实体
+   * @param {import('../entities/Entity.js').Entity[]} entities 顶层实体
    * @param {THREE.Camera} camera 当前渲染相机
    * @param {{worldScale:number, hideCameras:boolean}} opts
    */
@@ -109,7 +110,7 @@ export class Labels {
             // CSS transform translate(-50%, -135% / -160%)：框底在锚点上方 0.35h / 0.6h
             const ax = (p.x * 0.5 + 0.5) * W, ay = (-p.y * 0.5 + 0.5) * H;
             const lift = t.type === 'camera' ? 0.6 : 0.35;
-            items.push({ lab, ax, ay, x: ax, bottom: ay - lift * lab._h, w: lab._w, h: lab._h, depth });
+            items.push({ dy: 0, lab, ax, ay, x: ax, bottom: ay - lift * lab._h, w: lab._w, h: lab._h, depth });
           }
         }
         if (lab._shown !== show) { lab._shown = show; lab.style.display = show ? '' : 'none'; }

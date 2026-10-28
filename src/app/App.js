@@ -1,3 +1,4 @@
+// @ts-check
 import * as THREE from 'three';
 import { TransformGizmo } from '../core/TransformGizmo.js';
 import { Selection } from '../core/Selection.js';

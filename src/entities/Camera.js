@@ -172,6 +172,8 @@ function tintHelper(helper, color) {
  * - helper 必须挂到 scene（非 root），每帧 update()。
  */
 export class CameraEntity extends Entity {
+  /** @param {string} name
+   * @param {{fov?:number, aspect?:number, near?:number, far?:number, scene?:THREE.Scene, id?:string}} [options] */
   constructor(name, { fov = CAMERA_FOV, aspect = 16 / 9, near = 0.1, far = 1000, scene, id } = {}) {
     const root = new THREE.Group();
     super('camera', name, root, id);

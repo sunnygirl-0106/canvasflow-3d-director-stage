@@ -1,3 +1,4 @@
+// @ts-check
 import { Emitter } from '../util/Emitter.js';
 import { applyPatches } from 'immer';
 
@@ -11,6 +12,7 @@ export class History extends Emitter {
     this.index = -1;
     this.enabled = false;
     this._pending = null;
+    /** @type {Promise<boolean|void>} */
     this._chain = Promise.resolve();
     app.store.on('change', (change) => {
       if (!this.enabled || !change.history) return;

@@ -1,3 +1,4 @@
+// @ts-check
 import { checkRequestState } from '../util/requestGuard.js';
 import { DocumentStore, updateDraft } from '../doc/Store.js';
 import { createEmptyDocument, APP_ID } from '../doc/schema.js';

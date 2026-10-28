@@ -7,6 +7,8 @@ import { Emitter } from '../util/Emitter.js';
  * 事件：'tick'(time) —— 时间变化；'state'('playing' | 'paused' | 'idle')。
  */
 export class Playback extends Emitter {
+  /** @param {object} timeline
+   * @param {{invalidate?:()=>void, beforePlay?:()=>boolean}} [hooks] */
   constructor(timeline, { invalidate = () => {}, beforePlay = () => true } = {}) {
     super();
     this.timeline = timeline;

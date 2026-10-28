@@ -1,3 +1,4 @@
+// @ts-check
 import { resolveAssetURL } from '../util/assetURL.js';
 import * as THREE from 'three';
 import { isEquirectImage } from '../config.js';
@@ -40,8 +41,8 @@ function readAsDataURL(file) {
  */
 export class Panorama {
   /**
-   * @param {Stage} stage
-   * @param {{getSky:()=>number, onChange:(applied:boolean, opts:{silent:boolean})=>void}} hooks
+   * @param {import('../core/Stage.js').Stage} stage
+   * @param {{getSky:()=>number, getRevision?:()=>number, onChange:(applied:boolean, opts?:{silent?:boolean, parameters?:boolean})=>void}} hooks
    */
   constructor(stage, { getSky, onChange, getRevision = () => 0 }) {
     this.stage = stage;

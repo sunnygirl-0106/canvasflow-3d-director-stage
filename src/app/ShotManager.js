@@ -1,3 +1,4 @@
+// @ts-check
 import { exportSize } from './exportSpec.js';
 import { toast } from '../util/dom.js';
 

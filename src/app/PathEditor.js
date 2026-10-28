@@ -1,3 +1,4 @@
+// @ts-check
 import * as THREE from 'three';
 import { sameKeyTime } from '../anim/keyframes.js';
 import { framePlanePoint } from '../core/pathPicking.js';
@@ -58,7 +59,7 @@ export class PathEditor {
     app.pathTool.on('mode', () => { this.cancel(); sync(); });
     // 时间轴接手焦点后，删除键由时间轴处理。
     document.addEventListener('pointerdown', e => {
-      this.timelineFocus = !!e.target.closest?.('#timeline, .tl-menu');
+      this.timelineFocus = e.target instanceof Element && !!e.target.closest('#timeline, .tl-menu');
     }, true);
   }
 
@@ -236,7 +237,7 @@ export class PathEditor {
       e.preventDefault();
       this._consumed = true;
       this.selectNode(hit.sourceKind === 'pos' ? { kind: 'pos', sourceId: hit.pathId, keyTime: hit.keyTime } : { kind: 'path', sourceId: hit.pathId, index: hit.index });
-      this._beginDrag(e, hit);
+      this._beginDrag(e);
       return;
     }
     if (hit?.kind === 'line' && (!this.app.gizmo.visible || !this.app.gizmo.overAxis)) {

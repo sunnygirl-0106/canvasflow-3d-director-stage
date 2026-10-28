@@ -1,3 +1,4 @@
+// @ts-check
 import * as THREE from 'three';
 import { labelAnchor, layoutLabels } from './Labels.js';
 
@@ -176,7 +177,7 @@ export class LabelSprites {
       const depth = p.distanceTo(_camPos.setFromMatrixPosition(camera.matrixWorld));
       p.project(camera);
       if (p.z >= 1) continue;
-      items.push({ it, x: (p.x * 0.5 + 0.5) * baseHeight * aspect, bottom: (-p.y * 0.5 + 0.5) * baseHeight - (it.h - pad) * (t.type === 'camera' ? 0.6 : 0.35), w: it.w - pad, h: it.h - pad, depth });
+      items.push({ dy: 0, it, x: (p.x * 0.5 + 0.5) * baseHeight * aspect, bottom: (-p.y * 0.5 + 0.5) * baseHeight - (it.h - pad) * (t.type === 'camera' ? 0.6 : 0.35), w: it.w - pad, h: it.h - pad, depth });
     }
     layoutLabels(items);
     for (const x of items) x.it.dy = x.dy;

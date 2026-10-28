@@ -1,3 +1,4 @@
+// @ts-check
 import * as THREE from 'three';
 import { el, toast, toastError, isTyping, CLICK_PX, pointerNDC } from '../util/dom.js';
 import { Emitter } from '../util/Emitter.js';
@@ -383,12 +384,16 @@ export class PathTool extends Emitter {
    * 公共 setPath 仍保留显式时长、按步速估算及 AI 的原有语义。
    * @returns {string|null} 路径 id
    */
+  /** @param {number[][]} points
+   * @param {{closed?:boolean, meta?:object, interpolation?:'centripetal'|'polyline'}} [options] */
   _commit(points, { closed = false, meta = null, interpolation } = {}) {
     if (!points || points.length < 2 || !points.some(p => dist2(p, points[0]) > 0.01)) { toast('路径太短'); return null; }
     const { app } = this;
     const ent = this.ent;
     this._end();
-    let path, old;
+    /** @type {import('../types/contracts.js').PathDocument} */
+    let path;
+    let old;
     try {
       app.store.transact('绘制路径', (doc) => {
         doc.timeline.duration = Math.max(10, doc.timeline.duration);

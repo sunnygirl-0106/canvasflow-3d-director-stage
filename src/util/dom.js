@@ -1,6 +1,9 @@
 // 小型 DOM helper
 
-/** 创建元素：el('div', {class:'x', onclick:fn}, [child|string]) */
+/** 创建元素：el('div', {class:'x', onclick:fn}, [child|string])
+ * @param {string} tag
+ * @param {object} [attrs]
+ * @param {Node|string|(Node|string)[]} [children] */
 export function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {

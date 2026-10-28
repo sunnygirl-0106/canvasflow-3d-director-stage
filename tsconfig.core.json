@@ -9,6 +9,7 @@
   "include": [
     "src/doc/**/*.js",
     "src/anim/**/*.js",
-    "src/ai/**/*.js"
+    "src/ai/**/*.js",
+    "src/app/**/*.js"
   ]
 }

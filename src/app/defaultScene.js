@@ -1,3 +1,4 @@
+// @ts-check
 import { createEmptyDocument } from '../doc/schema.js';
 import { addCharacter, charName } from '../doc/edit.js';
 import { CameraEntity } from '../entities/Camera.js';

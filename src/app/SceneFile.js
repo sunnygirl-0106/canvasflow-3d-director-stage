@@ -1,3 +1,4 @@
+// @ts-check
 import { migrate } from '../doc/migrate.js';
 import { validate } from '../doc/schema.js';
 import { toast } from '../util/dom.js';

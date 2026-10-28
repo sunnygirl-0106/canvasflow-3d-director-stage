@@ -1,3 +1,4 @@
+// @ts-check
 import { toast, toastError } from '../util/dom.js';
 import { aimPoint } from '../anim/Constraint.js';
 import { defaultParams, PANEL_LABEL, PANEL_DURATION } from '../anim/cameraMoves.js';
@@ -42,6 +43,9 @@ export class CameraMoveTool {
   }
 
   /** 替换整条运镜、编辑已保存的末段，或追加一段；每次操作只提交一个事务。 */
+  /** @param {import('../entities/Camera.js').CameraEntity} cam
+   * @param {string} name
+   * @param {{params?:Record<string,number>, subject?:string|number[], reset?:boolean, mode?:string}} [options] */
   applyPreset(cam, name, { params, subject, reset = false, mode = 'replace' } = {}) {
     const current = this.current(cam), last = current?.segments.at(-1);
     const append = mode === 'append', editing = mode === 'edit';
@@ -75,6 +79,7 @@ export class CameraMoveTool {
       aim = editing ? last.aim : this._aim(subject);
     });
     if (!aim) return this._presetError('生成参考对象已不存在，请在摄像机属性中选择目标');
+    /** @type {Record<string,number>} */
     const defaults = { ...defaultParams(name, { position: origin.position, aim }), duration: PANEL_DURATION[name] };
     if (name === 'push_in') {
       const ent = typeof subject === 'string' && this.app.findEntity(subject);

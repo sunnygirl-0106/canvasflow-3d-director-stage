@@ -1,3 +1,4 @@
+// @ts-check
 // 编码生命周期：取消/编码错误立即关闭编码器，同时唤醒背压与 flush 等待。
 export const exportAbortError = () => new DOMException('导出已取消', 'AbortError');
 
