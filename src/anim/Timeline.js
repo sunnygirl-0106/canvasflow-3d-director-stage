@@ -10,7 +10,8 @@ import { Track } from './Track.js';
 import { sameKeyTime, upsertKeys } from './keyframes.js';
 import { PathTrack } from './PathTrack.js';
 import { pathOptionsFor } from './Path.js';
-import { fitStops, fitPathToDuration } from './pathGen.js';
+import { endpointSchedule } from './schedule.js';
+import { remapSchedule, fitPathToDuration } from './pathGen.js';
 import { applyLocomotion } from './Locomotion.js';
 import { applyConstraint, constraintActive } from './Constraint.js';
 import { round6, clone, D2R } from '../util/math.js';
@@ -473,8 +474,8 @@ export class Timeline extends Emitter {
   }
 
   /** 新建路径。缺省：不闭合、0 秒开始、时长 4 秒、匀速、朝向切线。 */
-  addPath({ target, points, closed = false, start = 0, duration = 4, speed = 'linear', orient = 'tangent', interpolation }) {
-    const path = { id: newId(this.app.store.document), target, points: clone(points), closed, start, duration, speed, orient, ...(interpolation ? { interpolation } : {}) };
+  addPath({ target, points, closed = false, start = 0, duration = 4, schedule, orient = 'tangent', interpolation }) {
+    const path = { id: newId(this.app.store.document), target, points: clone(points), closed, start, duration, schedule: schedule || endpointSchedule(points, closed, duration), orient, ...(interpolation ? { interpolation } : {}) };
     this._commit({ paths: [...this.paths, path] });
     return clone(this.paths.find((p) => p.id === path.id));
   }
@@ -483,7 +484,7 @@ export class Timeline extends Emitter {
   updatePath(id, patch) {
     const old = this._find(this.paths, id, '路径');
     if (patch.start >= this.duration) throw new Error(`开始时间需早于场景结束（${this.duration} 秒）`);
-    const path = fitStops(old, { ...old, ...clone(patch), id }, patch); // 停顿随顶点数 / 时长调整
+    const path = remapSchedule(old, { ...clone(patch), id }); // 停顿随顶点数 / 时长调整
     this._commit({ paths: this.paths.map((x) => (x === old ? path : x)) });
     return clone(this.paths.find((p) => p.id === id));
   }

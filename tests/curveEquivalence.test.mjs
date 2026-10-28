@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { Path } from '../src/anim/Path.js';
+import { Path } from './migrate/pathModel.js';
 
 // 固定种子让替换门槛可复现；覆盖开放/闭合、长短边与两种速度曲线。
 function paths() {

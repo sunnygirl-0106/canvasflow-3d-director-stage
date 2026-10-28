@@ -1,6 +1,8 @@
+import { markedSchedule } from '../src/anim/pathGen.js';
+import { oldFields } from './migrate/pathModel.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Path, pathOptionsFor } from '../src/anim/Path.js';
+import { Path, pathOptionsFor } from './migrate/pathModel.js';
 import { rectangle } from '../src/anim/pathGen.js';
 import { animatedPropFixture } from './helpers.mjs';
 import { PathEditor } from '../src/app/PathEditor.js';
@@ -59,13 +61,13 @@ test('rectangle drawing plane preserves camera height under translated, rotated 
 test('insert sampled height, shift stop indices, preserve timing; prevent seam/duplicate/zero-length insertion', () => {
   const {app,ent}=animatedPropFixture();
   const p=app.timeline.addPath({target:ent.id,points:[[0,0,0],[2,2,0],[4,0,0]],duration:6,interpolation:'polyline'});
-  app.timeline.updatePath(p.id,{stops:[1],stopTimes:[3]});
+  app.timeline.updatePath(p.id,{schedule:markedSchedule(p,[1],[3])});
   app.pathOverlay={pathOf:id=>new Path(app.timeline.paths.find(p=>p.id===id),pathOptionsFor(ent.type)),setSelectedVertex:()=>{}};
   const editor=Object.create(PathEditor.prototype); editor.app=app;
   const result=editor.insertAt(p.id,Math.sqrt(2));
   assert.equal(result.index,1); assert.equal(result.inserted,true);
   assert.deepEqual(app.timeline.paths[0].points[1],[1,1,0]);
-  assert.deepEqual(app.timeline.paths[0].stops,[2]); assert.deepEqual(app.timeline.paths[0].stopTimes,[3]);
+  assert.deepEqual(oldFields(app.timeline.paths[0]).stops,[2]); assert.deepEqual(oldFields(app.timeline.paths[0]).stopTimes,[3]);
   assert.equal(editor.insertAt(p.id,Math.sqrt(2)).inserted,false);
   app.timeline.updatePath(p.id,{closed:true});
   assert.deepEqual(editor.insertAt(p.id,app.pathOverlay.pathOf(p.id).length),{index:0,inserted:false});

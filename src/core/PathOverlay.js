@@ -1,3 +1,4 @@
+import { endpointSchedule } from '../anim/schedule.js';
 import * as THREE from 'three';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
@@ -371,7 +372,7 @@ export class PathOverlay {
   setDraft(points, { closed = false, dots = true, interpolation } = {}) {
     for (const o of [...this.draftGroup.children]) { this.draftGroup.remove(o); this._disposeLine(o); }
     if (points?.length >= 2) {
-      const path = new Path({ points, closed, interpolation, start: 0, duration: 1, speed: 'linear' });
+      const path = new Path({ points, closed, interpolation, start: 0, duration: 1, schedule: endpointSchedule(points, closed, 1) });
       if (path.length > 1e-6) this.draftGroup.add(this._line(this._sample(path), true, { color: COLOR.hover, opacity: 0.9 }));
     }
     for (const p of dots ? points || [] : []) {

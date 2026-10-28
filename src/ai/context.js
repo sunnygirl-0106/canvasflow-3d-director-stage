@@ -1,3 +1,4 @@
+import { stopEntries } from '../anim/schedule.js';
 // @ts-check
 import { pathLength } from '../anim/pathGen.js';
 import { roundTo } from '../util/math.js';
@@ -34,7 +35,7 @@ function describeAnimation(entity, doc, nameOf) {
   const parts = [];
   const path = doc.paths.find((path) => path.target === entity.id);
   if (path) {
-    const length = pathLength(path.points, path.closed, path.stops, path.interpolation);
+    const length = pathLength(path.points, path.closed, path.schedule[0].segmented ? null : stopEntries(path).map(entry => entry.i), path.interpolation);
     const endPoint = path.closed ? path.points[0] : path.points[path.points.length - 1];
     parts.push(`路径 ${path.points.length} 点 长 ${f2(length)} m ${span(path.start, path.start + path.duration)} 终点 ${vec(endPoint)}`);
   }
@@ -112,7 +113,7 @@ function boundedContext(doc, byId, overview, { input, selectedId, budget }) {
     addLine(`${label}：${JSON.stringify(value)}`);
     for (const p of doc.paths.filter((p) => p.target === id)) {
       if (!addLine(`路径详情：${JSON.stringify(p)}`)) {
-        addLine(`路径采样（已裁剪）：${JSON.stringify({ ...p, points: undefined, stops: undefined, stopTimes: undefined,
+        addLine(`路径采样（已裁剪）：${JSON.stringify({ ...p, points: undefined, schedule: undefined,
           pointCount: p.points.length, samples: [0, p.points.length - 1].map((index) => ({ index, point: p.points[index] })) })}`);
       }
     }

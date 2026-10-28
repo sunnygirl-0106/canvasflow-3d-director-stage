@@ -18,8 +18,8 @@ export type Track = { id: string; target: string } & (
 export interface PathDocument {
   id: string; target: string; points: Vec3[]; closed: boolean;
   interpolation?: 'centripetal' | 'polyline'; start: number; duration: number;
-  waypointTimes?: number[]; timedSegments?: {from:number,to:number,start:number,end:number}[];
-  speed: 'linear' | 'smooth'; orient: 'tangent' | 'keep'; stops?: number[]; stopTimes?: number[];
+  schedule: {i:number,t:number,curve?:'linear'|'smooth'|'cubic',baseCurve?:'linear'|'smooth',allocation?:'distance',segmented?:boolean,stop?:boolean,closed?:boolean,inherited?:boolean,caption?:boolean,captionTime?:boolean}[];
+  orient: 'tangent' | 'keep';
 }
 export interface ConstraintDocument {
   id: string; type: 'lookAt' | 'follow'; target: string; subject: string | Vec3;

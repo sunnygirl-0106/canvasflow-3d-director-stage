@@ -11,7 +11,7 @@ import { PANEL_LABEL, MOVE_DIRS } from '../anim/cameraMoves.js';
 import { clone, isObj, isNum } from '../util/math.js';
 import { num as numberType, vec3 as vectorType, hex as colorType, enumOf, obj, rule, optional, nullable, arrayOf, fmt } from '../util/validate.js';
 
-export const SCHEMA_VERSION = 'director-stage/0.1';
+export const SCHEMA_VERSION = 'director-stage/0.2';
 export const APP_ID = 'director-stage-demo';
 
 export const ENTITY_TYPES = ['character', 'prop', 'camera', 'group'];
@@ -116,8 +116,10 @@ const timelineType = shape({ duration: positive, fps: numberType({ gt: 0, int: t
 const trackType = shape({ id: any, target: any, property: enumOf(TRACK_PROPERTIES), keys: any });
 const pathType = shape({
   id: any, target: any, points: arrayOf(vector, 2), closed: boolType, start: timeType, duration: positive,
-  speed: enumOf(PATH_SPEEDS), orient: enumOf(PATH_ORIENTS), interpolation: optional(enumOf(['centripetal', 'polyline'])),
-  stops: optional(any), stopTimes: optional(any), timedSegments: optional(any), waypointTimes: optional(any),
+  schedule: arrayOf(obj({ i: numberType({ min: 0, int: true }), t: timeType, curve: optional(enumOf(['linear', 'smooth', 'cubic'])),
+    baseCurve: optional(enumOf(PATH_SPEEDS)), allocation: optional(enumOf(['distance'])), segmented: optional(boolType),
+    stop: optional(boolType), closed: optional(boolType), inherited: optional(boolType), caption: optional(boolType), captionTime: optional(boolType) }), 2),
+  orient: enumOf(PATH_ORIENTS), interpolation: optional(enumOf(['centripetal', 'polyline'])),
 });
 const constraintType = shape({ id: any, type: enumOf(CONSTRAINT_TYPES), target: any, subject: any, offset: vector,
   start: nullable(timeType), end: nullable(timeType) });
@@ -273,28 +275,6 @@ export function validate(doc) {
     });
   }
 
-  /** 路径停顿：stops 为升序顶点索引（不含首尾），stopTimes 与之等长、递增、在 (0, duration) 内。 */
-  const checkStops = (pa, p) => {
-    const { stops, stopTimes } = pa;
-    if (stops === undefined) {
-      if (stopTimes !== undefined) err(`${p}.stopTimes`, '需要同时给出 stops');
-      return;
-    }
-    if (!Array.isArray(stops)) { err(`${p}.stops`, `应为顶点索引数组，实际为 ${fmt(stops)}`); return; }
-    const n = Array.isArray(pa.points) ? pa.points.length : 0;
-    const last = pa.closed ? n - 1 : n - 2;
-    stops.forEach((i, j) => {
-      if (!Number.isInteger(i) || i < 1 || i > last) err(`${p}.stops[${j}]`, `应为 1–${last} 之间的顶点索引（不含首尾），实际为 ${fmt(i)}`);
-      else if (j > 0 && !(i > stops[j - 1])) err(`${p}.stops[${j}]`, `应大于前一项 ${stops[j - 1]}，实际为 ${i}`);
-    });
-    if (stopTimes === undefined) return;
-    if (!Array.isArray(stopTimes) || stopTimes.length !== stops.length) { err(`${p}.stopTimes`, `应为与 stops 等长（${stops.length}）的时刻数组，实际为 ${fmt(stopTimes)}`); return; }
-    stopTimes.forEach((t, j) => {
-      if (!isNum(t) || !(t > 0) || (isNum(pa.duration) && !(t < pa.duration))) err(`${p}.stopTimes[${j}]`, `应在 (0, ${pa.duration}) 内，实际为 ${fmt(t)}`);
-      else if (j > 0 && !(t > stopTimes[j - 1])) err(`${p}.stopTimes[${j}]`, `应大于前一项 ${stopTimes[j - 1]}，实际为 ${t}`);
-    });
-  };
-
   arr(doc.paths, 'paths');
   const pathOf = new Map(); // targetId → 路径路径
   (Array.isArray(doc.paths) ? doc.paths : []).forEach((pa, i) => {
@@ -313,38 +293,18 @@ export function validate(doc) {
         if (!connected) err(`${p}.target`, `${fmt(pa.target)} 已有 pos 轨道 ${prefix.path}，路径与 pos 轨道不能重叠；仅机位可在位置动画结束后从末端接续`);
       }
     }
-    checkStops(pa, p);
-    if (pa.timedSegments !== undefined) {
-      if (!Array.isArray(pa.points) || !isNum(pa.duration)) return;
-      if (!Array.isArray(pa.timedSegments) || !pa.timedSegments.length) err(`${p}.timedSegments`, '应为非空分段数组');
-      else {
-        if ((Array.isArray(pa.stops) && pa.stops.length) || (Array.isArray(pa.stopTimes) && pa.stopTimes.length)) err(`${p}.timedSegments`, '不能与 stops 同时使用');
-        const points = pa.points, duration = pa.duration;
-        let lastPoint = 0, lastEnd = 0;
-        pa.timedSegments.forEach((s, j) => {
-          const q = `${p}.timedSegments[${j}]`;
-          if (!check(shape({ from: any, to: any, start: any, end: any, closed: optional(any), speed: optional(any) }), s, q)) return;
-          if (!isNum(s.from) || !isNum(s.to) || s.from !== lastPoint || !Number.isInteger(s.to) || s.to <= s.from || s.to >= points?.length) { err(q, '顶点区间应连续、递增并覆盖路径'); return; }
-          if (!isNum(s.start) || !isNum(s.end) || s.start < lastEnd || s.end <= s.start || s.end > duration) { err(q, '时段应递增且位于路径时长内'); return; }
-          check(obj({ closed: optional(boolType), speed: optional(enumOf(PATH_SPEEDS)) }, { strict: false }), s, q);
-          if (s.closed && (s.to - s.from < 3 || JSON.stringify(points?.[s.from]) !== JSON.stringify(points?.[s.to]))) err(q, '闭合段须至少三条边且首尾重合');
-          lastPoint = s.to; lastEnd = s.end;
-        });
-        if (lastPoint !== points?.length - 1) err(`${p}.timedSegments`, '最后一段须到达终点');
-      }
-    }
-    if (pa.waypointTimes !== undefined) {
-      if (!Array.isArray(pa.points) || !isNum(pa.duration)) return;
-      const times = pa.waypointTimes, duration = pa.duration;
-      if (pa.closed || pa.timedSegments) err(`${p}.waypointTimes`, '仅开放且不含 timedSegments 的路径可设置节点时间');
-      if (!Array.isArray(times) || times.length !== pa.points?.length) err(`${p}.waypointTimes`, '应为与路径顶点等长的时刻数组');
-      else {
-        times.forEach((value, j) => {
-          if (!isNum(value) || (j === 0 ? value !== 0 : value <= times[j - 1]) || value > duration) err(`${p}.waypointTimes[${j}]`, '应从 0 开始并严格递增，且不超过路径时长');
-        });
-        if (times.at(-1) !== pa.duration) err(`${p}.waypointTimes`, '末时刻应等于路径时长');
-      }
-    }
+    if (!Array.isArray(pa.schedule) || !Array.isArray(pa.points) || pa.schedule.some(entry => !entry || !Number.isInteger(entry.i) || !isNum(entry.t))) return;
+    const entries = pa.schedule.filter(entry => !entry.caption), lastIndex = pa.points.length - (pa.closed ? 0 : 1);
+    if (entries[0]?.i !== 0 || entries[0]?.t !== 0 || !entries[0]?.curve) err(`${p}.schedule`, '时刻表须从顶点 0、时刻 0 开始并指定曲线');
+    if (entries.at(-1)?.i !== lastIndex || entries.at(-1)?.t !== pa.duration) err(`${p}.schedule`, '末项须为终点和路径时长');
+    entries.forEach((entry, j) => {
+      const previous = entries[j - 1], q = `${p}.schedule[${j}]`;
+      if (entry.i > lastIndex || entry.t > pa.duration) err(q, '顶点或时刻超出路径范围');
+      if (previous && (entry.i < previous.i || (entry.t < previous.t || (entry.t === previous.t && entries[0].allocation !== 'distance')))) err(q, '顶点下标应非递减，时刻应严格递增');
+      if (entry.stop && (entry.i === 0 || entry.i === lastIndex)) err(q, '停顿标记只能位于中间顶点');
+      if (entry.closed && (!previous || entry.i - previous.i < 3 || JSON.stringify(pa.points[previous.i]) !== JSON.stringify(pa.points[entry.i]))) err(q, '闭合段须至少三条边且首尾重合');
+    });
+    if (entries[0]?.curve === 'cubic' && (pa.closed || entries.length !== pa.points.length || entries.some((entry, i) => entry.i !== i))) err(`${p}.schedule`, '节点曲线须覆盖开放路径的每个顶点');
   });
 
   arr(doc.constraints, 'constraints');

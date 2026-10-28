@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { sameKeyTime } from '../anim/keyframes.js';
 import { trackPointer } from './pathPointer.js';
 import { el, toast, toastError, isTyping, CLICK_PX } from '../util/dom.js';
-import { stopsAfterInsert, stopsAfterDelete } from '../anim/pathGen.js';
+import { remapSchedule } from '../anim/pathGen.js';
 import { round4 } from '../util/math.js';
 import { onKey, KEY_PRIORITY } from '../util/keys.js';
 
@@ -342,7 +342,7 @@ export class PathEditor {
     const index = path.edgeAt(s) + 1;
     const pts = json.points.slice();
     pts.splice(index, 0, [round4(p.x), round4(p.y), round4(p.z)]);
-    if (!this._write(pathId, { points: pts, ...stopsAfterInsert(json, index) })) return null;
+    if (!this._write(pathId, remapSchedule(json, { points: pts }, { map: i => i >= index ? i + 1 : i }))) return null;
     this.app.pathOverlay.setSelectedVertex({ pathId, index });
     return { index, inserted: true };
   }
@@ -353,7 +353,7 @@ export class PathEditor {
     if (json.points.length <= 2) { toast('路径至少需要 2 个顶点（Backspace 可删除整条轨迹）'); return; }
     const pts = json.points.filter((_, i) => i !== index);
     this.app.pathOverlay.setSelectedVertex(null);
-    this._write(pathId, { points: pts, ...stopsAfterDelete(json, index) });
+    this._write(pathId, remapSchedule(json, { points: pts }, { map: i => i === index ? null : i > index ? i - 1 : i }));
   }
 
   _write(pathId, patch) {

@@ -1,3 +1,4 @@
+import { stopEntries } from '../anim/schedule.js';
 // @ts-check
 import * as THREE from 'three';
 import { el, toast, toastError, isTyping, CLICK_PX } from '../util/dom.js';
@@ -401,7 +402,7 @@ export class PathTool extends Emitter {
       });
     } catch (err) { toastError(err); return null; }
     if (meta) app.pathMeta[path.id] = meta; else delete app.pathMeta[path.id];
-    const length = pathLength(path.points, path.closed, path.stops, path.interpolation);
+    const length = pathLength(path.points, path.closed, path.schedule[0].segmented ? null : stopEntries(path).map(entry => entry.i), path.interpolation);
     toast(`${old ? '已替换' : '已创建'}轨迹：${fmt(path.start)}–${fmt(path.start + path.duration)} s · 平均 ${(length / path.duration).toFixed(2)} m/s`);
     app.pathOverlay.setSelectedPath(path.id);
     this.emit('commit', path);

@@ -1,6 +1,7 @@
 // @ts-check
 import * as THREE from 'three';
 import { EASE, smoothDeriv, clamp01 } from './ease.js';
+import { pathCurve, motionEntries, stopEntries, captionEntries, scheduleSegments } from './schedule.js';
 
 const MIN_SEGMENTS = 200;
 const SEGMENTS_PER_POINT = 64;
@@ -136,21 +137,24 @@ class Polyline {
  * 时间 → 弧长：progress(t) 把 (t − start) / duration 夹到 [0,1] 后按 speed 曲线映射（linear 匀速 / smooth 缓入缓出），
  * distanceAt(t) = progress × 全长。start 之前停在起点、结束之后停在终点。纯函数，无内部状态。
  *
- * 停顿 stops（可选）：顶点索引升序、不含首尾。有 stops 时路径在这些顶点处断成几段，
+ * 时刻表 schedule 的停顿标记：顶点索引升序、不含首尾。有停顿时路径在这些顶点处断成几段，
  * 每段是独立的 Catmull-Rom（停顿处速度为 0，允许折角，所以推镜头那段是严格的直线）；
- * 每段各自缓入缓出（无论 speed），各段时长 = stopTimes（相对 start 的到达时刻，可选）或按弧长比例分配。
+ * 每段各自缓入缓出（无论 speed），各段时长 = arrival times（相对 start 的到达时刻，可选）或按弧长比例分配。
  * 起步 / 收步（ramp 选项，角色 / 组）：smooth 不再整段缓入缓出，而是 ramp 秒加速 → 匀速 → ramp 秒减速（见 profile）。
- * 闭合路径有 stops 时按 [p0 … pn−1, p0] 的开放点列处理。
+ * 闭合路径有停顿时按 [p0 … pn−1, p0] 的开放点列处理。
  */
 export class Path {
   /** @param {object} json 文档 Path @param {{ramp?:number, uniform?:boolean}} [opts] uniform：人物匀速；显式停顿仍按段处理。 */
   constructor(json, { ramp = 0, uniform = false } = {}) {
-    this.json = uniform && !json.timedSegments?.length ? { ...json, speed: 'linear' } : json;
-    this.ramp = uniform && !json.stops?.length && !json.timedSegments?.length ? 0 : ramp;
+    this.json = json;
+    const entries = motionEntries(json), first = entries[0];
+    const timed = first.segmented ? scheduleSegments(json) : null;
+    const markers = stopEntries(json).map(entry => entry.i);
+    const stops = timed?.length ? timed.slice(0, -1).map(segment => segment.to) : markers.length ? markers : null;
+    this.curve = uniform && !timed ? 'linear' : pathCurve(json);
+    this.ramp = uniform && !markers.length && !timed ? 0 : ramp;
     const geometry = (points, closed) => json.interpolation === 'polyline' || (!closed && points.length === 2)
       ? new Polyline(points, closed) : new Curve(points, closed);
-    const timed = json.timedSegments;
-    const stops = timed?.length ? timed.slice(0, -1).map(s => s.to) : json.stops?.length ? json.stops : null;
     if (!stops) {
       this.curves = [geometry(json.points, json.closed)];
       this._vs = [0];
@@ -168,18 +172,20 @@ export class Path {
     this._S = [0];
     for (const c of this.curves) this._S.push(this._S[this._S.length - 1] + c.length);
     this.length = this._S[this._S.length - 1];
-    this.timedSegments = timed || null;
-    this.waypointTimes = json.waypointTimes || null;
-    if (this.waypointTimes) {
-      const T = this.waypointTimes;
+    this.sections = timed;
+    this.knots = first.curve === 'cubic' ? entries.map(entry => entry.t) : null;
+    if (this.knots) {
+      const T = this.knots;
       this._waypointS = T.map((_, i) => this.vertexDistance(i));
       const slopes = T.slice(0, -1).map((v, i) => (this._waypointS[i + 1] - this._waypointS[i]) / (T[i + 1] - v));
-      this._waypointV = T.map((_, i) => i === 0 || i === T.length - 1 || json.stops?.includes(i) ? 0
+      this._waypointV = T.map((_, i) => i === 0 || i === T.length - 1 || markers.includes(i) ? 0
         : slopes[i - 1] * slopes[i] <= 0 ? 0 : 2 * slopes[i - 1] * slopes[i] / (slopes[i - 1] + slopes[i]));
     }
     const D = json.duration;
+    const captions = captionEntries(json);
+    const arrivals = first.allocation === 'distance' ? null : captions.length ? captions.map(entry => entry.t) : entries.slice(1, -1).map(entry => entry.t);
     this._T = stops
-      ? [0, ...(json.stopTimes?.length === stops.length ? json.stopTimes : this._S.slice(1, -1).map((s) => (this.length > 0 ? D * s / this.length : 0))), D]
+      ? [0, ...(arrivals?.length === stops.length ? arrivals : this._S.slice(1, -1).map(s => this.length > 0 ? D * s / this.length : 0)), D]
       : [0, D];
   }
 
@@ -191,7 +197,7 @@ export class Path {
     return [k, s - S[k]];
   }
 
-  /** 弧长 s → 曲线参数 u（无 stops 时整条曲线的 u；有 stops 时为所在段的 u）。 */
+  /** 弧长 s → 曲线参数 u（无停顿时整条曲线的 u；有停顿时为所在段的 u）。 */
   uAt(s) { const [k, ls] = this._seg(s); return this.curves[k].uAt(ls); }
 
   /** 弧长 s 落在哪条边上（顶点 i → i+1 的 i；闭合路径最后一条边回到 0）。点击曲线插入顶点用。 */
@@ -242,15 +248,16 @@ export class Path {
 
   /** t 时刻的进度 ∈ [0,1]（已走弧长 / 全长）。 */
   progress(t) {
-    if (this.waypointTimes) return this.length > 0 ? this.distanceAt(t) / this.length : 0;
+    if (this.knots) return this.length > 0 ? this.distanceAt(t) / this.length : 0;
     if (this.curves.length === 1 && !this.ramp) {
-      const { start, duration, speed } = this.json;
+      const { start, duration } = this.json;
+      const speed = this.curve;
       return EASE[speed](clamp01((t - start) / duration));
     }
     return this.length > 0 ? this.distanceAt(t) / this.length : clamp01((t - this.json.start) / this.json.duration);
   }
 
-  /** 有 stops 时 t 所在的段与段内进度 x ∈ [0,1]（按段缓入缓出）。 */
+  /** 有停顿时 t 所在的段与段内进度 x ∈ [0,1]（按段缓入缓出）。 */
   _segTime(t) {
     const T = this._T, x = t - this.json.start;
     let k = 0;
@@ -261,33 +268,34 @@ export class Path {
 
   /** t 时刻已走的路程（米）。 */
   distanceAt(t) {
-    if (this.waypointTimes) return this._waypointMotion(t)[0];
-    if (this.timedSegments) {
+    if (this.knots) return this._waypointMotion(t)[0];
+    if (this.sections) {
       const x = t - this.json.start;
-      for (let k = 0; k < this.timedSegments.length; k++) {
-        const seg = this.timedSegments[k];
+      for (let k = 0; k < this.sections.length; k++) {
+        const seg = this.sections[k];
         if (x < seg.start) return this._S[k];
-        if (x <= seg.end) return this._S[k] + profile(x - seg.start, seg.end - seg.start, this._S[k + 1] - this._S[k], seg.speed || this.json.speed, this.ramp)[0];
+        if (x <= seg.end) return this._S[k] + profile(x - seg.start, seg.end - seg.start, this._S[k + 1] - this._S[k], seg.curve, this.ramp)[0];
       }
       return this.length;
     }
     if (this.curves.length === 1 && !this.ramp) return this.progress(t) * this.length;
     const [k, x, dt] = this._segTime(t);
-    const ease = this.curves.length === 1 ? this.json.speed : 'smooth';
+    const ease = this.curves.length === 1 ? this.curve : 'smooth';
     return this._S[k] + profile(clamp01(x) * dt, dt, this._S[k + 1] - this._S[k], ease, this.ramp)[0];
   }
 
   /** t 时刻的瞬时速度（米/秒）：弧长对时间的导数（解析式；区间外为 0）。 */
   speedAt(t) {
-    if (this.waypointTimes) return this._waypointMotion(t)[1];
-    if (this.timedSegments) {
+    if (this.knots) return this._waypointMotion(t)[1];
+    if (this.sections) {
       const x = t - this.json.start;
-      const k = this.timedSegments.findIndex(s => x > s.start && x < s.end);
+      const k = this.sections.findIndex(s => x > s.start && x < s.end);
       if (k < 0) return 0;
-      const seg = this.timedSegments[k];
-      return profile(x - seg.start, seg.end - seg.start, this._S[k + 1] - this._S[k], seg.speed || this.json.speed, this.ramp)[1];
+      const seg = this.sections[k];
+      return profile(x - seg.start, seg.end - seg.start, this._S[k + 1] - this._S[k], seg.curve, this.ramp)[1];
     }
-    const { start, duration, speed } = this.json;
+    const { start, duration } = this.json;
+      const speed = this.curve;
     const x = (t - start) / duration;
     if (x < 0 || x > 1) return 0;
     if (this.curves.length === 1 && !this.ramp) return (speed === 'smooth' ? smoothDeriv(x) : 1) * this.length / duration;
@@ -298,7 +306,7 @@ export class Path {
 
   /** 指定经过节点的时间，节点间使用单调三次 Hermite；内部节点速度连续且不停车。 */
   _waypointMotion(t) {
-    const T = this.waypointTimes, x = t - this.json.start;
+    const T = this.knots, x = t - this.json.start;
     if (x <= T[0]) return [0, 0];
     if (x >= T.at(-1)) return [this.length, 0];
     const S = this._waypointS, velocity = this._waypointV;

@@ -1,6 +1,7 @@
 // @ts-check
 import { Path, WALK_RAMP, isWalker } from './Path.js';
 import { D2R, R2D, round6, round4 } from '../util/math.js';
+import { endpointSchedule, pathCurve, stopEntries, captionEntries, scheduleSegments } from './schedule.js';
 
 // 路径生成器：纯函数，不依赖 DOM。输入 / 输出都是文档口径的 [x,y,z]（实体父坐标系，角色 / 组的 y = 地面高度）。
 // 同时是运镜预设、AI 生成的积木（词汇表：line / arc / toward）。点的 y 一律由调用方给。
@@ -84,78 +85,124 @@ export function simplify(points, tolerance = 0.05) {
   return points.filter((_, i) => keep[i]).map((p) => pt(...p));
 }
 
-/** 路径曲线全长（米）：与求值同一条 centripetal Catmull-Rom（复用 Path 的弧长表；有 stops 时按段）。 */
-export function pathLength(points, closed = false, stops = null, interpolation) {
+/** 路径曲线全长（米）；显示层沿用停顿处分段的几何口径。 */
+export function pathLength(points, closed = false, markers = null, interpolation) {
   if (points.length < 2) return 0;
-  return new Path({ points, closed, interpolation, start: 0, duration: 1, speed: 'linear', ...(stops?.length ? { stops } : {}) }).length;
+  const path = { points, closed, interpolation, start: 0, duration: 1 };
+  path.schedule = markedSchedule(path, markers || []);
+  return new Path(path).length;
 }
 
-// ---- 停顿 stops / stopTimes：文档口径的纯函数 ----
+/** Marked arrivals use distance allocation unless explicit arrival times are supplied. */
+export function markedSchedule(path, markers = [], times, curve = 'linear') {
+  const schedule = endpointSchedule(path.points, path.closed, path.duration, curve);
+  if (times) delete schedule[0].allocation;
+  schedule.splice(1, 0, ...markers.map((i, j) => ({ i, t: times?.[j] ?? 0, stop: true,
+    ...(times ? { captionTime: true } : {}) })));
+  if (!times && markers.length) {
+    const model = new Path({ ...path, schedule });
+    schedule.slice(1, -1).forEach((entry, index) => { entry.t = model.segmentTimes[index]; });
+  }
+  return schedule;
+}
 
-/**
- * 路径改动后让 stops / stopTimes 仍然合法（Timeline.updatePath / edit.setPath 用）：
- * - patch 没给 stops 而顶点数变了 → 去掉停顿（索引对不上了）；越界的停顿（闭合 ↔ 开放切换）去掉；
- * - patch 没给 stopTimes 而时长变了 → 各停顿时刻按比例缩放；
- * - stops 为空 → 两个字段都删掉（没有停顿的路径与旧文档逐字段相同）。
- * @param {object|null} old 改动前的路径（新建时为 null） @param {object} next 合并后的路径 @param {object} patch
+/** Scale the one time column; callers retain their existing rounding precision. */
+export function scaleSchedule(schedule, ratio, roundTime = round4) {
+  return schedule.map(entry => ({ ...entry, t: roundTime(entry.t * ratio) }));
+}
+
+/** Explicit intervals and dwell use the same ordered arrival/departure entries. */
+export function intervalSchedule(path, sections) {
+/** @type {import('../types/contracts.js').PathDocument['schedule']} */
+  const schedule = [{ i: 0, t: 0, curve: pathCurve(path), segmented: true }];
+  for (const [index, section] of sections.entries()) {
+    if (section.start > schedule.at(-1).t) schedule.push({ i: section.from, t: section.start });
+    schedule.push({ i: section.to, t: section.end, curve: section.curve,
+      ...(index < sections.length - 1 ? { stop: true } : {}), ...(section.inherited ? { inherited: true } : {}),
+      ...(section.closed !== undefined ? { closed: section.closed } : {}) });
+  }
+  if (schedule.at(-1).t < path.duration) schedule.push({ i: schedule.at(-1).i, t: path.duration });
+  return schedule;
+}
+
+/** All vertex edits and timing adjustments share one remapping operation.
+ * map returns the new vertex index, or null for a removed vertex. Reverse
+ * preserves the established time semantics of explicitly authored motion.
  */
-export function fitStops(old, next, patch = {}, roundTime = round4) {
-  const out = { ...next };
-  const pointCountChanged = old && patch.points?.length !== undefined && patch.points.length !== old.points.length;
-  const durationChanged = old && next.duration !== old.duration;
-  // 顶点数变化优先清除旧时间表；显式传入的新时间表不再自动缩放。
-  if (old?.waypointTimes && !patch.waypointTimes) {
-    if (pointCountChanged) delete out.waypointTimes;
-    else if (durationChanged && out.waypointTimes) {
-      out.waypointTimes = out.waypointTimes.map(t => roundTime(t * next.duration / old.duration));
+/** @param {object} old @param {object} patch @param {{map?:(i:number)=>number|null,reverse?:boolean,stop?:{index:number,on:boolean},roundTime?:(t:number)=>number}} [options] */
+export function remapSchedule(old, patch, { map, reverse = false, stop, roundTime = round4 } = {}) {
+  const out = { ...old, ...patch };
+  const first = old.schedule[0], curve = pathCurve(old);
+  const changedCount = out.points.length !== old.points.length;
+  let schedule = (patch.schedule || old.schedule).map(entry => ({ ...entry }));
+  const captions = captionEntries(old);
+  let marks = stopEntries(old).map(entry => entry.i);
+  let times = captions.length ? captions.map(entry => entry.t)
+    : first.allocation === 'distance' || first.segmented || first.curve === 'cubic' ? null : stopEntries(old).map(entry => entry.t);
+  if (map && !first.segmented) {
+    const keep = marks.map(index => map(index) != null);
+    marks = marks.filter((_, i) => keep[i]).map(map);
+    if (times) times = times.filter((_, i) => keep[i]);
+    if (reverse) { marks.reverse(); if (times) times = times.map(t => round4(old.duration - t)).reverse(); }
+  }
+  if (stop) {
+    const { index, on } = stop;
+    if (first.segmented) {
+      const sections = scheduleSegments(old), boundary = sections.findIndex(section => section.to === index);
+      if (!on && boundary >= 0 && boundary < sections.length - 1) {
+        const left = sections[boundary], right = sections[boundary + 1];
+        sections.splice(boundary, 2, { from: left.from, to: right.to, start: left.start, end: right.end, curve: 'smooth' });
+      } else if (on && boundary < 0) {
+        const at = sections.findIndex(section => section.from < index && index < section.to);
+        if (at >= 0) {
+          const section = sections[at], time = round6(new Path(old).vertexTime(index) - old.start);
+          sections.splice(at, 1,
+            { from: section.from, to: index, start: section.start, end: time, curve: 'smooth' },
+            { from: index, to: section.to, start: time, end: section.end, curve: 'smooth' });
+        }
+      }
+      schedule = intervalSchedule(out, sections);
+    } else {
+      const at = marks.indexOf(index);
+      if (!on && at >= 0) { marks.splice(at, 1); times?.splice(at, 1); }
+      if (on && at < 0) {
+        const next = marks.findIndex(i => i > index), insert = next < 0 ? marks.length : next;
+        marks.splice(insert, 0, index);
+        if (times) {
+          const arrival = new Path(old).vertexTime(index) - old.start;
+          times.splice(insert, 0, round4(Math.min(Math.max(arrival, (insert ? times[insert - 1] : 0) + 0.05), (times[insert] ?? old.duration) - 0.05)));
+        }
+      }
     }
   }
-  if (old?.timedSegments && !patch.timedSegments) {
-    if (pointCountChanged) delete out.timedSegments;
-    else if (durationChanged && out.timedSegments) {
-      out.timedSegments = out.timedSegments.map(segment => ({
-        ...segment,
-        start: roundTime(segment.start * next.duration / old.duration),
-        end: roundTime(segment.end * next.duration / old.duration),
-      }));
-    }
+  if (!patch.schedule && changedCount && !map) { marks = []; times = null; }
+  const last = out.points.length - (out.closed ? 0 : 1);
+  const keep = marks.map(i => i > 0 && i < last);
+  marks = marks.filter((_, i) => keep[i]);
+  if (times) times = times.filter((_, i) => keep[i]);
+  if (!patch.schedule && out.duration !== old.duration) {
+    const ratio = out.duration / old.duration;
+    schedule = scaleSchedule(schedule, ratio, roundTime);
+    if (times) times = times.map(t => roundTime(t * ratio));
   }
-  if (patch.points && out.timedSegments) {
-    out.timedSegments = out.timedSegments.map(segment => {
-      const opened = segment.closed && JSON.stringify(out.points[segment.from]) !== JSON.stringify(out.points[segment.to]);
-      return opened ? { ...segment, closed: false } : segment;
-    });
+  if (times && !times.every((t, i) => t > 0 && t < out.duration && (!i || t > times[i - 1]))) times = null;
+  if (!patch.schedule) {
+    if (first.segmented && !changedCount) {
+      if (patch.points) {
+        const entries = schedule.filter(entry => !entry.caption);
+        for (let i = 1; i < entries.length; i++) {
+          if (entries[i].closed && JSON.stringify(out.points[entries[i - 1].i]) !== JSON.stringify(out.points[entries[i].i])) entries[i].closed = false;
+        }
+      }
+    } else if (first.curve === 'cubic' && !changedCount) {
+      schedule = schedule.filter(entry => !entry.caption).map(entry => {
+        delete entry.stop;
+        return marks.includes(entry.i) ? { ...entry, stop: true } : entry;
+      });
+      if (times) schedule.push(...marks.map((i, j) => ({ i, t: times[j], caption: true })));
+    } else schedule = markedSchedule(out, first.segmented ? [] : marks, first.segmented ? null : times, curve);
   }
-  let stops = 'stops' in patch ? patch.stops : out.stops;
-  let times = 'stopTimes' in patch ? patch.stopTimes : out.stopTimes;
-  delete out.stops;
-  delete out.stopTimes;
-
-  // 未显式更新停顿时，顶点数变化会使旧索引失效。
-  if (pointCountChanged && !('stops' in patch)) return out;
-  if (!stops?.length) return out;
-
-  const lastStopIndex = out.closed ? out.points.length - 1 : out.points.length - 2;
-  const keep = stops.map((index) => index >= 1 && index <= lastStopIndex);
-  if (keep.some((valid) => !valid)) {
-    stops = stops.filter((_, index) => keep[index]);
-    if (times?.length === keep.length) times = times.filter((_, index) => keep[index]);
-  }
-
-  if (times?.length && durationChanged && !('stopTimes' in patch)) {
-    times = times.map((t) => roundTime(t * out.duration / old.duration));
-  }
-  if (times) {
-    const validTimes = times.length === stops.length && times.every((t, index) => (
-      t > 0 && t < out.duration && (index === 0 || t > times[index - 1])
-    ));
-    if (!validTimes) times = undefined;
-  }
-
-  if (stops?.length) {
-    out.stops = stops.slice();
-    if (times?.length) out.stopTimes = times.slice();
-  }
+  out.schedule = schedule;
   return out;
 }
 
@@ -164,80 +211,7 @@ export function fitPathToDuration(path, total) {
   const end = path.start + path.duration;
   if (!(total > 0) || !Number.isFinite(total) || !(path.start >= 0) || !(path.duration > 0) || !Number.isFinite(end) || end <= total) return path;
   const start = path.start >= total ? round6(path.start * total / end) : path.start;
-  const duration = round6(total - start);
-  return fitStops(path, { ...path, start, duration });
-}
-
-/** 插入顶点（新顶点下标 index）后的停顿：之后的索引 +1。 */
-export function stopsAfterInsert(path, index) {
-  if (!path.stops?.length) return {};
-  return { stops: path.stops.map((i) => (i >= index ? i + 1 : i)), ...(path.stopTimes ? { stopTimes: path.stopTimes.slice() } : {}) };
-}
-
-/** 删除顶点 index 后的停顿：删掉该顶点上的停顿，之后的索引 −1。 */
-export function stopsAfterDelete(path, index) {
-  if (!path.stops?.length) return {};
-  const keep = path.stops.map((i) => i !== index);
-  return {
-    stops: path.stops.filter((_, j) => keep[j]).map((i) => (i > index ? i - 1 : i)),
-    ...(path.stopTimes ? { stopTimes: path.stopTimes.filter((_, j) => keep[j]) } : {}),
-  };
-}
-
-/** 反向（顶点倒序）后的停顿：索引 i → n−1−i，时刻 t → duration − t，整体倒序（闭合路径落到首点的停顿由 fitStops 去掉）。 */
-export function stopsAfterReverse(path) {
-  if (!path.stops?.length) return {};
-  const n = path.points.length;
-  return {
-    stops: path.stops.map((i) => n - 1 - i).reverse(),
-    ...(path.stopTimes ? { stopTimes: path.stopTimes.map((t) => round4(path.duration - t)).reverse() } : {}),
-  };
-}
-
-/** 分段运镜用段边界表示停顿；拆分或合并时保留两侧的起止时刻。 */
-function toggleSegmentStop(path, index, on) {
-  const segments = path.timedSegments.map(segment => ({ ...segment }));
-  const boundary = segments.findIndex(segment => segment.to === index);
-  if (!on && boundary >= 0 && boundary < segments.length - 1) {
-    const left = segments[boundary], right = segments[boundary + 1];
-    segments.splice(boundary, 2, { from: left.from, to: right.to, start: left.start, end: right.end, speed: 'smooth' });
-  } else if (on && boundary < 0) {
-    const segmentIndex = segments.findIndex(segment => segment.from < index && index < segment.to);
-    if (segmentIndex >= 0) {
-      const segment = segments[segmentIndex];
-      const time = round6(new Path(path).vertexTime(index) - path.start);
-      segments.splice(segmentIndex, 1,
-        { from: segment.from, to: index, start: segment.start, end: time, speed: 'smooth' },
-        { from: index, to: segment.to, start: time, end: segment.end, speed: 'smooth' });
-    }
-  }
-  return { timedSegments: segments };
-}
-
-/**
- * 在顶点 index 处加 / 去停顿。已有 stopTimes 时新停顿的时刻 = 当前时间分配下到达该顶点的时刻（其余段不变）。
- * @returns {{stops?:number[], stopTimes?:number[], timedSegments?:object[]}} 交给 updatePath 的 patch（stops 为空时 fitStops 会删掉字段）
- */
-export function toggleStop(path, index, on) {
-  if (path.timedSegments) return toggleSegmentStop(path, index, on);
-  const stops = (path.stops || []).slice(), times = path.stopTimes ? path.stopTimes.slice() : null;
-  const stopIndex = stops.indexOf(index);
-  if (!on) {
-    if (stopIndex < 0) return { stops };
-    stops.splice(stopIndex, 1);
-    if (times) times.splice(stopIndex, 1);
-    return times ? { stops, stopTimes: times } : { stops };
-  }
-  if (stopIndex >= 0) return times ? { stops, stopTimes: times } : { stops };
-  const nextStopIndex = stops.findIndex((i) => i > index);
-  const insertIndex = nextStopIndex < 0 ? stops.length : nextStopIndex;
-  stops.splice(insertIndex, 0, index);
-  if (!times) return { stops };
-  const arrival = new Path(path).vertexTime(index) - path.start; // 当前时间分配下到达该顶点的时刻（相对 start）
-  const previousTime = insertIndex ? times[insertIndex - 1] : 0;
-  const nextTime = insertIndex < times.length ? times[insertIndex] : path.duration;
-  times.splice(insertIndex, 0, round4(Math.min(Math.max(arrival, previousTime + 0.05), nextTime - 0.05)));
-  return { stops, stopTimes: times };
+  return remapSchedule(path, { start, duration: round6(total - start) });
 }
 
 /** 默认步速（m/s）：匀速段的速度。角色新路径比原先的 1.2 m/s 提高 20%。 */

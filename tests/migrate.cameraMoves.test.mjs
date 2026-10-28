@@ -1,10 +1,11 @@
+import { oldFields } from './migrate/pathModel.js';
 // cameraMoves 单元测试（阶段 F 第 1 步）：node 直接跑，不起浏览器。
 // 运行：npm run test:unit
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { cameraMove, defaultParams, aimRotation, appendMove, lookAtWindows, pathEnd, MoveError, CAMERA_MOVES, MOVE_DURATION } from '../src/anim/cameraMoves.js';
-import { Path } from '../src/anim/Path.js';
+import { cameraMove, defaultParams, aimRotation, appendMove, lookAtWindows, pathEnd, MoveError, CAMERA_MOVES, MOVE_DURATION } from './migrate/pathModel.js';
+import { Path } from './migrate/pathModel.js';
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 const hd = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
@@ -176,8 +177,8 @@ test('appendMove 停顿：推 3 s + 半环绕 5 s —— 接缝加 stop、stopTi
   const a = cameraMove('push_in', { position: CAM, aim: AIM });
   const pathA = { id: 'p1', target: 'c1', points: a.points, closed: false, start: 0, duration: a.duration, speed: 'smooth', orient: 'keep' };
   const ab = appendMove(pathA, cameraMove('half_orbit', { position: pathEnd(pathA), aim: AIM }));
-  assert.deepEqual(ab.stops, [a.points.length - 1]);
-  assert.deepEqual(ab.stopTimes, [3]);
+  assert.deepEqual(oldFields(ab).stops, [a.points.length - 1]);
+  assert.deepEqual(oldFields(ab).stopTimes, [3]);
   const P = new Path(ab);
   assert.ok(P.speedAt(3) < 0.05, `t=3 速度 ${P.speedAt(3)}`);
   assert.equal(ab.duration, 8);
@@ -195,8 +196,8 @@ test('appendMove 停顿：推 3 s + 半环绕 5 s —— 接缝加 stop、stopTi
   assert.ok(P.speedAt(1.5) > 0.1 && P.speedAt(5.5) > 0.1); // 两段中间都在动
   // 再追加一段：已有停顿沿用、时刻按名义时长
   const abc = appendMove(ab, cameraMove('push_in', { position: pathEnd(ab), aim: AIM, params: { duration: 2 } }));
-  assert.deepEqual(abc.stopTimes, [3, 8]);
-  assert.equal(abc.stops.length, 2);
+  assert.deepEqual(oldFields(abc).stopTimes, [3, 8]);
+  assert.equal(oldFields(abc).stops.length, 2);
   assert.equal(abc.duration, 10);
 });
 
@@ -229,18 +230,18 @@ test('appending retains closed tangents and linear custom prefix at every old fr
 });
 
 test('timed appended loops still support stop editing and independent endpoint editing', async () => {
-  const { toggleStop, fitStops } = await import('../src/anim/pathGen.js');
+  const { remapSchedule } = await import('../src/anim/pathGen.js');
   const move = cameraMove('circle', { position: CAM, aim: AIM });
   const prefix = { ...move, start: 0, speed: 'smooth', orient: 'keep' };
   const json = appendMove(prefix, cameraMove('truck', { position: pathEnd(prefix), aim: AIM }));
-  const stopped = { ...json, ...toggleStop(json, 4, true) };
-  assert.equal(stopped.timedSegments.length, 3);
-  assert.equal(new Path(stopped).speedAt(stopped.timedSegments[0].end), 0);
-  assert.deepEqual(stopped.timedSegments.at(-1), json.timedSegments.at(-1));
-  const resumed = { ...stopped, ...toggleStop(stopped, 4, false) };
-  assert.equal(resumed.timedSegments.length, 2);
+  const stopped = remapSchedule(json, {}, { stop: { index: 4, on: true } });
+  assert.equal(oldFields(stopped).timedSegments.length, 3);
+  assert.equal(new Path(stopped).speedAt(oldFields(stopped).timedSegments[0].end), 0);
+  assert.deepEqual(oldFields(stopped).timedSegments.at(-1), oldFields(json).timedSegments.at(-1));
+  const resumed = remapSchedule(stopped, {}, { stop: { index: 4, on: false } });
+  assert.equal(oldFields(resumed).timedSegments.length, 2);
   const points = structuredClone(json.points); points[0][0] += .5;
-  const edited = fitStops(json, { ...json, points }, { points });
-  assert.equal(edited.timedSegments[0].closed, false);
+  const edited = remapSchedule(json, { points });
+  assert.equal(edited.schedule.find(entry => entry.i > 0).closed, false);
   assert.deepEqual(edited.points.at(-1), json.points.at(-1));
 });

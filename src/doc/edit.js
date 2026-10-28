@@ -10,7 +10,8 @@ import * as THREE from 'three';
 import { genId, hexColor } from '../entities/Entity.js';
 import { BODY_TYPES, CROWD_PALETTE, CHARACTER_COLOR, CHARACTER_COLORS, CHARACTER_PALETTE } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
-import { paceFor, defaultDuration, fitStops, fitPathToDuration } from '../anim/pathGen.js';
+import { endpointSchedule, pathCurve, motionEntries } from '../anim/schedule.js';
+import { paceFor, defaultDuration, fitPathToDuration } from '../anim/pathGen.js';
 import { rampFor, isWalker } from '../anim/Path.js';
 import { cameraMove, appendMove, lookAtWindows, pathEnd, MoveError } from '../anim/cameraMoves.js';
 import { round6, clone, round4, D2R, R2D } from '../util/math.js';
@@ -253,13 +254,13 @@ export function pathStartPoint(type, pos, groundY) {
  * opts.set 里给出的字段两种情况都覆盖，但角色 / 组始终使用匀速。
  * @returns {{path:object, replaced:boolean}}
  */
-/** @param {ReturnType<typeof import("./schema.js").createEmptyDocument>} doc @param {string} target @param {number[][]} points @param {{closed?:boolean,start?:number,set?:Partial<import("../types/contracts.js").PathDocument>}} [options] */
-export function setPath(doc, target, points, { closed = false, start = 0, set = {} } = {}) {
+/** @param {ReturnType<typeof import("./schema.js").createEmptyDocument>} doc @param {string} target @param {number[][]} points @param {{closed?:boolean,start?:number,curve?:'linear'|'smooth',set?:Partial<import("../types/contracts.js").PathDocument>}} [options] */
+export function setPath(doc, target, points, { closed = false, start = 0, curve, set = {} } = {}) {
   const ent = findEntity(doc, target);
   if (!ent) throw new Error(`实体不存在：${target}`);
   const old = doc.paths.find((p) => p.target === target);
   const uniform = isWalker(ent.type);
-  const speed = uniform ? 'linear' : set.speed ?? old?.speed ?? PATH_DEFAULTS.speed(ent.type);
+  const speed = uniform ? 'linear' : curve ?? set.schedule?.[0]?.curve ?? (old ? pathCurve(old) : undefined) ?? PATH_DEFAULTS.speed(ent.type);
   // 显式时长优先；角色 / 组重画时沿用旧时长，其余情况按步速估算。
   let duration = set.duration ?? (uniform ? old?.duration : undefined);
   if (duration == null) {
@@ -268,20 +269,13 @@ export function setPath(doc, target, points, { closed = false, start = 0, set = 
       ramp: speed === 'smooth' ? rampFor(ent.type) : 0,
     });
   }
-  let path;
-  if (old) { // 重新绘制：旧停顿作废（set.stops 给出时用新的）
-    path = fitStops(null, { ...old, interpolation: undefined, points: clone(points), closed, duration, stops: undefined, stopTimes: undefined, ...clone(set), speed });
-    if (!set.timedSegments) delete path.timedSegments;
-    if (!set.waypointTimes) delete path.waypointTimes;
-    doc.paths = doc.paths.map((p) => (p === old ? path : p));
-  } else {
-    doc.timeline.tracks = doc.timeline.tracks.filter((t) => !(t.target === target && t.property === 'pos'));
-    path = fitStops(null, {
-      id: newId(doc), target, points: clone(points), closed, start, duration,
-      orient: PATH_DEFAULTS.orient(ent.type), ...clone(set), speed,
-    });
-    doc.paths = [...doc.paths, path];
-  }
+  let path = {
+    ...(old || { id: newId(doc), target, start, orient: PATH_DEFAULTS.orient(ent.type) }),
+    interpolation: undefined, points: clone(points), closed, duration, ...clone(set),
+    schedule: set.schedule || endpointSchedule(points, closed, duration, speed),
+  };
+  if (!old) doc.timeline.tracks = doc.timeline.tracks.filter(t => !(t.target === target && t.property === 'pos'));
+  doc.paths = old ? doc.paths.map(p => p === old ? path : p) : [...doc.paths, path];
   path = fitPathToDuration(path, doc.timeline.duration);
   doc.paths = doc.paths.map((p) => p.id === path.id ? path : p);
   return { path, replaced: !!old };
@@ -373,12 +367,12 @@ export function applyCameraMove(doc, camId, { name, subject, aim, params = {}, t
   if (move.points) {
     if (before.path) {
       const bp = before.path;
-      undo.path = { ...clone(bp), stops: bp.stops || [], stopTimes: bp.stopTimes, timedSegments: bp.timedSegments, waypointTimes: bp.waypointTimes };
+      undo.path = clone(bp);
       const next = { ...before.path, ...appendMove(before.path, move) };
       doc.paths = doc.paths.map((p) => (p === before.path ? next : p));
     } else {
       if (before.posTrack && !preservePositionKeys) tl.tracks = tl.tracks.filter((t) => t !== before.posTrack);
-      doc.paths = [...doc.paths, { id: newId(doc), target: camId, points: move.points, closed: move.closed, start, duration: move.duration, speed: 'smooth', orient: 'keep' }];
+      doc.paths = [...doc.paths, { id: newId(doc), target: camId, points: move.points, closed: move.closed, start, duration: move.duration, schedule: endpointSchedule(move.points, move.closed, move.duration, 'smooth'), orient: 'keep' }];
       undo.path = null;
     }
   } else {
@@ -431,10 +425,11 @@ export function removeCameraMoveTail(doc, camId, segment) {
   const endIndex = path.points.length - count - 1;
   path.points = path.points.slice(0, endIndex + 1);
   path.duration = round4(start - path.start);
-  if (path.timedSegments) path.timedSegments = path.timedSegments.slice(0, -1);
-  if (path.waypointTimes) path.waypointTimes = path.waypointTimes.slice(0, endIndex + 1);
-  if (path.stops) path.stops = path.stops.filter(i => i < endIndex);
-  if (path.stopTimes) path.stopTimes = path.stopTimes.slice(0, path.stops.length);
+  const entries = motionEntries(path);
+  path.schedule = entries.filter(entry => entry.i <= endIndex);
+  const last = path.schedule.at(-1);
+  if (last) { last.t = path.duration; delete last.stop; delete last.captionTime; }
+
 }
 
 /** 清除机位的运镜：路径 + 该机位全部约束 + rot 轨道。返回是否有改动。 */

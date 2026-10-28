@@ -1,6 +1,7 @@
 // @ts-check
 import * as THREE from 'three';
-import { line, arc, polar } from './pathGen.js';
+import { line, arc, polar, markedSchedule, intervalSchedule } from './pathGen.js';
+import { endpointSchedule, pathCurve, motionEntries, stopEntries, scheduleSegments } from './schedule.js';
 import { Path } from './Path.js';
 import { D2R, R2D, round6 } from '../util/math.js';
 
@@ -191,7 +192,7 @@ const openPoints = (points, closed) => (closed ? [...points, points[0]] : points
 /**
  * 追加拼接：next 接在 path 后面。next 的首点必须与 path 的终点重合（运镜从路径终点生成）。
  * → 新的 path 字段：points 接续（去掉 next 首点；闭合的两边先展开）、duration 累加、closed = false，
- *   接缝顶点加一个停顿（stops），各段时长按名义时长分配（stopTimes：推 3 s + 半环绕 5 s → 接缝在 3 s）。
+ *   接缝顶点加一个停顿（stops），各段时长按名义时长分配（推 3 s + 半环绕 5 s → 接缝在 3 s）。
  * start / speed / orient 等其余字段保持。
  */
 export function appendMove(path, next) {
@@ -200,32 +201,28 @@ export function appendMove(path, next) {
   if (Math.hypot(head[0] - end[0], head[1] - end[1], head[2] - end[2]) > 1e-4) throw new MoveError('追加的运镜必须从现有路径的终点开始');
   const prev = openPoints(path.points, path.closed);
   const points = [...prev, ...openPoints(next.points, next.closed).slice(1)];
-  if (path.timedSegments) return { ...path, points, closed: false, duration: round6(path.duration + next.duration),
-    timedSegments: [...path.timedSegments, { from: prev.length - 1, to: points.length - 1, start: path.duration, end: round6(path.duration + next.duration), speed: 'smooth', ...(next.closed ? { closed: true } : {}) }] };
-  if (path.waypointTimes) {
-    const model = new Path({ ...next, start: 0, speed: 'smooth', orient: 'keep' });
-    return { ...path, points, closed: false, duration: round6(path.duration + next.duration),
-      stops: [...(path.stops || []), prev.length - 1],
-      waypointTimes: [...path.waypointTimes, ...points.slice(prev.length).map((_, i) => round6(path.duration + model.vertexTime(i + 1)))] };
+  const duration = round6(path.duration + next.duration), first = path.schedule[0];
+  const result = { ...path, points, closed: false, duration };
+  const tail = { from: prev.length - 1, to: points.length - 1, start: path.duration, end: duration, curve: 'smooth', closed: next.closed };
+  if (first.segmented) return { ...result, schedule: intervalSchedule(result, [...scheduleSegments(path), tail]) };
+  if (first.curve === 'cubic') {
+    const model = new Path({ ...next, start: 0, schedule: endpointSchedule(next.points, next.closed, next.duration, 'smooth'), orient: 'keep' });
+    const entries = motionEntries(path).map(entry => ({ ...entry }));
+    entries.at(-1).stop = true;
+    return { ...result, schedule: [...entries,
+      ...points.slice(prev.length).map((_, i) => ({ i: prev.length + i, t: round6(path.duration + model.vertexTime(i + 1)) }))] };
   }
-  // A closed curve must retain its cyclic tangents; a linear prefix must not be
-  // silently eased by the new seam. The existing timed segments carry both facts.
-  if ((path.closed || path.speed === 'linear') && !path.stops?.length || next.closed) {
-    const cuts = [0, ...(path.stops || []), prev.length - 1];
+  const markers = stopEntries(path), curve = pathCurve(path);
+  // Cyclic tangents and a linear prefix must survive appending a new motion.
+  if ((path.closed || curve === 'linear') && !markers.length || next.closed) {
+    const cuts = [0, ...markers.map(entry => entry.i), prev.length - 1];
     const times = [0, ...new Path(path).segmentTimes];
-    const timedSegments = cuts.slice(0, -1).map((from, i) => ({ from, to: cuts[i + 1], start: times[i], end: times[i + 1],
-      speed: path.stops?.length ? 'smooth' : path.speed || 'smooth', ...(path.closed && cuts.length === 2 ? { closed: true } : {}) }));
-    timedSegments.push({ from: prev.length - 1, to: points.length - 1, start: path.duration, end: round6(path.duration + next.duration), speed: 'smooth', ...(next.closed ? { closed: true } : {}) });
-    const result = { ...path, points, closed: false, duration: round6(path.duration + next.duration), timedSegments };
-    delete result.stops; delete result.stopTimes;
-    return result;
+    const sections = cuts.slice(0, -1).map((from, i) => ({ from, to: cuts[i + 1], start: times[i], end: times[i + 1],
+      curve: markers.length ? 'smooth' : curve || 'smooth', closed: path.closed && cuts.length === 2 }));
+    return { ...result, schedule: intervalSchedule(result, [...sections, tail]) };
   }
-  // 已有停顿沿用（闭合路径展开后索引不变）；没有 stopTimes 的按当前（弧长比例）分配取到达时刻
-  const stops = [...(path.stops || [])];
-  const times = path.stops?.length ? (path.stopTimes?.length ? path.stopTimes.slice() : new Path(path).segmentTimes.slice(0, -1).map(round6)) : [];
-  stops.push(prev.length - 1);
-  times.push(round6(path.duration));
-  return { ...path, points, closed: false, duration: round6(path.duration + next.duration), stops, stopTimes: times };
+  const times = markers.length ? (first.allocation === 'distance' ? new Path(path).segmentTimes.slice(0, -1).map(round6) : markers.map(entry => entry.t)) : [];
+  return { ...result, schedule: markedSchedule(result, [...markers.map(entry => entry.i), prev.length - 1], [...times, round6(path.duration)], curve) };
 }
 
 const sameSubject = (a, b) => JSON.stringify(a) === JSON.stringify(b);
