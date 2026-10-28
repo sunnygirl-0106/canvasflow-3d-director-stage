@@ -15,7 +15,6 @@ import { el, toast, pointerNDC } from '../util/dom.js';
 import { worldBox } from '../util/measure.js';
 import { ShotManager } from './ShotManager.js';
 import { Panorama } from './Panorama.js';
-import { Labels } from './Labels.js';
 import { LabelSprites } from './LabelSprites.js';
 import * as edit from '../doc/edit.js';
 import { round6, clone } from '../util/math.js';
@@ -41,7 +40,7 @@ const PROP_NAME = { pos: '位置', rot: '旋转', scale: '缩放', fov: '视野'
  * 任何事件都意味着画面可能变化，emit 时自动请求重绘。
  */
 export class App extends Emitter {
-  constructor({ stage, rig, labelLayer }) {
+  constructor({ stage, rig }) {
     super();
     this.stage = stage;
     this.rig = rig;
@@ -57,7 +56,6 @@ export class App extends Emitter {
     this.povCameraId = null;       // 机位视角下此刻实际出画的机位
     this.mainPreview = false;     // 正透过主机位看成片（gizmo 隐藏）
     this.povUnset = false;        // 机位视角 active 但没设主机位（视口提示）
-    this.labelPreview = false;     // 「预览名牌」：视口也用精灵名牌（会话态）
     this._cleanDepth = 0;          // 洁净渲染嵌套层数（>0 时 gizmo 等不显示）
 
     this.charSeq = 0; // 下一个自动角色名的序号（edit.charName）；AI 编译也从这里接着起名
@@ -116,8 +114,7 @@ export class App extends Emitter {
     this.cameraMoves = new CameraMoveTool(this); // 机位运镜
     this.selection.setSkipPredicate(() => this.gizmo.dragging || (this.gizmo.visible && this.gizmo.overAxis) || this.pathTool.busy || this.pathEditor.busy);
 
-    this.labels = new Labels(labelLayer);
-    this.labelSprites = new LabelSprites(this); // 3D 精灵名牌：截图 / 导出 / 「预览名牌」
+    this.labelSprites = new LabelSprites(this); // 视口、截图和导出共用
     this.shots = new ShotManager(this);
     this.panorama = new Panorama(stage, {
       getSky: () => this.sceneState.sky,
@@ -378,7 +375,6 @@ export class App extends Emitter {
     this.directorDetached = true;
     this.rig.controls.enabled = false;
     this.preview = true;
-    this.labelSprites.enable();
     this.beginCleanRender();
     this._applyFrame();
     this._syncPov();
@@ -477,7 +473,6 @@ export class App extends Emitter {
     }
     this.rig.controls.enabled = true;
     this.endCleanRender();
-    this.labelSprites.disable();
     this._applyFrame();
     this._syncPov();
     this._syncEditCamera();
@@ -548,13 +543,6 @@ export class App extends Emitter {
   setScenePos(axis, v, opts) { this.sceneEdit((s) => { s.pos['xyz'.indexOf(axis)] = round6(v); }, opts); }
   setSceneRot(axis, v, opts) { this.sceneEdit((s) => { s.rot['xyz'.indexOf(axis)] = round6(v); }, opts); }
   setSkyColor(hex, opts) { this.sceneEdit((s) => { s.sky = '#' + new THREE.Color(hex).getHexString(); }, opts); }
-  /** 「预览名牌」：视口里也用 3D 精灵名牌（看导出效果）；会话态，不进文档。 */
-  setLabelPreview(on) {
-    if (!!on === !!this.labelPreview) return;
-    this.labelPreview = !!on;
-    if (on) this.labelSprites.enable(); else this.labelSprites.disable();
-    this.emit('labelPreview', this.labelPreview);
-  }
   setLabelsVisible(v) { this.sceneEdit((s) => { s.labels = v; }); }
   setGroundVisible(v) { this.sceneEdit((s) => { s.ground.visible = v; }); }
   setGroundOpacity(v, opts) { this.sceneEdit((s) => { s.ground.opacity = round6(v); }, opts); }
@@ -731,10 +719,6 @@ export class App extends Emitter {
     this.pathOverlay.update();
     this.selection.update();
     this.gizmo.updateSize();
-    this.labels.update(this.entities, this.getRenderCamera(), {
-      worldScale: this.stage.world.scale.y,
-      hideCameras: this.cameraView,
-    });
     this.labelSprites.update();
     if (this._cleanDepth) this.hideOverlays();
   }

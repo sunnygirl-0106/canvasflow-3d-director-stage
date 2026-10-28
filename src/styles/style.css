@@ -161,19 +161,6 @@ main > .side, #sideRail { height: calc(100% - var(--timeline-visible-height)); }
   flex: 1; position: relative; min-width: 0; background: var(--bg);
 }
 #viewport canvas { display: block; }
-#labelLayer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.label3d {
-  /* 屏幕坐标由 JS 写 translate 属性（不触发布局）；transform 负责锚点偏移 */
-  position: absolute; left: 0; top: 0; transform: translate(-50%, -135%);
-  background: #fff; color: #000; font-size: 14px; font-weight: 400;
-  padding: 3px 14px; border-radius: 8px; pointer-events: none; white-space: nowrap;
-  box-shadow: 0 2px 10px rgba(0,0,0,.5);
-}
-/* 机位名牌保持紧凑，与摄影机的中性配色一致。 */
-.label3d.cam {
-  font-size: 11px; font-weight: 400; padding: 2px 9px;
-  letter-spacing: .04em; transform: translate(-50%, -160%);
-}
 #frame {
   position: absolute; pointer-events: none; display: none;
 }
@@ -678,8 +665,6 @@ header .logo { font-size: 15px; white-space: nowrap; }
 #dock { position: relative; left: auto; bottom: auto; transform: none; }
 #dock .dockbtn { flex: none; }
 .dockmenu { z-index: 80; }
-.label3d, .label3d.cam { background: transparent; color: #fff; box-shadow: none; text-shadow: 0 1px 3px #0009; padding-left: 2px; padding-right: 2px; line-height: 1.25; }
-.label3d.cam { color: #c8d0d8; }
 .ai-capsule { width: 246.5625px; position: relative; }
 .ai-capsule .ai-input { border: 1px solid var(--line2); border-radius: 28px; background: var(--surface-dock); min-height: 51.5625px; display: flex; flex-direction: row; align-items: center; gap: 4px; padding: 7px 6px; overflow: visible; }
 .ai-capsule .ai-text { background: transparent; border: 0; border-radius: 0; font-size: 12px; line-height: 24px; padding: 0; min-height: 24px; max-height: 72px; overflow-y: auto; }

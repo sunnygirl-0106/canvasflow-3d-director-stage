@@ -56,12 +56,12 @@ export class DocumentController {
       a.selection.highlight(null);
     }
     for (const ent of removed) {
-      a.stage.remove(ent.root); a.labels.detach(ent); ent.dispose();
+      a.stage.remove(ent.root); ent.dispose();
     }
     a.entities = a.entities.filter((e) => byId.has(e.id));
     for (const group of a.entities.filter((e) => e.type === 'group')) {
       for (const member of [...group.members]) if (!byId.has(member.id)) {
-        group.removeMember(member); a.labels.detach(member); member.dispose();
+        group.removeMember(member); member.dispose();
       }
     }
     // 先恢复手动值，再建立新的 base。未修改实体的运行时对象不动。
@@ -69,7 +69,6 @@ export class DocumentController {
       const ent = a.findEntity(json.id);
       ent.applyJSON(json, ctx);
       a.timeline.invalidateBase(ent);
-      a.labels.rename(ent);
     }
     if (next.scene !== prev.scene) this.applyScene(next.scene);
     if (next.timeline !== prev.timeline || next.paths !== prev.paths || next.constraints !== prev.constraints || changed.length || removed.length) {
@@ -90,7 +89,6 @@ export class DocumentController {
     a.stage.setWorldPos(...s.pos);
     a.stage.setWorldRot(...s.rot.map((v) => v * D2R));
     a.stage.setSkyColor(s.sky);
-    a.labels.setVisible(s.labels);
     a.stage.setGroundVisible(s.ground.visible);
     a.stage.setGroundOpacity(s.ground.opacity);
     a.stage.setGroundHeight(s.ground.height);
@@ -110,7 +108,6 @@ export class DocumentController {
     this.app.selection.highlight(null);
     for (const ent of this.app.entities) {
       this.app.stage.remove(ent.root);
-      this.app.labels.detach(ent);
       if (!keep.has(ent)) ent.dispose();
     }
     this.app.entities = [];
@@ -136,7 +133,6 @@ export class DocumentController {
       this.app.stage.add(ent.root);
       if (ent.type === 'camera') ent.attachScene(this.app.stage.scene);
       ent.setHelpersVisible(!this.app.cameraView);
-      this.app.labels.attach(ent);
       this.app.entities.push(ent);
     }
 

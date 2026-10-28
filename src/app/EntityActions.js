@@ -50,7 +50,6 @@ export class EntityActions {
       for (const member of ent.children) doc.entities.push(member.toJSON({ parent: ent.id }));
     });
     this.app.stage.add(ent.root);
-    this.app.labels.attach(ent);
     this.app.entities.push(ent);
     this.app.store.commit(change);
     this.app.emit('entities');
@@ -120,7 +119,6 @@ export class EntityActions {
     members.forEach((m, i) => { group.add(m.root); m.applyTransform(res.members[i].transform); });
     this.app.entities = this.app.entities.filter((e) => !members.includes(e));
     this.app.entities.push(crowd);
-    this.app.labels.attach(crowd);
     this.app.store.commit(change);
     this.app.select(crowd.id);
     toast(`已打组：${members.length} 个角色 → ${crowd.name}`);
@@ -226,7 +224,7 @@ export class EntityActions {
     let change;
     try { change = this.app.store.prepare('复制实体', (doc) => { doc.entities.push(...json); }); }
     catch (err) { copies.forEach((e) => e.dispose()); throw err; }
-    for (const ent of copies) { this.app.stage.add(ent.root); this.app.labels.attach(ent); this.app.entities.push(ent); }
+    for (const ent of copies) { this.app.stage.add(ent.root); this.app.entities.push(ent); }
     this.app.store.commit(change);
     if (copies.length) this.app.select(copies.at(-1).id);
   }

@@ -1,10 +1,44 @@
 // @ts-check
 import * as THREE from 'three';
-import { labelAnchor, layoutLabels } from './Labels.js';
+/** 名牌锚点（世界坐标）：实体根节点上方 labelOffset（头顶 / 机位上方）。 */
+export function labelAnchor(t, worldScale, out) {
+  t.root.getWorldPosition(out);
+  out.y += t.labelOffset() * worldScale;
+  return out;
+}
+
+/**
+ * 名牌重叠避让（视口、截图和导出共用）。
+ * items：{ x 名牌框底边中点屏幕 x, bottom 框底屏幕 y（向下为正）, w, h 框宽高, depth 到相机距离 }，单位一致即可。
+ * 按屏幕 x 排序后，离相机近的先落位；后落位的（远的）与已落位的矩形相交就往上推，推开距离 = 重叠高度 + gap，
+ * 直到与所有已落位的都不相交。结果写在 item.dy（向上推的距离，≥ 0）；没有重叠时 dy = 0，位置不变。
+ */
+export function layoutLabels(items, gap = 4) {
+  const order = items.slice().sort((a, b) => a.x - b.x);
+  for (const it of order) it.dy = 0;
+  order.sort((a, b) => a.depth - b.depth); // 稳定排序：同距离按 x
+  const placed = [];
+  for (const it of order) {
+    for (let moved = true; moved;) {
+      moved = false;
+      for (const o of placed) {
+        if (Math.abs(it.x - o.x) * 2 >= it.w + o.w) continue;
+        const bot = it.bottom - it.dy, oBot = o.bottom - o.dy;
+        if (bot <= oBot - o.h || bot - it.h >= oBot) continue;
+        it.dy += bot - (oBot - o.h) + gap; // 底边推到对方顶边之上 gap
+        moved = true;
+      }
+    }
+    placed.push(it);
+  }
+  return items;
+}
+
+
 
 const _camPos = new THREE.Vector3();
 
-// 名牌样式：照抄 style.css 的 .label3d / .label3d.cam（单位 CSS px）
+// 视口和导出共用名牌样式（单位 CSS px）
 const STYLE = {
   char: { font: 14, weight: 400, padX: 2, padY: 3, fg: '#fff' },
   cam: { font: 12, weight: 400, padX: 2, padY: 2, fg: '#fff' },
@@ -12,19 +46,15 @@ const STYLE = {
 const SHADOW = { y: 2, blur: 10, color: 'rgba(0,0,0,.5)' };
 const MARGIN = 12;               // 纹理四周给阴影留的边（CSS px）
 const LINE = 1.25;               // 行高 / 字号
-const CHAR_PX = 23.5;            // 与 DOM 的 14px × 1.25 + 6px 一致
+const CHAR_PX = 23.5;            // 14px × 1.25 + 6px
 const DPR = 2;                   // 纹理按 2 倍绘制，避免放大发糊
 const CHAR_BOX_H = STYLE.char.font * LINE + STYLE.char.padY * 2;
-const SCALE = CHAR_PX / CHAR_BOX_H; // CSS 尺寸比例（与 DOM 相同）
+const SCALE = CHAR_PX / CHAR_BOX_H; // CSS 尺寸比例
 
 /**
- * 3D 精灵名牌：与 DOM 名牌（Labels）同一锚点、同一样式，但画进 WebGL 画面，
- * 所以截图 / 机位预览 / 导出视频里都有名牌。平时视口仍用 DOM 名牌（更清晰、不占 GPU）。
- * - 锚点在名牌框底部中央，位置 = labelAnchor（头顶 / 机位上方）；
- * - sizeAttenuation=false，名牌高 = 画面高 × CSS字号 / 视口高度（与分辨率成比例），每次渲染按当前相机投影矩阵算 scale；
- * - depthTest=false、renderOrder 最高：与 DOM 名牌一样始终压在画面最上层。
- * 启用方式：enable()/disable()（导出、「预览名牌」开关，引用计数；启用期间隐藏 DOM 层）；
- * withCleanRender 期间临时显示（beginClean/endClean），机位名牌在洁净渲染里不显示（相机体也不显示）。
+ * 视口、截图与视频共用精灵名牌，锚点位于头顶 / 机位上方。
+ * sizeAttenuation=false，按当前相机投影矩阵计算尺寸，输出分辨率变化时同比缩放。
+ * 洁净渲染期间隐藏机位名牌，可按导出选项临时隐藏全部名牌。
  */
 export class LabelSprites {
   constructor(app) {
@@ -34,25 +64,10 @@ export class LabelSprites {
     this.group.visible = false;
     app.stage.scene.add(this.group); // 不挂 stage.world：位置直接用世界坐标，不受场景缩放影响
     this._items = new Map();         // target → { sprite, text, w, h }
-    this._enabled = 0;
     this._clean = 0;
     this._cleanLabels = [];
     this._tmp = new THREE.Vector3();
     this._layoutKey = null;
-  }
-
-  /** 当前名牌文字的只读快照，按实体 ID 索引。 */
-  get labels() { return Object.fromEntries([...this._items].map(([entity, item]) => [entity.id, item.text])); }
-
-  get enabled() { return this._enabled > 0; }
-
-  enable() {
-    if (this._enabled++ === 0) this._apply();
-  }
-
-  disable() {
-    if (this._enabled === 0) return;
-    if (--this._enabled === 0) { this._apply(); this._clear(); }
   }
 
   /** 洁净渲染开始：按 scene.labels 显示精灵（机位名牌隐藏）。可嵌套；结束后精灵留作缓存（机位预览每帧都会走这里）。 */
@@ -66,21 +81,12 @@ export class LabelSprites {
   endClean() {
     if (!this._clean) return;
     this._cleanLabels.pop();
-    if (--this._clean === 0) this._apply();
+    if (--this._clean === 0) this.update();
     else this.group.visible = this._cleanLabels.at(-1) && this.app.sceneState.labels;
   }
 
-  _apply() {
-    const on = this.enabled;
-    this.app.labels.setSuppressed(on);
-    if (on) this.sync({ hideCameras: this.app.cameraView });
-    this.group.visible = on && this.app.sceneState.labels;
-    this.app.stage.invalidate();
-  }
-
-  /** 每帧渲染前（启用时）：增删精灵、改名重绘、显隐。位置与尺寸在 onBeforeRender 里按渲染相机算。 */
+  /** 每帧渲染前：增删精灵、改名重绘、显隐。位置与尺寸在 onBeforeRender 里按渲染相机算。 */
   update() {
-    if (!this.enabled) return;
     this.sync({ hideCameras: !!this._clean || this.app.cameraView });
     this.group.visible = (!this._clean || this._cleanLabels.at(-1)) && this.app.sceneState.labels;
   }
@@ -114,7 +120,7 @@ export class LabelSprites {
     sprite.onBeforeRender = function (renderer, scene, camera) {
       k._layout(renderer, camera);
       labelAnchor(t, k.app.stage.world.scale.y, this.position);
-      // NDC 高 = scale.y × P[1][1]；视口里与 DOM 等大，导出随分辨率同比缩放
+      // NDC 高 = scale.y × P[1][1]；视口按 CSS 像素定尺寸，导出随分辨率同比缩放
       const s = 2 / (k.app.stage.viewport.clientHeight * camera.projectionMatrix.elements[5]);
       this.scale.set(it.w * s, it.h * s, 1);
       this.center.y = (MARGIN * SCALE - it.dy - (it.h - MARGIN * SCALE * 2) * (t.type === 'camera' ? 0.6 : 0.35)) / it.h; // 避让：框底上移 dy（CSS px）
@@ -158,7 +164,7 @@ export class LabelSprites {
   }
 
   /**
-   * 本次渲染（renderer 的一次 render 调用 × 相机）里所有出画名牌的避让，与 DOM 名牌同一个 layoutLabels。
+   * 本次渲染（renderer 的一次 render 调用 × 相机）里所有出画名牌的避让。
    * 按当前视口高度与出画 aspect 计算；导出按输出尺寸同比缩放。
    * 由第一个被渲染的精灵触发，结果写进各 it.dy。
    */
@@ -190,5 +196,4 @@ export class LabelSprites {
     this._items.delete(t);
   }
 
-  _clear() { for (const [t, it] of this._items) this._dispose(t, it); }
 }

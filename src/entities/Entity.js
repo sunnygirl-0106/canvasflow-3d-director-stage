@@ -31,7 +31,6 @@ export class Entity {
     this.root = root;
     this.visible = true;
     this.baseScale = 1; // 归一化基准缩放（统一缩放滑条以此为 1.0 基准）
-    this.labelEl = null; // 名牌 DOM，由 Labels 管理
     root.userData.entityId = this.id; // 选择时向上回溯用
   }
 

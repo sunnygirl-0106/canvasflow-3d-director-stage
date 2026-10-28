@@ -89,6 +89,11 @@ export async function run() {
   await page.waitForFunction(() => window.__app.cameraView);
   ok('4 添加机位、应用运镜预设、切到机位视角', true);
 
+  const viewportLabels = await page.evaluate(() => {
+    const group = window.__app.labelSprites.group;
+    if (!group.visible || !group.children.some(sprite => sprite.visible)) throw new Error('视口应显示精灵名牌');
+    return group.children.map(sprite => [sprite.id, sprite.material.map.id]);
+  });
   await page.click('[aria-label="截图"]');
   await page.waitForFunction(() => window.__app.shots.list.length > 0);
   await clickText('截图');
@@ -116,6 +121,12 @@ export async function run() {
   const mp4 = fs.readFileSync(await download('.mp4'));
   assert.equal(mp4.subarray(4, 8).toString(), 'ftyp');
   assert.equal(mp4Info(mp4).frames, 12);
+  assert.deepEqual(await page.evaluate(() => {
+    const group = window.__app.labelSprites.group;
+    if (!group.visible) throw new Error('导出后应恢复视口名牌');
+    return group.children.map(sprite => [sprite.id, sprite.material.map.id]);
+  }), viewportLabels, '视口、截图和视频沿用同一组名牌及纹理');
+  assert.equal(await page.$('[data-name="preview"]'), null);
   ok('5 PNG 和 MP4 下载成功，半秒 24fps 导出 12 帧', true);
 
   await page.click('#viewtabs [data-v="director"]');

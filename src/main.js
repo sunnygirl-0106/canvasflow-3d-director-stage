@@ -26,7 +26,7 @@ const rig = new CameraRig(stage.camera, stage.renderer.domElement, $('viewport')
 stage.onViewportResize(() => rig.onResize());
 
 // ---- app ----
-const app = new App({ stage, rig, labelLayer: $('labelLayer') });
+const app = new App({ stage, rig });
 const navGizmo = new NavGizmo($('navsvg'), stage.camera, () => app.resetView());
 
 // AI 操作者：__app.ai.run({ input, mode }) 走模型 + 重试回路；__app.ai.applyOps([...], { mode }) 直接应用 ops。

@@ -68,13 +68,11 @@ async function exportSession(app, { labels }, fn) {
   app.exporting = true;
   app.emit('exporting', true);
   app.stage.suspended = true; // 逐帧离屏渲染期间主视口不跟着重绘（否则每帧渲染两遍）
-  app.labelSprites.enable();
   app.beginCleanRender({ labels });
   try {
     return await fn();
   } finally {
     app.endCleanRender();
-    app.labelSprites.disable();
     if (was.active) pb.seek(was.time); else pb.stop();
     app.stage.suspended = false;
     app.stage.invalidate();

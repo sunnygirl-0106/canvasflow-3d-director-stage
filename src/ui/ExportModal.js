@@ -53,7 +53,6 @@ export class ExportModal {
     if (this.busy) return;
     this.overlay?.remove();
     this.overlay = null;
-    this.app.setLabelPreview(false);
   }
 
   /** 当前表单 → 导出参数（含校验错误）。 */
@@ -137,8 +136,7 @@ export class ExportModal {
       el('div', { class: 'ex-note', text: `宽高比跟随取景比例（${app.ratio === 'auto' ? 'Auto = 16:9' : app.ratio}）` }),
       row('帧率', fps),
       row('范围', rangeSel, custom),
-      row('名牌', check('画进视频', f.labels, (v) => { f.labels = v; }, 'labels'),
-        check('视口预览', !!app.labelPreview, (v) => app.setLabelPreview(v), 'preview')),
+      row('名牌', check('画进视频', f.labels, (v) => { f.labels = v; }, 'labels')),
       el('div', { class: 'ex-est' + (p.error ? ' err' : ''), text: p.error || `${p.width}×${p.height} · ${p.n} 帧 · 时长 ${fmtSec(p.n / p.fps)} s` }),
     ]);
 
