@@ -25,7 +25,7 @@ test('未知版本不被虚构迁移，后续校验拒绝', () => {
 });
 test('真实旧文件缺可选字段仍兼容：旧镜头/路径/默认场景', () => {
   for (const file of ['round4-default', 'bench-seated', 'reference-standing']) {
-    const source = JSON.parse(fs.readFileSync(`e2e/fixtures/${file}.json`, 'utf8'));
+    const source = JSON.parse(fs.readFileSync(`tests/fixtures/${file}.json`, 'utf8'));
     const before = structuredClone(source), migrated = migrate(source);
     assert.deepEqual(validate(migrated).errors, [], file);
     assert.deepEqual(source, before); assert.deepEqual(migrate(migrated), migrated);

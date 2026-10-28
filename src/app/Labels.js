@@ -118,13 +118,4 @@ export class Labels {
     layoutLabels(items);
     for (const it of items) it.lab.style.translate = `${it.ax}px ${it.ay - it.dy}px`;
   }
-
-  /** selftest：可见 DOM 名牌框的屏幕矩形（相对名牌层）。 */
-  debugRects() {
-    const base = this.layer.getBoundingClientRect();
-    return [...this.layer.children].filter((n) => n._shown).map((n) => {
-      const b = n.getBoundingClientRect();
-      return { text: n.textContent, x: b.x - base.x, y: b.y - base.y, w: b.width, h: b.height };
-    });
-  }
 }

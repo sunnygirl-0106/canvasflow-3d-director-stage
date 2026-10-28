@@ -105,9 +105,7 @@ onKey((e) => {
 
 // 调试句柄（selftest 也通过它驱动）
 window.__app = app;
-window.__timelinePanel = timelinePanel;
 window.__exportModal = exportModal;
-window.__aiPanel = aiPanel;
 
 // ---- 按需渲染循环 ----
 stage.startLoop({

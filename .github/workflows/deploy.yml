@@ -15,8 +15,6 @@ concurrency:
 jobs:
   verify:
     uses: ./.github/workflows/verify.yml
-    with:
-      base-ref: ${{ github.event.before || '' }}
 
   package:
     needs: verify

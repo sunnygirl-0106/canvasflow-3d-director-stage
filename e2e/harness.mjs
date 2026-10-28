@@ -3,7 +3,6 @@
 import fs from 'node:fs';
 import puppeteer from 'puppeteer-core';
 import { createServer } from 'vite';
-export const ARGS = process.argv.slice(3);
 const CHROME_CANDIDATES = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser',
@@ -69,21 +68,6 @@ export async function finish() {
   const failed = results.filter((r) => !r.pass).length;
   console.log(`\n=== ${results.length - failed}/${results.length} passed ===`);
   await close(failed ? 1 : 0);
-}
-/** 双人业务用例显式准备自己的场景，不依赖生产 seed。 */
-export async function twoCharacterFixture() {
-  await page.evaluate(async () => {
-    const a = window.__app;
-    const { createEmptyDocument } = await import('/src/doc/schema.js');
-    const { addCharacter } = await import('/src/doc/edit.js');
-    const doc = createEmptyDocument();
-    addCharacter(doc, { name: '角色A', body: 'male', pos: [-1.1, 0, 0.2] });
-    addCharacter(doc, { name: '角色B', body: 'female', pos: [1.1, 0, 0.2] });
-    await a.loadDocument(doc, { history: false });
-    a.frameSubjects();
-    a.select(null);
-    a.history.reset();
-  });
 }
 export async function fail(err) {
   errs.push(err.stack || String(err));

@@ -97,7 +97,7 @@ test('timed custom prefix retains holds and times when appending', async () => {
 
 test('fallback fixture contains two separate 10-second paths starting at the actors', async () => {
   const { readFile } = await import('node:fs/promises');
-  const d = JSON.parse(await readFile(new URL('../e2e/fixtures/round4-default.json', import.meta.url), 'utf8'));
+  const d = JSON.parse(await readFile(new URL('./fixtures/round4-default.json', import.meta.url), 'utf8'));
   assert.equal(validate(d).ok, true);
   assert.equal(d.entities.length,3); assert.equal(d.paths.length,2);
   assert.equal(d.timeline.duration,10); assert.equal(d.timeline.fps,30);

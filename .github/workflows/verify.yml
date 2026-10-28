@@ -2,13 +2,6 @@ name: Verify revision
 
 on:
   workflow_call:
-    inputs:
-      full:
-        type: boolean
-        default: false
-      base-ref:
-        type: string
-        default: ''
 
 permissions:
   contents: read
@@ -46,12 +39,8 @@ jobs:
       - run: npm run test:browser:install
         timeout-minutes: 10
       - run: npm run test:build
-      - name: Required browser checks
-        if: ${{ !inputs.full }}
-        run: npm run test:e2e:required
-      - name: All browser checks
-        if: ${{ inputs.full }}
-        run: npm run test:e2e:all
+      - name: Browser smoke checks
+        run: npm run test:e2e
       - name: Upload verified build
         uses: actions/upload-artifact@v4
         with:

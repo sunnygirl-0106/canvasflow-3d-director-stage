@@ -182,21 +182,6 @@ export class LabelSprites {
     for (const x of items) x.it.dy = x.dy;
   }
 
-  /** selftest：出画精灵名牌框在给定画面尺寸下的像素矩形（按最近一次渲染的避让结果）。 */
-  debugRects(camera, width, height) {
-    const p = this._tmp, ws = this.app.stage.world.scale.y, k = height / this.app.stage.viewport.clientHeight, pad = MARGIN * SCALE * 2;
-    const out = [];
-    for (const [t, it] of this._items) {
-      if (!it.sprite.visible) continue;
-      labelAnchor(t, ws, p).project(camera);
-      if (p.z >= 1) continue;
-      const w = (it.w - pad) * k, h = (it.h - pad) * k;
-      const x = (p.x * 0.5 + 0.5) * width, bottom = (-p.y * 0.5 + 0.5) * height - it.dy * k - h * (t.type === 'camera' ? 0.6 : 0.35);
-      out.push({ text: it.text, x: x - w / 2, y: bottom - h, w, h });
-    }
-    return out;
-  }
-
   _dispose(t, it) {
     this.group.remove(it.sprite);
     it.sprite.material.map.dispose();
@@ -205,10 +190,4 @@ export class LabelSprites {
   }
 
   _clear() { for (const [t, it] of this._items) this._dispose(t, it); }
-
-  /** selftest：某目标的精灵状态（是否出画、整张纹理的 CSS 像素尺寸、文字）。 */
-  debugItem(t) {
-    const it = this._items.get(t);
-    return it ? { visible: it.sprite.visible && this.group.visible, w: it.w, h: it.h, text: it.text } : null;
-  }
 }

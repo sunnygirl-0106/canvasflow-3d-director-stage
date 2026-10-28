@@ -110,3 +110,23 @@ test('frustum tracks true projection, world transform and finite depth without t
   c.setHelpersVisible(true); assert.equal(c.helper.visible, true);
   c.dispose();
 });
+
+test('lookAt 入退场混合及相邻目标接力不回摆到手动朝向', () => {
+  const app = fakeApp(), cam = addCamera(app), a = addProp(app, 'box', [-3, 0, 0]), b = addProp(app, 'box', [3, 0, 0]);
+  const manual = cam.root.quaternion.clone();
+  const sample = t => { app.timeline.evaluate(t); return cam.root.quaternion.clone(); };
+  app.timeline.addConstraint({ type: 'lookAt', target: cam.id, subject: a.id, start: 2, end: 5 });
+  const aimed = sample(3);
+  assert.ok(aimed.angleTo(manual) > .1);
+  assert.ok(sample(2).angleTo(manual) < 1e-6);
+  assert.ok(sample(2.5).angleTo(aimed) < 1e-6);
+  assert.ok(sample(2.25).angleTo(manual) > .01);
+  assert.ok(sample(2.25).angleTo(aimed) > .01);
+  assert.ok(sample(4.5).angleTo(aimed) < 1e-6);
+  assert.ok(sample(5).angleTo(manual) < 1e-6);
+  app.timeline.addConstraint({ type: 'lookAt', target: cam.id, subject: b.id, start: 5, end: 8 });
+  assert.ok(sample(4.9).angleTo(aimed) < 1e-6);
+  assert.ok(sample(5).angleTo(aimed) < 1e-6);
+  assert.ok(sample(5.25).angleTo(aimed) > .01);
+  assert.ok(sample(5.5).angleTo(sample(6)) < 1e-6);
+});
