@@ -1,3 +1,4 @@
+// @ts-check
 // 文档版本迁移：按版本号逐级升级到 SCHEMA_VERSION。
 // 新增版本时：在 STEPS 里登记 { from, to, up(doc) → doc }，up 只负责相邻两版之间的差异。
 import { SCHEMA_VERSION } from './schema.js';

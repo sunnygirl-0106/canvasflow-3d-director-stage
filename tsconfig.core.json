@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": false
+  },
+  "files": [
+    "src/types/globals.d.ts"
+  ],
+  "include": [
+    "src/doc/**/*.js"
+  ]
+}

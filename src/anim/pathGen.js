@@ -250,6 +250,7 @@ export const paceFor = type => isWalker(type) ? WALK_PACE : 1.2;
  * 匀速 V = 长 / (时长 − r)、r = min(ramp, 时长/2) → 时长 = 长/speed + ramp（很短时 = 2·长/speed）；ramp=0 即 长 ÷ speed。
  * 向上取 0.1 s，最短 1 s。
  */
+/** @param {number[][]} points @param {{speed?:number,closed?:boolean,ramp?:number,interpolation?:string}} [options] */
 export function defaultDuration(points, { speed = WALK_PACE, closed = false, ramp = WALK_RAMP, interpolation } = {}) {
   const length = pathLength(points, closed, null, interpolation);
   const base = length / speed;

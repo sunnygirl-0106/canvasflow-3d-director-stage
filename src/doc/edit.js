@@ -1,3 +1,4 @@
+// @ts-check
 // 作用于场景文档的纯函数：新建角色 / 群众 / 打组 / 路径 / 运镜的"数据部分"。
 // 界面入口（App / PathTool / CameraMoveTool）与 AI（src/ai/apply.js）调用同一份函数：
 // 界面先在 exportDocument() 的拷贝上算出结果，再按结果建场景对象（Character.fromJSON 等）或整体提交动画字段；
@@ -118,6 +119,7 @@ export function addCharacter(doc, { name, body, pos, yaw = 0, color, pose = null
 /**
  * 新建群众阵列：行 × 列网格的角色挂在一个组轴心下（成员 transform 相对轴心，按行优先排列、轮换配色）。
  * 行列数 / 间距按 CROWD_LIMITS 夹取。
+ * @param {ReturnType<typeof import("./schema.js").createEmptyDocument>} doc
  * @param {{rows:number, cols:number, spacing?:number, name?:string, pos?:number[], yaw?:number, body?:string, memberName:()=>string}} o
  *   memberName：成员起名（界面用角色计数器）
  * @returns {{group:object, members:object[], rows:number, cols:number}}
@@ -178,6 +180,7 @@ function canonicalRot(rot) {
  * 把若干独立角色打成一组，保留各自位姿：组轴心 = pivot（默认成员位置的平均），旋转 0、缩放 1；
  * 成员 transform 改为相对轴心（旋转按 canonicalRot 规整），条目移到组后面（顺序 = ids 顺序），并删掉成员的变换动画。
  * 不足 2 个独立角色时返回 null、文档不变。
+ * @param {ReturnType<typeof import("./schema.js").createEmptyDocument>} doc @param {string[]} ids
  * @param {{name:string, pivot?:number[]}} o
  * @returns {{group:object, members:object[]}|null}
  */
@@ -249,6 +252,7 @@ export function pathStartPoint(type, pos, groundY) {
  * opts.set 里给出的字段两种情况都覆盖，但角色 / 组始终使用匀速。
  * @returns {{path:object, replaced:boolean}}
  */
+/** @param {ReturnType<typeof import("./schema.js").createEmptyDocument>} doc @param {string} target @param {number[][]} points @param {{closed?:boolean,start?:number,set?:Partial<import("../types/contracts.js").PathDocument>}} [options] */
 export function setPath(doc, target, points, { closed = false, start = 0, set = {} } = {}) {
   const ent = findEntity(doc, target);
   if (!ent) throw new Error(`实体不存在：${target}`);
@@ -302,6 +306,7 @@ export const cameraAnimation = (doc, camId) => ({
 /**
  * 下一段运镜从哪里开始：已有路径 → 路径终点 + 结束时刻；上一段是摇镜头（lastPan）→ 它结束的时刻与摇到的朝向；
  * 否则 = 机位手动值 + time。
+ * @param {ReturnType<typeof import("./schema.js").createEmptyDocument>} doc @param {string} camId
  * @param {{time?:number, lastPan?:{start:number, duration:number, rotEnd:number[]}|null}} o
  */
 export function moveContext(doc, camId, { time = 0, lastPan = null } = {}) {
@@ -339,7 +344,8 @@ export function nearestSubject(doc, camId, position, aimOf) {
 
 /**
  * 写入一段运镜：生成器结果写成 path（追加 = 接在已有路径后）+ lookAt 约束（+ pan 的 rot 轨道两键）。
- * @param {{name:string, subject:string|number[], aim:number[], params?:object, time?:number, lastPan?:object|null, ownPan?:boolean}} o
+ * @param {ReturnType<typeof import("./schema.js").createEmptyDocument>} doc @param {string} camId
+ * @param {{name:string, subject:string|number[], aim:number[], params?:object, time?:number, lastPan?:object|null, ownPan?:boolean,mode?:string,origin?:{position:number[],rot:number[],roll:number,time:number}|null,preserveConstraints?:boolean,preservePositionKeys?:boolean}} o
  *   aim = 主体注视点；time = 无路径时的开始时刻；lastPan / ownPan = 会话里上一段摇镜头 / 已有 rot 轨道是否由运镜产生
  * @returns {{ctx:object, move:object, start:number, undo:object}} undo = 删末段用的逆操作信息
  * @throws {MoveError} 几何上做不出来（文案直接给用户看）

@@ -18,6 +18,7 @@ export type Track = { id: string; target: string } & (
 export interface PathDocument {
   id: string; target: string; points: Vec3[]; closed: boolean;
   interpolation?: 'centripetal' | 'polyline'; start: number; duration: number;
+  waypointTimes?: number[]; timedSegments?: {from:number,to:number,start:number,end:number}[];
   speed: 'linear' | 'smooth'; orient: 'tangent' | 'keep'; stops?: number[]; stopTimes?: number[];
 }
 export interface ConstraintDocument {

@@ -1,3 +1,4 @@
+// @ts-check
 import { Color } from 'three';
 
 const PALETTE = ['#4dd9ed', '#ff897d', '#f4c85c', '#83d69a', '#76a9ff', '#f49ec4'];

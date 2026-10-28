@@ -1,3 +1,4 @@
+// @ts-check
 /** Persisted preset identity is valid only while its generated motion still matches. */
 export function motionSignature(doc, id) {
   return JSON.stringify({

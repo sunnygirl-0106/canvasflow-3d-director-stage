@@ -1,3 +1,4 @@
+// @ts-check
 import { enablePatches, produceWithPatches, freeze, isDraft, original } from 'immer';
 import { Emitter } from '../util/Emitter.js';
 import { clone } from '../util/math.js';
@@ -27,8 +28,11 @@ export class DocumentStore extends Emitter {
     this._validate(document);
     this._document = freeze(clone(document), true);
     this.revision = 0;
+    /** @type {((next:ReturnType<typeof createEmptyDocument>, previous:ReturnType<typeof createEmptyDocument>)=>void)|undefined} */
+    this.project = undefined;
   }
 
+  /** @returns {ReturnType<typeof createEmptyDocument>} */
   get document() { return this._batchDocument || this._document; }
 
   _validate(doc) {
@@ -37,11 +41,12 @@ export class DocumentStore extends Emitter {
   }
 
   /** 生成候选版本，不发布。异步加载资源后必须用 commit 检查版本。 */
+  /** @param {string} label @param {(draft:ReturnType<typeof createEmptyDocument>)=>unknown} recipe */
   prepare(label, recipe) {
     const before = this.document;
     const [after, patches, inversePatches] = produceWithPatches(before, (draft) => {
       const result = recipe(draft);
-      if (result?.then) throw new Error('文档事务必须同步执行，请先准备资源');
+      if ((/** @type {{then?:unknown}} */ (result))?.then) throw new Error('文档事务必须同步执行，请先准备资源');
     });
     if (!patches.length) return null;
     this._validate(after);
@@ -76,7 +81,7 @@ export class DocumentStore extends Emitter {
     let result, after;
     try {
       result = fn();
-      if (result?.then) throw new Error('批量事务必须同步执行');
+      if ((/** @type {{then?:unknown}} */ (result))?.then) throw new Error('批量事务必须同步执行');
       after = this._batchDocument;
     } finally { this._batchDocument = null; }
     this.commit(this.prepareReplacement(label, after));

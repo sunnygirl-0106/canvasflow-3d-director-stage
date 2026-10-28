@@ -1,3 +1,4 @@
+// @ts-check
 // 场景文档 schema：版本号 / 默认值 / 手写校验器（不引 ajv）。
 // 文档是"源"，场景对象是它的渲染结果；界面上能看到的每个场景状态在这里都有字段。
 // 词汇表面向 AI 与外部工具，用通用词（如 group），不跟代码类名走。
@@ -100,6 +101,7 @@ export const DEFAULT_SCENE = Object.freeze({
   ground: { visible: true, opacity: 0.4, height: 0 },
   ratio: 'auto', activeCameraId: null, panorama: null,
 });
+/** @type {{duration:number,fps:number,mainCameraId:string|null,tracks:object[]}} */
 export const DEFAULT_TIMELINE = Object.freeze({ duration: 10, fps: 30, mainCameraId: null, tracks: [] });
 export const DEFAULT_SCENE_NAME = '未命名场景';
 
@@ -155,6 +157,7 @@ export function validate(doc) {
   // 约定：字段缺失（undefined）由上一级 checkKeys 报"缺少字段"，下面各值检查遇到 undefined 直接跳过，避免重复报错。
 
   /** 必须是对象且键集合恰好为 keys（缺键 / 多余键都报；optional 里的可缺省）。返回是否为对象。 */
+  /** @param {unknown} v @param {string} path @param {string[]} keys @param {string[]} [optional] @returns {v is Record<string, unknown>} */
   const checkKeys = (v, path, keys, optional = []) => {
     if (v === undefined) return false;
     if (!isObj(v)) { err(path, `应为对象，实际为 ${fmt(v)}`); return false; }
@@ -167,6 +170,7 @@ export function validate(doc) {
     if (!Array.isArray(v) || v.length !== 3) { err(path, `应为长度 3 的数组，实际为 ${fmt(v)}`); return; }
     v.forEach((x, i) => { if (!isNum(x)) err(`${path}[${i}]`, `应为有限数，实际为 ${fmt(x)}`); });
   };
+  /** @param {unknown} v @param {string} path @param {{min?:number,max?:number,gt?:number}} [bounds] */
   const num = (v, path, { min = -Infinity, max = Infinity, gt } = {}) => {
     if (v === undefined) return;
     if (!isNum(v)) { err(path, `应为有限数，实际为 ${fmt(v)}`); return; }
@@ -206,7 +210,7 @@ export function validate(doc) {
         state.segments.forEach((segment, i) => {
           const q = `${p}.segments[${i}]`;
           if (!checkKeys(segment, q, ['name', 'params', 'subject', 'aim', 'origin'])) return;
-          if (!MOVE_NAMES.includes(segment.name)) err(`${q}.name`, '未知运镜');
+          if (!(isStr(segment.name) && MOVE_NAMES.includes(segment.name))) err(`${q}.name`, '未知运镜');
           vec3(segment.aim, `${q}.aim`);
           if (Array.isArray(segment.subject)) vec3(segment.subject, `${q}.subject`); else str(segment.subject, `${q}.subject`);
           if (checkKeys(segment.origin, `${q}.origin`, ['position', 'rot', 'roll', 'time'])) {
@@ -215,7 +219,7 @@ export function validate(doc) {
           }
           if (checkKeys(segment.params, `${q}.params`, ['duration'], ['amount', 'sweep', 'rise', 'dir', 'minSubjectDist'])) {
             for (const k of ['duration', 'amount', 'sweep', 'rise', 'minSubjectDist']) num(segment.params[k], `${q}.params.${k}`, { gt: 0 });
-            if (segment.params.dir != null && !MOVE_DIR_VALUES.has(segment.params.dir)) err(`${q}.params.dir`, '无效方向');
+            if (segment.params.dir != null && !(isStr(segment.params.dir) && MOVE_DIR_VALUES.has(segment.params.dir))) err(`${q}.params.dir`, '无效方向');
           }
         });
       }
@@ -265,7 +269,7 @@ export function validate(doc) {
   ents.forEach((e, i) => {
     const p = `entities[${i}]`;
     if (!isObj(e)) { err(p, `应为对象，实际为 ${fmt(e)}`); return; }
-    if (!ENTITY_TYPES.includes(e.type)) { err(`${p}.type`, `未知实体类型 ${fmt(e.type)}（可选 ${ENTITY_TYPES.join(' / ')}）`); return; }
+    if (!(isStr(e.type) && ENTITY_TYPES.includes(e.type))) { err(`${p}.type`, `未知实体类型 ${fmt(e.type)}（可选 ${ENTITY_TYPES.join(' / ')}）`); return; }
     checkKeys(e, p, ENTITY_KEYS[e.type], e.type === 'character' ? ['trailColor'] : []);
     nonEmpty(e.id, `${p}.id`);
     str(e.name, `${p}.name`);
@@ -296,7 +300,7 @@ export function validate(doc) {
       }
       if (e.parent != null) ref(e.parent, `${p}.parent`, 'group');
     } else if (e.type === 'prop') {
-      if (e.kind !== undefined && !PROP_KIND_SET.has(e.kind)) err(`${p}.kind`, `未知道具类型 ${fmt(e.kind)}（可选 ${[...PROP_KIND_SET].join(' / ')}）`);
+      if (e.kind !== undefined && !(isStr(e.kind) && PROP_KIND_SET.has(e.kind))) err(`${p}.kind`, `未知道具类型 ${fmt(e.kind)}（可选 ${[...PROP_KIND_SET].join(' / ')}）`);
       hex(e.color, `${p}.color`);
     } else if (e.type === 'camera') {
       num(e.fov, `${p}.fov`, { min: FOV_RANGE[0], max: FOV_RANGE[1] });
@@ -340,7 +344,7 @@ export function validate(doc) {
       num(s.ground.opacity, 'scene.ground.opacity', { min: 0, max: 1 });
       num(s.ground.height, 'scene.ground.height');
     }
-    if (s.ratio !== undefined && !RATIO_SET.has(s.ratio)) err('scene.ratio', `未知取景比例 ${fmt(s.ratio)}（可选 ${[...RATIO_SET].join(' / ')}）`);
+    if (s.ratio !== undefined && !(isStr(s.ratio) && RATIO_SET.has(s.ratio))) err('scene.ratio', `未知取景比例 ${fmt(s.ratio)}（可选 ${[...RATIO_SET].join(' / ')}）`);
     if (s.activeCameraId != null) ref(s.activeCameraId, 'scene.activeCameraId', 'camera');
     if (s.panorama != null && checkKeys(s.panorama, 'scene.panorama', ['assetId', 'rotation', 'radius'])) {
       if (!assetIds.has(s.panorama.assetId)) err('scene.panorama.assetId', `引用的资源不存在：${fmt(s.panorama.assetId)}`);
@@ -377,7 +381,7 @@ export function validate(doc) {
   if (checkKeys(doc.timeline, 'timeline', TIMELINE_KEYS)) {
     const t = doc.timeline;
     num(t.duration, 'timeline.duration', { gt: 0 });
-    if (t.fps !== undefined && !(Number.isInteger(t.fps) && t.fps > 0)) err('timeline.fps', `应为正整数，实际为 ${fmt(t.fps)}`);
+    if (t.fps !== undefined && !(Number.isInteger(t.fps) && isNum(t.fps) && t.fps > 0)) err('timeline.fps', `应为正整数，实际为 ${fmt(t.fps)}`);
     if (t.mainCameraId != null) ref(t.mainCameraId, 'timeline.mainCameraId', 'camera');
     arr(t.tracks, 'timeline.tracks');
     const seen = new Map(); // `${target}|${property}` → 轨道路径
@@ -386,7 +390,7 @@ export function validate(doc) {
       if (!checkKeys(tr, p, TRACK_KEYS)) return;
       claimId(tr.id, p);
       oneOf(tr.property, `${p}.property`, TRACK_PROPERTIES, '轨道属性');
-      const okProp = TRACK_PROPERTIES.includes(tr.property);
+      const okProp = isStr(tr.property) && TRACK_PROPERTIES.includes(tr.property);
       const hit = okProp ? animRef(tr.target, `${p}.target`, TRACK_TARGETS[tr.property]) : null;
       if (hit) {
         const k = `${tr.target}|${tr.property}`;
@@ -469,30 +473,33 @@ export function validate(doc) {
     oneOf(pa.orient, `${p}.orient`, PATH_ORIENTS, '朝向方式');
     checkStops(pa, p);
     if (pa.timedSegments !== undefined) {
+      if (!Array.isArray(pa.points) || !isNum(pa.duration)) return;
       if (!Array.isArray(pa.timedSegments) || !pa.timedSegments.length) err(`${p}.timedSegments`, '应为非空分段数组');
       else {
-        if (pa.stops?.length || pa.stopTimes?.length) err(`${p}.timedSegments`, '不能与 stops 同时使用');
+        if ((Array.isArray(pa.stops) && pa.stops.length) || (Array.isArray(pa.stopTimes) && pa.stopTimes.length)) err(`${p}.timedSegments`, '不能与 stops 同时使用');
+        const points = pa.points, duration = pa.duration;
         let lastPoint = 0, lastEnd = 0;
         pa.timedSegments.forEach((s, j) => {
           const q = `${p}.timedSegments[${j}]`;
           if (!checkKeys(s, q, ['from', 'to', 'start', 'end'], ['closed', 'speed'])) return;
-          if (s.from !== lastPoint || !Number.isInteger(s.to) || s.to <= s.from || s.to >= pa.points?.length) err(q, '顶点区间应连续、递增并覆盖路径');
-          if (!isNum(s.start) || !isNum(s.end) || s.start < lastEnd || s.end <= s.start || s.end > pa.duration) err(q, '时段应递增且位于路径时长内');
+          if (!isNum(s.from) || !isNum(s.to) || s.from !== lastPoint || !Number.isInteger(s.to) || s.to <= s.from || s.to >= points?.length) { err(q, '顶点区间应连续、递增并覆盖路径'); return; }
+          if (!isNum(s.start) || !isNum(s.end) || s.start < lastEnd || s.end <= s.start || s.end > duration) { err(q, '时段应递增且位于路径时长内'); return; }
           if (s.speed !== undefined) oneOf(s.speed, `${q}.speed`, PATH_SPEEDS, '速度曲线');
           if (s.closed !== undefined) bool(s.closed, `${q}.closed`);
-          if (s.closed && (s.to - s.from < 3 || JSON.stringify(pa.points?.[s.from]) !== JSON.stringify(pa.points?.[s.to]))) err(q, '闭合段须至少三条边且首尾重合');
+          if (s.closed && (s.to - s.from < 3 || JSON.stringify(points?.[s.from]) !== JSON.stringify(points?.[s.to]))) err(q, '闭合段须至少三条边且首尾重合');
           lastPoint = s.to; lastEnd = s.end;
         });
-        if (lastPoint !== pa.points?.length - 1) err(`${p}.timedSegments`, '最后一段须到达终点');
+        if (lastPoint !== points?.length - 1) err(`${p}.timedSegments`, '最后一段须到达终点');
       }
     }
     if (pa.waypointTimes !== undefined) {
-      const times = pa.waypointTimes;
+      if (!Array.isArray(pa.points) || !isNum(pa.duration)) return;
+      const times = pa.waypointTimes, duration = pa.duration;
       if (pa.closed || pa.timedSegments) err(`${p}.waypointTimes`, '仅开放且不含 timedSegments 的路径可设置节点时间');
       if (!Array.isArray(times) || times.length !== pa.points?.length) err(`${p}.waypointTimes`, '应为与路径顶点等长的时刻数组');
       else {
         times.forEach((value, j) => {
-          if (!isNum(value) || (j === 0 ? value !== 0 : value <= times[j - 1]) || value > pa.duration) err(`${p}.waypointTimes[${j}]`, '应从 0 开始并严格递增，且不超过路径时长');
+          if (!isNum(value) || (j === 0 ? value !== 0 : value <= times[j - 1]) || value > duration) err(`${p}.waypointTimes[${j}]`, '应从 0 开始并严格递增，且不超过路径时长');
         });
         if (times.at(-1) !== pa.duration) err(`${p}.waypointTimes`, '末时刻应等于路径时长');
       }
