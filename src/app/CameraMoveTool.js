@@ -35,7 +35,7 @@ export class CameraMoveTool {
     return this.atTime(time, () => ({
       position: cam.root.position.toArray(),
       rot: rotationDeg(cam),
-      roll: cam.roll || 0, time,
+      roll: cam.rollRad * R2D, time,
     }));
   }
 
