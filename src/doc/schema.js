@@ -1,70 +1,15 @@
 // @ts-check
-// 场景文档 schema：版本号 / 默认值 / 手写校验器（不引 ajv）。
+// 场景文档 schema：版本号 / 默认值 / 声明式结构与跨引用校验（不引 ajv）。
 // 文档是"源"，场景对象是它的渲染结果；界面上能看到的每个场景状态在这里都有字段。
 // 词汇表面向 AI 与外部工具，用通用词（如 group），不跟代码类名走。
 //
-// 文档形状（director-stage/0.1）：
-// {
-//   schema: 'director-stage/0.1',
-//   meta: { name, createdAt, updatedAt, app, editorView: { pos:[x,y,z], target:[x,y,z], fov?:number } | null },
-//   scene: { scale, pos:[3], rot:[3](度), sky:'#rrggbb', labels, ground:{visible, opacity, height},
-//            ratio, activeCameraId, panorama: { assetId, rotation(度), radius } | null },
-//   assets: { [id]: { type:'image', name, url | dataURL } },        // url 只接受同源 ./assets/…
-//   entities: [
-//     { type:'character', id, name, body, color, visible, transform, pose:{ preset, values }, parent },
-//     { type:'prop',      id, name, kind, color, visible, transform },
-//     { type:'camera',    id, name, visible, transform, fov, roll(度), lookAt:[3] },
-//     { type:'group',     id, name, visible, transform, members:[ids] },
-//   ],
-//   paths: [ Path ], constraints: [ Constraint ], timeline: { duration, fps, mainCameraId, tracks: [ Track ] },
-// }
-// transform = { pos:[3], rot:[3](度, XYZ 欧拉), scale:[3] }。
-//   - character 的 scale 是"相对素体自然尺寸的倍数"（站立素体 = [1,1,1]），与模型文件单位无关；
-//   - group 成员（parent 非 null）的 transform 是相对组轴心的局部变换；
-//   - camera 的 rot 已包含荷兰角；roll 单独存一份，供"改注视坐标后重新瞄准"时叠加。
-// camera.lookAt 与 transform 同时存在时以 transform + roll 为准，lookAt 只回写面板显示（不触发瞄准），
-// 校验器不检查二者一致。
-//
-// 动画—— 时间单位一律为秒；坐标与 entities[].transform 同一口径（场景根节点下的局部坐标）：
-// timeline: {
-//   duration: 10,            // 秒，> 0
-//   fps: 30,                 // 只影响吸附与导出
-//   mainCameraId: null,      // 主机位（机位视角下播放时透过它看）
-//   tracks: [ Track ],
-// }
-// Track = {
-//   id,                      // 8 位 base36，与实体 / 路径 / 约束同一命名空间内唯一
-//   target: entityId,        // character / prop / group / camera
-//   property: 'pos' | 'rot' | 'scale' | 'fov',   // fov 只允许 camera；camera 不允许 scale
-//   keys: [ { t, value, ease } ],                // 可为空（空轨道不驱动任何属性，但仍占名额）；非空时 t 严格递增；value: vec3（口径同 transform，rot 为欧拉角度数 XYZ）或 number（fov）
-// }                                              // ease ∈ 'linear' | 'smooth' | 'step'，作用于"从该键出发"的那一段；最后一键的 ease 忽略
-// Path = {
-//   id, target: entityId,    // character / prop / camera / group（群众成员不能单独有路径）；每个实体最多一条
-//   points: [[x,y,z], ...],  // ≥ 2 个；角色 / 组的路径 y 即地面高度（= transform.pos.y）
-//   closed: false,
-//   interpolation: 'centripetal' | 'polyline', // 可选：缺省保持原曲线；折线按真实边长求值
-//   start: 0, duration: 4,   // 秒；start ≥ 0，duration > 0
-//   speed: 'linear' | 'smooth',      // 弧长随时间的曲线：匀速 / 缓入缓出
-//   orient: 'tangent' | 'keep',      // 朝向跟随切线（只改 yaw）/ 保持手动朝向
-//   stops: [i, ...],                 // 可选：停顿的顶点索引，升序、不含首尾（闭合路径可到 n−1）；缺省 = 无停顿
-//   stopTimes: [秒, ...],            // 可选：到达各停顿顶点的时刻（相对 start），与 stops 等长、递增、在 (0, duration) 内；
-//   timedSegments: [{from,to,start,end}], // 可选：连续覆盖全部顶点；时段间空隙是真正的驻足，时间相对路径 start
-//   waypointTimes: [秒, ...],       // 可选：依次到达各节点的相对时刻；内部节点速度连续；stops 可固定追加接缝速度为零
-// }                                  //   缺省 = 各段按弧长比例分配时长。有 stops 时每段各自缓入缓出（停顿处速度 0）
-// Constraint = {
-//   id, type: 'lookAt' | 'follow',
-//   target: cameraId,                 // 被约束的机位（本阶段只约束机位）
-//   subject: entityId | [x,y,z],      // 看向 / 跟随谁（不能是 target 自己）
-//   offset: [x,y,z],                  // follow 用：在 subject 的 yaw 坐标系下的偏移；lookAt 忽略
-//   start: null, end: null,           // 生效区间（秒），null = 全程
-// }
-// 规则：同一实体同一 property 最多一条轨道（空轨道也算）；有路径的实体不允许再有 pos 轨道（路径优先，直接拒绝）。
-// 机位同时有 follow 与 pos 轨道 / 路径时仍合法，follow 覆盖之（evaluate 顺序：关键帧 → 路径 → 约束）。
+// 文档形状见 src/types/contracts.d.ts。
 import { BODY_TYPES, PROP_KINDS, RATIO_OPTIONS } from '../config.js';
 import { POSE_PRESET_MAP } from '../entities/posePresets.js';
 import { JOINT_SCHEMA } from '../rig/jointSchema.js';
 import { PANEL_LABEL, MOVE_DIRS } from '../anim/cameraMoves.js';
 import { clone, isObj, isNum } from '../util/math.js';
+import { num as numberType, vec3 as vectorType, hex as colorType, enumOf, obj, rule, optional, nullable, arrayOf, fmt } from '../util/validate.js';
 
 export const SCHEMA_VERSION = 'director-stage/0.1';
 export const APP_ID = 'director-stage-demo';
@@ -88,9 +33,6 @@ export const TRACK_TARGETS = {
 export const PATH_TARGETS = ['character', 'prop', 'camera', 'group'];
 
 const JOINT_MAP = Object.fromEntries(JOINT_SCHEMA.map((j) => [j.key, j]));
-const PROP_KIND_SET = new Set(PROP_KINDS.map(([k]) => k));
-const RATIO_SET = new Set(RATIO_OPTIONS.map(([k]) => k));
-const HEX_RE = /^#[0-9a-f]{6}$/i;
 // 手动运镜面板持久化的预设名与方向（与 anim/cameraMoves.js 同一份词汇）
 const MOVE_NAMES = Object.keys(PANEL_LABEL);
 const MOVE_DIR_VALUES = new Set(Object.values(MOVE_DIRS).flat().map(([value]) => value));
@@ -123,25 +65,62 @@ export function createEmptyDocument({ name = DEFAULT_SCENE_NAME, app = APP_ID } 
 }
 
 // ---- 校验 ----
-const TOP_KEYS = ['schema', 'meta', 'scene', 'assets', 'entities', 'paths', 'constraints', 'timeline'];
-const META_KEYS = ['name', 'createdAt', 'updatedAt', 'app', 'editorView'];
-const SCENE_KEYS = ['scale', 'pos', 'rot', 'sky', 'labels', 'ground', 'ratio', 'activeCameraId', 'panorama'];
-const ENTITY_KEYS = {
-  character: ['type', 'id', 'name', 'body', 'color', 'visible', 'transform', 'pose', 'parent'],
-  prop: ['type', 'id', 'name', 'kind', 'color', 'visible', 'transform'],
-  camera: ['type', 'id', 'name', 'visible', 'transform', 'fov', 'roll', 'lookAt'],
-  group: ['type', 'id', 'name', 'visible', 'transform', 'members'],
+const isStr = v => typeof v === 'string';
+const any = rule(() => true, ''); // 引用与字段间关系由下方普通代码检查。
+const strType = rule(isStr, '应为字符串');
+const nonEmptyType = rule(v => isStr(v) && !!v, '应为非空字符串');
+const boolType = rule(v => typeof v === 'boolean', '应为布尔值');
+const scalar = numberType(), vector = vectorType(), positive = numberType({ gt: 0 }), timeType = numberType({ min: 0 });
+const fovType = numberType({ min: FOV_RANGE[0], max: FOV_RANGE[1] });
+const shape = fields => obj(fields, { missingAt: 'parent' });
+const record = type => ({ check(v, p, err) {
+  if (v === undefined) return;
+  if (!isObj(v)) { err(p, '应为对象'); return; }
+  for (const [key, value] of Object.entries(v)) type.check(value, `${p}.${key}`, err);
+} });
+const transformType = shape({ pos: vector, rot: vector, scale: vector });
+const originType = shape({ position: vector, rot: vector, roll: scalar, time: timeType });
+const moveType = shape({
+  signature: strType, customPrefix: optional(boolType),
+  segments: { missingAt: 'both', type: arrayOf(shape({
+    name: { missingAt: 'both', type: enumOf(MOVE_NAMES) }, aim: vector,
+    subject: { check: (v, p, err) => (Array.isArray(v) ? vector : strType).check(v, p, err) },
+    origin: originType,
+    params: shape({ duration: positive, amount: optional(positive), sweep: optional(positive), rise: optional(positive),
+      minSubjectDist: optional(positive), dir: optional(nullable(enumOf([...MOVE_DIR_VALUES]))) }),
+  })) },
+});
+const metaType = shape({
+  name: strType, app: strType,
+  ...Object.fromEntries(['createdAt', 'updatedAt'].map(k => [k, rule(v => isStr(v) && !Number.isNaN(Date.parse(v)), '应为 ISO 时间字符串')])),
+  editorView: nullable(shape({ pos: vector, target: vector, fov: optional(numberType({ gt: 0, max: 179 })) })),
+  cameraMoves: optional(nullable(record(moveType))),
+});
+const entityBase = { type: any, id: nonEmptyType, name: strType, visible: boolType, transform: transformType };
+const entityTypes = {
+  character: shape({ ...entityBase, body: enumOf(Object.keys(BODY_TYPES)), color: colorType, trailColor: optional(colorType), parent: any,
+    pose: shape({ preset: nullable(enumOf(Object.keys(POSE_PRESET_MAP))),
+      values: shape(Object.fromEntries(Object.entries(JOINT_MAP).map(([key, joint]) => [key, optional(numberType({ min: joint.min, max: joint.max }))]))) }),
+  }),
+  prop: shape({ ...entityBase, kind: enumOf(PROP_KINDS.map(([k]) => k)), color: colorType }),
+  camera: shape({ ...entityBase, fov: fovType, roll: scalar, lookAt: vector }),
+  group: shape({ ...entityBase, members: arrayOf(any, 1) }),
 };
-const TIMELINE_KEYS = ['duration', 'fps', 'mainCameraId', 'tracks'];
-const TRACK_KEYS = ['id', 'target', 'property', 'keys'];
-const KEY_KEYS = ['t', 'value', 'ease'];
-const PATH_KEYS = ['id', 'target', 'points', 'closed', 'start', 'duration', 'speed', 'orient'];
-const PATH_OPTIONAL = ['stops', 'stopTimes', 'interpolation', 'timedSegments', 'waypointTimes'];
-const CONSTRAINT_KEYS = ['id', 'type', 'target', 'subject', 'offset', 'start', 'end'];
-
-const isStr = (v) => typeof v === 'string';
-const fmt = (v) => (v === undefined ? 'undefined'
-  : JSON.stringify(v, (k, x) => (typeof x === 'number' && !Number.isFinite(x) ? String(x) : x)));
+const sceneType = shape({
+  scale: positive, pos: vector, rot: vector, sky: colorType, labels: boolType,
+  ground: shape({ visible: boolType, opacity: numberType({ min: 0, max: 1 }), height: scalar }),
+  ratio: enumOf(RATIO_OPTIONS.map(([k]) => k)), activeCameraId: any,
+  panorama: nullable(shape({ assetId: any, rotation: scalar, radius: positive })),
+});
+const timelineType = shape({ duration: positive, fps: numberType({ gt: 0, int: true }), mainCameraId: any, tracks: arrayOf(any) });
+const trackType = shape({ id: any, target: any, property: enumOf(TRACK_PROPERTIES), keys: any });
+const pathType = shape({
+  id: any, target: any, points: arrayOf(vector, 2), closed: boolType, start: timeType, duration: positive,
+  speed: enumOf(PATH_SPEEDS), orient: enumOf(PATH_ORIENTS), interpolation: optional(enumOf(['centripetal', 'polyline'])),
+  stops: optional(any), stopTimes: optional(any), timedSegments: optional(any), waypointTimes: optional(any),
+});
+const constraintType = shape({ id: any, type: enumOf(CONSTRAINT_TYPES), target: any, subject: any, offset: vector,
+  start: nullable(timeType), end: nullable(timeType) });
 
 /** 同源资源路径：只允许 ./assets/ 下的相对路径，不允许 .. 回溯、协议、查询串。 */
 export function isLocalAssetURL(url) {
@@ -155,34 +134,12 @@ export function isLocalAssetURL(url) {
 export function validate(doc) {
   const errors = [];
   const err = (path, msg) => errors.push(`${path} ${msg}`);
-  // 约定：字段缺失（undefined）由上一级 checkKeys 报"缺少字段"，下面各值检查遇到 undefined 直接跳过，避免重复报错。
-
-  /** 必须是对象且键集合恰好为 keys（缺键 / 多余键都报；optional 里的可缺省）。返回是否为对象。 */
-  /** @param {unknown} v @param {string} path @param {string[]} keys @param {string[]} [optional] @returns {v is Record<string, unknown>} */
-  const checkKeys = (v, path, keys, optional = []) => {
-    if (v === undefined) return false;
-    if (!isObj(v)) { err(path, `应为对象，实际为 ${fmt(v)}`); return false; }
-    for (const k of keys) if (!(k in v)) err(path, `缺少字段 ${k}`);
-    for (const k of Object.keys(v)) if (!keys.includes(k) && !optional.includes(k)) err(`${path}.${k}`, '是未知字段');
-    return true;
-  };
-  const vec3 = (v, path) => {
-    if (v === undefined) return;
-    if (!Array.isArray(v) || v.length !== 3) { err(path, `应为长度 3 的数组，实际为 ${fmt(v)}`); return; }
-    v.forEach((x, i) => { if (!isNum(x)) err(`${path}[${i}]`, `应为有限数，实际为 ${fmt(x)}`); });
-  };
-  /** @param {unknown} v @param {string} path @param {{min?:number,max?:number,gt?:number}} [bounds] */
-  const num = (v, path, { min = -Infinity, max = Infinity, gt } = {}) => {
-    if (v === undefined) return;
-    if (!isNum(v)) { err(path, `应为有限数，实际为 ${fmt(v)}`); return; }
-    if (gt != null && !(v > gt)) err(path, `应大于 ${gt}，实际为 ${v}`);
-    if (v < min || v > max) err(path, `超出范围 ${min}..${max}，实际为 ${v}`);
-  };
-  const bool = (v, path) => { if (v !== undefined && typeof v !== 'boolean') err(path, `应为布尔值，实际为 ${fmt(v)}`); };
-  const str = (v, path) => { if (v !== undefined && !isStr(v)) err(path, `应为字符串，实际为 ${fmt(v)}`); };
-  const nonEmpty = (v, path) => { if (v !== undefined && (!isStr(v) || !v)) err(path, `应为非空字符串，实际为 ${fmt(v)}`); };
-  const hex = (v, path) => { if (v !== undefined && (!isStr(v) || !HEX_RE.test(v))) err(path, `应为 #rrggbb 颜色，实际为 ${fmt(v)}`); };
-  const arr = (v, path) => { if (v !== undefined && !Array.isArray(v)) err(path, `应为数组，实际为 ${fmt(v)}`); };
+  // 缺字段保留父对象定位；关系校验仅在结构允许时继续。
+  /** @param {object} type @param {unknown} v @param {string} path @returns {v is Record<string, any>} */
+  const check = (type, v, path) => type.check(v, path, err);
+  const vec3 = (v, path) => check(vector, v, path);
+  const nonEmpty = (v, path) => check(nonEmptyType, v, path);
+  const arr = (v, path) => check(arrayOf(any), v, path);
 
   if (!isObj(doc)) return { ok: false, errors: [`文档应为对象，实际为 ${fmt(doc)}`] };
 
@@ -190,47 +147,10 @@ export function validate(doc) {
   if (doc.schema !== SCHEMA_VERSION) {
     return { ok: false, errors: [`schema 版本未知：${fmt(doc.schema)}（当前支持 ${SCHEMA_VERSION}）`] };
   }
-  checkKeys(doc, '文档', TOP_KEYS);
+  check(shape({ schema: any, meta: any, scene: any, assets: any, entities: any, paths: any, constraints: any, timeline: any }), doc, '文档');
 
   // ---- meta ----
-  if (checkKeys(doc.meta, 'meta', META_KEYS, ['cameraMoves'])) {
-    const m = doc.meta;
-    str(m.name, 'meta.name');
-    for (const k of ['createdAt', 'updatedAt']) {
-      if (m[k] !== undefined && (!isStr(m[k]) || Number.isNaN(Date.parse(m[k])))) err(`meta.${k}`, `应为 ISO 时间字符串，实际为 ${fmt(m[k])}`);
-    }
-    str(m.app, 'meta.app');
-    if (m.cameraMoves != null) {
-      if (typeof m.cameraMoves !== 'object' || Array.isArray(m.cameraMoves)) err('meta.cameraMoves', '应为对象');
-      else for (const [id, state] of Object.entries(m.cameraMoves)) {
-        const p = `meta.cameraMoves.${id}`;
-        if (!checkKeys(state, p, ['signature', 'segments'], ['customPrefix'])) continue;
-        str(state.signature, `${p}.signature`);
-        if (state.customPrefix !== undefined && typeof state.customPrefix !== 'boolean') err(`${p}.customPrefix`, '应为布尔值');
-        if (!Array.isArray(state.segments)) { err(`${p}.segments`, '应为数组'); continue; }
-        state.segments.forEach((segment, i) => {
-          const q = `${p}.segments[${i}]`;
-          if (!checkKeys(segment, q, ['name', 'params', 'subject', 'aim', 'origin'])) return;
-          if (!(isStr(segment.name) && MOVE_NAMES.includes(segment.name))) err(`${q}.name`, '未知运镜');
-          vec3(segment.aim, `${q}.aim`);
-          if (Array.isArray(segment.subject)) vec3(segment.subject, `${q}.subject`); else str(segment.subject, `${q}.subject`);
-          if (checkKeys(segment.origin, `${q}.origin`, ['position', 'rot', 'roll', 'time'])) {
-            vec3(segment.origin.position, `${q}.origin.position`); vec3(segment.origin.rot, `${q}.origin.rot`);
-            num(segment.origin.roll, `${q}.origin.roll`); num(segment.origin.time, `${q}.origin.time`, { min: 0 });
-          }
-          if (checkKeys(segment.params, `${q}.params`, ['duration'], ['amount', 'sweep', 'rise', 'dir', 'minSubjectDist'])) {
-            for (const k of ['duration', 'amount', 'sweep', 'rise', 'minSubjectDist']) num(segment.params[k], `${q}.params.${k}`, { gt: 0 });
-            if (segment.params.dir != null && !(isStr(segment.params.dir) && MOVE_DIR_VALUES.has(segment.params.dir))) err(`${q}.params.dir`, '无效方向');
-          }
-        });
-      }
-    }
-    if (m.editorView != null && checkKeys(m.editorView, 'meta.editorView', ['pos', 'target'], ['fov'])) {
-      vec3(m.editorView.pos, 'meta.editorView.pos');
-      vec3(m.editorView.target, 'meta.editorView.target');
-      num(m.editorView.fov, 'meta.editorView.fov', { gt: 0, max: 179 });
-    }
-  }
+  check(metaType, doc.meta, 'meta');
 
   // ---- assets ----
   const assetIds = new Set();
@@ -240,9 +160,7 @@ export function validate(doc) {
       const p = `assets.${id}`;
       assetIds.add(id);
       if (!isObj(a)) { err(p, `应为对象，实际为 ${fmt(a)}`); continue; }
-      for (const k of Object.keys(a)) if (!['type', 'name', 'url', 'dataURL'].includes(k)) err(`${p}.${k}`, '是未知字段');
-      if (a.type !== 'image') err(`${p}.type`, `应为 'image'，实际为 ${fmt(a.type)}`);
-      str(a.name, `${p}.name`);
+      check(obj({ type: enumOf(['image']), name: optional(strType), url: optional(any), dataURL: optional(any) }), a, p);
       const hasUrl = 'url' in a, hasData = 'dataURL' in a;
       if (hasUrl === hasData) err(p, 'url 与 dataURL 必须二选一');
       if (hasUrl && !isLocalAssetURL(a.url)) err(`${p}.url`, `必须是以 ./assets/ 开头的同源相对路径，实际为 ${fmt(a.url)}`);
@@ -271,56 +189,20 @@ export function validate(doc) {
     const p = `entities[${i}]`;
     if (!isObj(e)) { err(p, `应为对象，实际为 ${fmt(e)}`); return; }
     if (!(isStr(e.type) && ENTITY_TYPES.includes(e.type))) { err(`${p}.type`, `未知实体类型 ${fmt(e.type)}（可选 ${ENTITY_TYPES.join(' / ')}）`); return; }
-    checkKeys(e, p, ENTITY_KEYS[e.type], e.type === 'character' ? ['trailColor'] : []);
-    nonEmpty(e.id, `${p}.id`);
-    str(e.name, `${p}.name`);
-    bool(e.visible, `${p}.visible`);
-    if (checkKeys(e.transform, `${p}.transform`, ['pos', 'rot', 'scale'])) {
-      for (const k of ['pos', 'rot', 'scale']) vec3(e.transform[k], `${p}.transform.${k}`);
-    }
-
+    check(entityTypes[e.type], e, p);
     if (e.type === 'character') {
-      if (e.body !== undefined && !(isStr(e.body) && e.body in BODY_TYPES)) err(`${p}.body`, `未知体型 ${fmt(e.body)}（可选 ${Object.keys(BODY_TYPES).join(' / ')}）`);
-      hex(e.color, `${p}.color`);
-      hex(e.trailColor, `${p}.trailColor`);
-      if (checkKeys(e.pose, `${p}.pose`, ['preset', 'values'])) {
-        const { preset, values } = e.pose;
-        if (preset != null && !(isStr(preset) && preset in POSE_PRESET_MAP)) {
-          err(`${p}.pose.preset`, `未知姿势预设 ${fmt(preset)}（应为 null 或 ${Object.keys(POSE_PRESET_MAP).join(' / ')}）`);
-        }
-        if (values === undefined) { /* 已报缺少字段 */ } else if (!isObj(values)) err(`${p}.pose.values`, `应为对象，实际为 ${fmt(values)}`);
-        else {
-          for (const [k, v] of Object.entries(values)) {
-            const j = JOINT_MAP[k];
-            const vp = `${p}.pose.values.${k}`;
-            if (!j) { err(vp, '不是已知关节'); continue; }
-            if (!isNum(v)) err(vp, `应为有限数，实际为 ${fmt(v)}`);
-            else if (v < j.min || v > j.max) err(vp, `超出范围 ${j.min}..${j.max}，实际为 ${v}`);
-          }
-        }
-      }
       if (e.parent != null) ref(e.parent, `${p}.parent`, 'group');
-    } else if (e.type === 'prop') {
-      if (e.kind !== undefined && !(isStr(e.kind) && PROP_KIND_SET.has(e.kind))) err(`${p}.kind`, `未知道具类型 ${fmt(e.kind)}（可选 ${[...PROP_KIND_SET].join(' / ')}）`);
-      hex(e.color, `${p}.color`);
-    } else if (e.type === 'camera') {
-      num(e.fov, `${p}.fov`, { min: FOV_RANGE[0], max: FOV_RANGE[1] });
-      num(e.roll, `${p}.roll`);
-      vec3(e.lookAt, `${p}.lookAt`);
-    } else if (e.type === 'group') {
-      if (e.members === undefined) { /* 已报缺少字段 */ } else if (!Array.isArray(e.members) || !e.members.length) err(`${p}.members`, `应为非空数组，实际为 ${fmt(e.members)}`);
-      else {
-        e.members.forEach((mid, k) => {
-          const mp = `${p}.members[${k}]`;
-          const hit = ref(mid, mp, 'character');
-          if (!hit) return;
-          if (memberOf.has(mid)) err(mp, `${fmt(mid)} 同时属于多个组（${memberOf.get(mid)} / ${e.id}）`);
-          else memberOf.set(mid, e.id);
-          // parent 悬空时只报"引用不存在"（在该角色条目上），不再重复报不一致
-          const parentDangling = isStr(hit.e.parent) && !byId.has(hit.e.parent);
-          if (hit.e.parent !== e.id && !parentDangling) err(`entities[${hit.i}].parent`, `应为 ${fmt(e.id)}（该角色列在组 ${fmt(e.id)} 的 members 里），实际为 ${fmt(hit.e.parent)}`);
-        });
-      }
+    } else if (e.type === 'group' && Array.isArray(e.members)) {
+      e.members.forEach((mid, k) => {
+        const mp = `${p}.members[${k}]`;
+        const hit = ref(mid, mp, 'character');
+        if (!hit) return;
+        if (memberOf.has(mid)) err(mp, `${fmt(mid)} 同时属于多个组（${memberOf.get(mid)} / ${e.id}）`);
+        else memberOf.set(mid, e.id);
+        // parent 悬空时只报"引用不存在"（在该角色条目上），不再重复报不一致
+        const parentDangling = isStr(hit.e.parent) && !byId.has(hit.e.parent);
+        if (hit.e.parent !== e.id && !parentDangling) err(`entities[${hit.i}].parent`, `应为 ${fmt(e.id)}（该角色列在组 ${fmt(e.id)} 的 members 里），实际为 ${fmt(hit.e.parent)}`);
+      });
     }
   });
   // 反向：parent 指向某组，但该组 members 里没有它
@@ -333,25 +215,10 @@ export function validate(doc) {
   });
 
   // ---- scene ----
-  if (checkKeys(doc.scene, 'scene', SCENE_KEYS)) {
+  if (check(sceneType, doc.scene, 'scene')) {
     const s = doc.scene;
-    num(s.scale, 'scene.scale', { gt: 0 });
-    vec3(s.pos, 'scene.pos');
-    vec3(s.rot, 'scene.rot');
-    hex(s.sky, 'scene.sky');
-    bool(s.labels, 'scene.labels');
-    if (checkKeys(s.ground, 'scene.ground', ['visible', 'opacity', 'height'])) {
-      bool(s.ground.visible, 'scene.ground.visible');
-      num(s.ground.opacity, 'scene.ground.opacity', { min: 0, max: 1 });
-      num(s.ground.height, 'scene.ground.height');
-    }
-    if (s.ratio !== undefined && !(isStr(s.ratio) && RATIO_SET.has(s.ratio))) err('scene.ratio', `未知取景比例 ${fmt(s.ratio)}（可选 ${[...RATIO_SET].join(' / ')}）`);
     if (s.activeCameraId != null) ref(s.activeCameraId, 'scene.activeCameraId', 'camera');
-    if (s.panorama != null && checkKeys(s.panorama, 'scene.panorama', ['assetId', 'rotation', 'radius'])) {
-      if (!assetIds.has(s.panorama.assetId)) err('scene.panorama.assetId', `引用的资源不存在：${fmt(s.panorama.assetId)}`);
-      num(s.panorama.rotation, 'scene.panorama.rotation');
-      num(s.panorama.radius, 'scene.panorama.radius', { gt: 0 });
-    }
+    if (isObj(s.panorama) && !assetIds.has(s.panorama.assetId)) err('scene.panorama.assetId', `引用的资源不存在：${fmt(s.panorama.assetId)}`);
   }
 
   // ---- 动画：timeline / paths / constraints ----
@@ -372,25 +239,15 @@ export function validate(doc) {
     if (!types.includes(hit.type)) { err(path, `应引用 ${types.join(' / ')}，实际 ${fmt(id)} 是 ${hit.type}`); return null; }
     return hit;
   };
-  const oneOf = (v, path, list, what) => {
-    if (v !== undefined && !list.includes(v)) err(path, `未知${what} ${fmt(v)}（可选 ${list.join(' / ')}）`);
-  };
-  const time = (v, path) => num(v, path, { min: 0 });
-  const nullableTime = (v, path) => { if (v !== null) time(v, path); };
-
   const posTracks = new Map(); // targetId → 位置轨道；机位允许结束后衔接路径
-  if (checkKeys(doc.timeline, 'timeline', TIMELINE_KEYS)) {
+  if (check(timelineType, doc.timeline, 'timeline')) {
     const t = doc.timeline;
-    num(t.duration, 'timeline.duration', { gt: 0 });
-    if (t.fps !== undefined && !(Number.isInteger(t.fps) && isNum(t.fps) && t.fps > 0)) err('timeline.fps', `应为正整数，实际为 ${fmt(t.fps)}`);
     if (t.mainCameraId != null) ref(t.mainCameraId, 'timeline.mainCameraId', 'camera');
-    arr(t.tracks, 'timeline.tracks');
     const seen = new Map(); // `${target}|${property}` → 轨道路径
     (Array.isArray(t.tracks) ? t.tracks : []).forEach((tr, i) => {
       const p = `timeline.tracks[${i}]`;
-      if (!checkKeys(tr, p, TRACK_KEYS)) return;
+      if (!check(trackType, tr, p)) return;
       claimId(tr.id, p);
-      oneOf(tr.property, `${p}.property`, TRACK_PROPERTIES, '轨道属性');
       const okProp = isStr(tr.property) && TRACK_PROPERTIES.includes(tr.property);
       const hit = okProp ? animRef(tr.target, `${p}.target`, TRACK_TARGETS[tr.property]) : null;
       if (hit) {
@@ -405,18 +262,12 @@ export function validate(doc) {
       let prevT = null;
       tr.keys.forEach((key, j) => {
         const kp = `${p}.keys[${j}]`;
-        if (!checkKeys(key, kp, KEY_KEYS)) { prevT = null; return; }
-        time(key.t, `${kp}.t`);
+        if (!check(shape({ t: timeType, value: !okProp ? any : tr.property === 'fov' ? fovType : vector, ease: enumOf(EASES) }), key, kp)) { prevT = null; return; }
         if (isNum(key.t) && prevT !== null && !(key.t > prevT)) err(`${kp}.t`, `应大于前一键 ${prevT}，实际为 ${key.t}`);
         prevT = isNum(key.t) ? key.t : null;
-        oneOf(key.ease, `${kp}.ease`, EASES, '缓动');
         if (!okProp || key.value === undefined) return;
-        if (tr.property === 'fov') num(key.value, `${kp}.value`, { min: FOV_RANGE[0], max: FOV_RANGE[1] });
-        else {
-          vec3(key.value, `${kp}.value`);
-          if (tr.property === 'scale' && Array.isArray(key.value)) {
-            key.value.forEach((x, n) => { if (isNum(x) && !(x > 0)) err(`${kp}.value[${n}]`, `缩放应大于 0，实际为 ${x}`); });
-          }
+        if (tr.property === 'scale' && Array.isArray(key.value)) {
+          key.value.forEach((x, n) => { if (isNum(x) && !(x > 0)) err(`${kp}.value[${n}]`, `缩放应大于 0，实际为 ${x}`); });
         }
       });
     });
@@ -448,7 +299,7 @@ export function validate(doc) {
   const pathOf = new Map(); // targetId → 路径路径
   (Array.isArray(doc.paths) ? doc.paths : []).forEach((pa, i) => {
     const p = `paths[${i}]`;
-    if (!checkKeys(pa, p, PATH_KEYS, PATH_OPTIONAL)) return;
+    if (!check(pathType, pa, p)) return;
     claimId(pa.id, p);
     const hit = animRef(pa.target, `${p}.target`, PATH_TARGETS);
     if (hit) {
@@ -462,16 +313,6 @@ export function validate(doc) {
         if (!connected) err(`${p}.target`, `${fmt(pa.target)} 已有 pos 轨道 ${prefix.path}，路径与 pos 轨道不能重叠；仅机位可在位置动画结束后从末端接续`);
       }
     }
-    if (pa.points !== undefined) {
-      if (!Array.isArray(pa.points) || pa.points.length < 2) err(`${p}.points`, `应为至少 2 个点的数组，实际为 ${Array.isArray(pa.points) ? `${pa.points.length} 个点` : fmt(pa.points)}`);
-      else pa.points.forEach((pt, j) => vec3(pt, `${p}.points[${j}]`));
-    }
-    if (pa.interpolation !== undefined) oneOf(pa.interpolation, `${p}.interpolation`, ['centripetal', 'polyline'], '插值');
-    bool(pa.closed, `${p}.closed`);
-    time(pa.start, `${p}.start`);
-    num(pa.duration, `${p}.duration`, { gt: 0 });
-    oneOf(pa.speed, `${p}.speed`, PATH_SPEEDS, '速度曲线');
-    oneOf(pa.orient, `${p}.orient`, PATH_ORIENTS, '朝向方式');
     checkStops(pa, p);
     if (pa.timedSegments !== undefined) {
       if (!Array.isArray(pa.points) || !isNum(pa.duration)) return;
@@ -482,11 +323,10 @@ export function validate(doc) {
         let lastPoint = 0, lastEnd = 0;
         pa.timedSegments.forEach((s, j) => {
           const q = `${p}.timedSegments[${j}]`;
-          if (!checkKeys(s, q, ['from', 'to', 'start', 'end'], ['closed', 'speed'])) return;
+          if (!check(shape({ from: any, to: any, start: any, end: any, closed: optional(any), speed: optional(any) }), s, q)) return;
           if (!isNum(s.from) || !isNum(s.to) || s.from !== lastPoint || !Number.isInteger(s.to) || s.to <= s.from || s.to >= points?.length) { err(q, '顶点区间应连续、递增并覆盖路径'); return; }
           if (!isNum(s.start) || !isNum(s.end) || s.start < lastEnd || s.end <= s.start || s.end > duration) { err(q, '时段应递增且位于路径时长内'); return; }
-          if (s.speed !== undefined) oneOf(s.speed, `${q}.speed`, PATH_SPEEDS, '速度曲线');
-          if (s.closed !== undefined) bool(s.closed, `${q}.closed`);
+          check(obj({ closed: optional(boolType), speed: optional(enumOf(PATH_SPEEDS)) }, { strict: false }), s, q);
           if (s.closed && (s.to - s.from < 3 || JSON.stringify(points?.[s.from]) !== JSON.stringify(points?.[s.to]))) err(q, '闭合段须至少三条边且首尾重合');
           lastPoint = s.to; lastEnd = s.end;
         });
@@ -510,17 +350,13 @@ export function validate(doc) {
   arr(doc.constraints, 'constraints');
   (Array.isArray(doc.constraints) ? doc.constraints : []).forEach((c, i) => {
     const p = `constraints[${i}]`;
-    if (!checkKeys(c, p, CONSTRAINT_KEYS)) return;
+    if (!check(constraintType, c, p)) return;
     claimId(c.id, p);
-    oneOf(c.type, `${p}.type`, CONSTRAINT_TYPES, '约束类型');
     animRef(c.target, `${p}.target`, ['camera']);
     if (Array.isArray(c.subject)) vec3(c.subject, `${p}.subject`);
     else if (c.subject !== undefined) {
       if (animRef(c.subject, `${p}.subject`, ENTITY_TYPES) && c.subject === c.target) err(`${p}.subject`, `不能是被约束的机位自己 ${fmt(c.target)}`);
     }
-    vec3(c.offset, `${p}.offset`);
-    if (c.start !== undefined) nullableTime(c.start, `${p}.start`);
-    if (c.end !== undefined) nullableTime(c.end, `${p}.end`);
     if (isNum(c.start) && isNum(c.end) && !(c.end > c.start)) err(`${p}.end`, `应大于 start ${c.start}，实际为 ${c.end}`);
   });
 

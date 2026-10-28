@@ -41,3 +41,19 @@ test('十种场景/动画错误定位准确，拒绝加载且不改变已提交�
     assert.equal(app.store.document, before);
   }
 });
+
+test('声明式结构保留缺字段、向量分量和未知字段的原定位', () => {
+  const doc = createEmptyDocument();
+  doc.meta.cameraMoves = { camera01: { signature: 'test', segments: [{}] } };
+  doc.scene.pos = [0, 'bad', 0];
+  doc.scene.ground.extra = 1;
+  delete doc.scene.sky;
+  const paths = validate(doc).errors.map(e => e.split(' ')[0]);
+  assert.ok(paths.includes('scene'));
+  assert.ok(paths.includes('scene.pos[1]'));
+  assert.ok(paths.includes('scene.ground.extra'));
+  assert.ok(paths.includes('meta.cameraMoves.camera01.segments[0]'));
+  assert.ok(paths.includes('meta.cameraMoves.camera01.segments[0].name'));
+  delete doc.meta.cameraMoves.camera01.segments;
+  assert.ok(validate(doc).errors.some(e => e.startsWith('meta.cameraMoves.camera01.segments ')));
+});
