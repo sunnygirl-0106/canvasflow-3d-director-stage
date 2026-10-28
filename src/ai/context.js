@@ -1,3 +1,4 @@
+// @ts-check
 import { pathLength } from '../anim/pathGen.js';
 import { roundTo } from '../util/math.js';
 // ---- 场景摘要 ----

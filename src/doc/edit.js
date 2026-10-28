@@ -103,6 +103,7 @@ export function nextTrailColor(doc) {
 }
 
 /** 新建角色并加入文档（默认落点 = spawnPoint）。返回条目。 */
+/** @param {ReturnType<typeof import("./schema.js").createEmptyDocument>} doc @param {{name:string,body:string,pos?:number[],yaw?:number,color?:string,pose?:string|null}} options */
 export function addCharacter(doc, { name, body, pos, yaw = 0, color, pose = null }) {
   const characterCount = doc.entities.filter(e => e.type === 'character').length;
   const defaultColor = CHARACTER_COLORS[body] ?? CHARACTER_PALETTE[characterCount % CHARACTER_PALETTE.length];

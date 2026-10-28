@@ -1,3 +1,4 @@
+// @ts-check
 // AI 高层操作（ops）：模型只输出一列 ops，不直接写场景文档。
 // 本文件 = ops 词汇（OP_SPECS，提示词里的写法也由它生成）+ 手写校验器 validateOps。
 // 校验只看 ops 本身与当前场景的名字表：结构、枚举、名字引用、数值范围；任何一条错 → 整批拒绝。
@@ -41,6 +42,7 @@ const nameType = (doc) => ({
   },
 });
 
+/** @param {{doc?:string,min?:number,max?:number,gt?:number,int?:boolean}} [options] */
 const numType = ({ doc = '数', min = -Infinity, max = Infinity, gt, int = false } = {}) => ({
   doc,
   check(v, p, err) {
@@ -231,6 +233,7 @@ export function uniqueName(name, taken) {
 export function validateOps(ops, scene = [], { mode = 'modify' } = {}) {
   const errors = [];
   const err = (path, msg) => errors.push(`${path} ${msg}`);
+  /** @type {Record<string,string>} */
   const renames = {};
   if (!MODES.includes(mode)) return { ok: false, errors: [`未知模式 ${fmt(mode)}，可选 ${MODES.join(' / ')}`], renames };
   if (!Array.isArray(ops)) return { ok: false, errors: [`ops 应为数组，实际为 ${fmt(ops)}`], renames };
@@ -283,7 +286,7 @@ export function validateOps(ops, scene = [], { mode = 'modify' } = {}) {
     if (o.op === undefined) { err(`${p}.op`, '缺少字段'); return; }
     const spec = OP_SPECS[o.op];
     if (!spec) { err(`${p}.op`, `未知操作 ${fmt(o.op)}，可选 ${OP_NAMES.join(' / ')}`); return; }
-    if (mode === 'image' && !IMAGE_OPS.includes(o.op)) { err(`${p}.op`, `识图模式不允许 ${fmt(o.op)}（只允许 ${IMAGE_OPS.join(' / ')}）`); return; }
+    if (mode === 'image' && !(typeof o.op === 'string' && IMAGE_OPS.includes(o.op))) { err(`${p}.op`, `识图模式不允许 ${fmt(o.op)}（只允许 ${IMAGE_OPS.join(' / ')}）`); return; }
     const { op, ...rest } = o;
     const before = errors.length;
     checkFields(rest, p, spec.fields, err);
@@ -346,12 +349,13 @@ export function validateOps(ops, scene = [], { mode = 'modify' } = {}) {
       case 'set_path': {
         if (!shapeOk) break;
         need(`${p}.target`, o.target, PATH_TARGETS, { member: false });
-        const pa = o.path;
+        const pa = /** @type {Record<string,unknown>} */ (o.path);
         if (pa.kind === 'line') refOrPoint(`${p}.path.to`, pa.to, { not: o.target });
         if (pa.kind === 'arc') refOrPoint(`${p}.path.center`, pa.center, { not: o.target });
         if (pa.kind === 'toward') need(`${p}.path.target`, pa.target, null, { not: o.target });
         if (pa.kind === 'points' && Array.isArray(pa.stops) && Array.isArray(pa.points)) {
-          pa.stops.forEach((i, j) => { if (Number.isInteger(i) && i > pa.points.length - 2) err(`${p}.path.stops[${j}]`, `应在 0–${pa.points.length - 2} 之间（最后一个点是终点，不用停顿），实际为 ${i}`); });
+          const count = pa.points.length;
+          pa.stops.forEach((i, j) => { if (Number.isInteger(i) && i > count - 2) err(`${p}.path.stops[${j}]`, `应在 0–${count - 2} 之间（最后一个点是终点，不用停顿），实际为 ${i}`); });
         }
         break;
       }

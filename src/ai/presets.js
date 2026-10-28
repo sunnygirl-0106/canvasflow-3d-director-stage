@@ -1,3 +1,4 @@
+// @ts-check
 import { Path, pathOptionsFor } from '../anim/Path.js';
 import { createEmptyDocument, validate } from '../doc/schema.js';
 import { addCharacter, charName, newId } from '../doc/edit.js';
@@ -15,6 +16,7 @@ export const SCENE_PRESETS = [
 ];
 
 /** 编排直接生成文档；描述仅供后续 AI 修改，不参与模板的确定性调度。 */
+/** @param {number} index @param {{ratio?:import("../types/vocab.js").Ratio}} [options] */
 export function createPresetScene(index, { ratio = '16:9' } = {}) {
   const preset = SCENE_PRESETS[index];
   if (!preset) throw new Error('未知预制场景');
@@ -183,6 +185,7 @@ export function createPresetScene(index, { ratio = '16:9' } = {}) {
     face(a, 9, [-0.6, -2], 11); face(b, 7, [-1.8, -0.5], 8);
     camera([-5.5, 1.9, 6.5], [[3, []], [7, [['half_orbit', { sweep: 35, dir: 'ccw' }]]], [9, [['truck', { amount: .6, dir: 'right' }], ['crane', { amount: .2, dir: 'up' }]]], [11, [['push_in', { amount: .5 }]]], [14, []]], 48);
   } else {
+    /** @type {[string,number[],number[],number[],number,number][]} */
     const data = [
       ['A', [0, -3.5], [-0.25, -1.5], [0, 1.2], 0, 6],
       ['B', [-3.8, -1], [-2.5, -0.2], [-1.4, 0.4], 1, 6.5],

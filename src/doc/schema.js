@@ -96,8 +96,9 @@ const MOVE_NAMES = Object.keys(PANEL_LABEL);
 const MOVE_DIR_VALUES = new Set(Object.values(MOVE_DIRS).flat().map(([value]) => value));
 
 // ---- 默认值 ----
+/** @type {import("../types/contracts.js").SceneDocument["scene"]} */
 export const DEFAULT_SCENE = Object.freeze({
-  scale: 1, pos: [0, 0, 0], rot: [0, 0, 0], sky: '#060608', labels: true,
+  scale: 1, pos: /** @type {[number,number,number]} */ ([0, 0, 0]), rot: /** @type {[number,number,number]} */ ([0, 0, 0]), sky: '#060608', labels: true,
   ground: { visible: true, opacity: 0.4, height: 0 },
   ratio: 'auto', activeCameraId: null, panorama: null,
 });

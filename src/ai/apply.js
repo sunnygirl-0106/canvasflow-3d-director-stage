@@ -1,3 +1,4 @@
+// @ts-check
 // ops → 场景：validateOps → 在文档拷贝上逐条执行（src/doc/edit.js 的纯函数）→ 现有校验器 →
 // 全部通过才 loadDocument，History 记一步。任何一步失败都返回错误列表，场景不变。
 import { checkRequestState } from '../util/requestGuard.js';
@@ -67,11 +68,13 @@ function docAnchorYaw(doc, id) {
 /**
  * 在文档拷贝上执行一批（已校验的）ops。纯函数：不碰场景。
  * @param {object} base 当前文档（不修改）
- * @param {{mode:string, charSeq?:number}} opts charSeq = 角色起名计数器起点（群众成员起名用）
+ * @param {object[]} ops
+ * @param {{mode?:string, charSeq?:number}} opts charSeq = 角色起名计数器起点（群众成员起名用）
  * @returns {{doc:object, errors:string[], renames:Object<string,string>, warnings:string[], applied:number}}
  */
 export function compileOps(base, ops, { mode = 'modify', charSeq = 0 } = {}) {
   const doc = clone(base);
+  /** @type {Record<string,string>} */
   const renames = {};
   const warnings = [];
   const errors = [];
