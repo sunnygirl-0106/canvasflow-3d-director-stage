@@ -1,15 +1,17 @@
+import { ok, openApp, page, twoCharacterFixture } from '../harness.mjs';
+import { animJSON, cleanShot, dragPath, hdist, pathMenu, pathOf, pickInOutliner, pixelDiff, scr, settle, sleep, toastText } from '../helpers.mjs';
 import fs from 'node:fs';
-import { page, ok, twoCharacterFixture } from '../harness.mjs';
-import { pixelDiff, sleep, settle, pickInOutliner, scr, pathMenu, toastText, animJSON, pathOf, cleanShot, dragPath, hdist } from '../helpers.mjs';
-
 export async function run() {
   await twoCharacterFixture();
   await page.evaluate(() => window.__timelinePanel.setCollapsed(false));
   const OUT = 'test-output/path';
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
-  const panelClip = () => page.$eval('#rightPanel', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; });
-
+  const panelClip = () => page.$eval('#rightPanel', (n) => {
+    const b = n.getBoundingClientRect();
+    return { x: b.x, y: b.y, width: b.width, height: b
+        .height };
+  });
   // ---- 场景：种子角色 A (−1.1, 0, 0.2) / B (1.1, 0, 0.2) + 方块 + 圆柱 + 方块2；导演相机斜俯视 ----
   const ids = await page.evaluate(() => {
     const a = window.__app;
@@ -17,28 +19,39 @@ export async function run() {
     // 种子模型并发加载，entities 的入列顺序不代表左右位置。
     const A = a.entities.find((e) => e.type === 'character' && e.body === 'male');
     const B = a.entities.find((e) => e.type === 'character' && e.body === 'female');
-    const box = a.addProp('box'); box.root.position.set(1.6, 0, 2.6); a.edited(box);
-    const cyl = a.addProp('cylinder'); cyl.root.position.set(3.4, 0, 0.9); a.edited(cyl);
-    const box2 = a.addProp('box'); box2.root.position.set(-2.6, 0, 2.4); a.edited(box2);
+    const box = a.addProp('box');
+    box.root.position.set(1.6, 0, 2.6);
+    a.edited(box);
+    const cyl = a.addProp('cylinder');
+    cyl.root.position.set(3.4, 0, 0.9);
+    a.edited(cyl);
+    const box2 = a.addProp('box');
+    box2.root.position.set(-2.6, 0, 2.4);
+    a.edited(box2);
     a.addCamera('front_mid'); // 验收 9：机位视角下路径不显示
     a.select(null);
     // 时间轴覆盖画布下部；绘制测试向上构图，点击点必须处于可见舞台。
-    a.rig.controls.target.set(0, -1.5, 0.6); a.stage.camera.position.set(0, 7, 7.5); a.rig.controls.update();
+    a.rig.controls.target.set(0, -1.5, 0.6);
+    a.stage.camera.position.set(0, 7, 7.5);
+    a.rig.controls.update();
     a.history.reset();
     const n = (e) => e.name;
     return { A: A.id, B: B.id, box: box.id, cyl: cyl.id, box2: box2.id, An: n(A), Bn: n(B), boxN: n(box), cylN: n(cyl), box2N: n(box2) };
   });
   await settle(200);
-
   // ---- 1 点击落点 + 8 绘制态不冲突 ----
   await pickInOutliner(ids.An);
   const shot0 = await cleanShot(`${OUT}/1_before.png`);
   const aPos = await page.evaluate((id) => window.__app.findEntity(id).toJSON().transform.pos, ids.A);
   await pathMenu('点击落点');
-  for (const p of [[-1.1, 0, 2.2], [0.6, 0, 2.9], [1.9, 0, 0.8]]) { await page.mouse.click(...await scr(p)); await settle(); }
+  for (const p of [[-1.1, 0, 2.2], [0.6, 0, 2.9], [1.9, 0, 0.8]]) {
+    await page.mouse.click(...await scr(p));
+    await settle();
+  }
   const view0 = await page.evaluate(() => ({ pos: window.__app.stage.camera.position.toArray(), target: window.__app.rig.controls.target.toArray() }));
   await dragPath([await scr([0, 0, -1]), await scr([1.2, 0, -2.2])], { steps: 10 });
-  const view1 = await page.evaluate(() => ({ pos: window.__app.stage.camera.position.toArray(), target: window.__app.rig.controls.target.toArray(), n: window.__app.pathTool.draft.length }));
+  const view1 = await page.evaluate(() => ({ pos: window.__app.stage.camera.position.toArray(), target: window.__app.rig.controls.target.toArray(),
+    n: window.__app.pathTool.draft.length }));
   await page.mouse.move(...await scr([2.6, 0, -0.6]));
   await settle();
   await page.screenshot({ path: `${OUT}/13_points.png` });
@@ -51,18 +64,18 @@ export async function run() {
   const shot1 = await cleanShot(`${OUT}/1_t0.png`);
   const diff1 = pixelDiff(shot0, shot1, `${OUT}/1_diff.png`);
   await page.evaluate(() => window.__app.playback.stop());
-  ok('验收1 点击落点：3 次点击 + Enter → 4 个点、首点 ≡ 角色当前位置、start=0、duration=10',
-    p1 && p1.points.length === 4 && hdist(p1.points[0], aPos) < 1e-3 && p1.points[0][1] === 0 && p1.start === 0 && p1.duration === dd1,
-    `points=${JSON.stringify(p1?.points)} start=${p1?.start} duration=${p1?.duration}/${dd1}`);
+  ok('验收1 点击落点：3 次点击 + Enter → 4 个点、首点 ≡ 角色当前位置、start=0、duration=10', p1 && p1.points.length === 4 && hdist(p1.points[0], aPos) < 1e-3 && p1
+    .points[0][1] === 0 && p1.start === 0 && p1.duration === dd1, `points=${JSON.stringify(p1?.points)} start=${p1?.start} duration=${p1?.duration}/${dd1}`);
   ok('验收1 创建后 t=0 画面 ≡ 创建前（不跳）', diff1 === 0, `差异 ${(diff1 * 100).toFixed(4)}%`);
-  ok('验收8 绘制态在地面按下拖动：相机不转、不落点',
-    JSON.stringify(view0) === JSON.stringify({ pos: view1.pos, target: view1.target }) && view1.n === 4, `n=${view1.n}`);
-
+  ok('验收8 绘制态在地面按下拖动：相机不转、不落点', JSON.stringify(view0) === JSON.stringify({ pos: view1.pos, target: view1.target }) && view1.n === 4, `n=${view1.n}`);
   // ---- 2 手绘：从角色 B 脚下拖一条约 4 m 的 S 形 ----
   await pickInOutliner(ids.Bn);
   await pathMenu('手绘');
   const stroke = [];
-  for (let i = 0; i <= 48; i++) { const u = i / 48; stroke.push(await scr([1.1 + 0.55 * Math.sin(u * Math.PI * 2), 0, 0.2 - 3.5 * u])); }
+  for (let i = 0; i <= 48; i++) {
+    const u = i / 48;
+    stroke.push(await scr([1.1 + 0.55 * Math.sin(u * Math.PI * 2), 0, 0.2 - 3.5 * u]));
+  }
   await dragPath(stroke, { hold: () => page.screenshot({ path: `${OUT}/13_freehand.png` }) });
   const fh = await page.evaluate(async (id) => {
     const a = window.__app;
@@ -71,15 +84,22 @@ export async function run() {
     const { Path } = await import('/src/anim/Path.js');
     const path = new Path(p);
     const S = [];
-    for (let i = 0; i <= 3000; i++) S.push(path.positionAt((i / 3000) * path.length));
+    for (let i = 0; i <= 3000; i++)
+      S.push(path.positionAt((i / 3000) * path.length));
     let max = 0;
-    for (const r of raw.slice(1)) { let b = Infinity; for (const s of S) b = Math.min(b, Math.hypot(s.x - r[0], s.z - r[2])); max = Math.max(max, b); }
-    let L = 0; for (let i = 1; i < raw.length; i++) L += Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][2] - raw[i - 1][2]);
+    for (const r of raw.slice(1)) {
+      let b = Infinity;
+      for (const s of S)
+        b = Math.min(b, Math.hypot(s.x - r[0], s.z - r[2]));
+      max = Math.max(max, b);
+    }
+    let L = 0;
+    for (let i = 1; i < raw.length; i++)
+      L += Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][2] - raw[i - 1][2]);
     return { n: p.points.length, raw: raw.length, L, max };
   }, ids.B);
-  ok('验收2 手绘 S 形：简化后点数 ∈ [5, 40]，原采样点到路径曲线最大偏差 < 5 cm',
-    fh.n >= 5 && fh.n <= 40 && fh.max < 0.05, `采样 ${fh.raw} 点 / 长 ${fh.L.toFixed(2)} m → ${fh.n} 点，最大偏差 ${(fh.max * 100).toFixed(2)} cm`);
-
+  ok('验收2 手绘 S 形：简化后点数 ∈ [5, 40]，原采样点到路径曲线最大偏差 < 5 cm', fh.n >= 5 && fh.n <= 40 && fh.max < 0.05,
+    `采样 ${fh.raw} 点 / 长 ${fh.L.toFixed(2)} m → ${fh.n} 点，最大偏差 ${(fh.max * 100).toFixed(2)} cm`);
   // ---- 3 直线（方块2）/ 走到（圆柱 → 方块）----
   await pickInOutliner(ids.box2N);
   await pathMenu('直线');
@@ -90,7 +110,6 @@ export async function run() {
   await settle(120);
   const ln = await pathOf(ids.box2);
   ok('验收3 直线：点一下终点 → 2 个点', ln?.points.length === 2 && hdist(ln.points[1], [-3.4, 0, 0.6]) < 0.01, JSON.stringify(ln?.points));
-
   await pickInOutliner(ids.cylN);
   await pathMenu('走到');
   await page.mouse.click(...await scr([0.4, 0, -2.8])); // 点地面（无 ⇧）：提示并留在绘制态
@@ -104,15 +123,14 @@ export async function run() {
   await settle(120);
   const tw = await pathOf(ids.cyl);
   const twD = tw ? hdist(tw.points[1], boxC) : NaN;
-  const twAng = tw ? Math.abs(Math.atan2(tw.points[1][2] - tw.points[0][2], tw.points[1][0] - tw.points[0][0]) - Math.atan2(boxC[2] - tw.points[0][2], boxC[0] - tw.points[0][0])) * 180 / Math.PI : NaN;
+  const twAng = tw ? Math.abs(Math.atan2(tw.points[1][2] - tw.points[0][2], tw.points[1][0] - tw.points[0][0]) - Math.atan2(boxC[2] - tw.points[0][2],
+    boxC[0] - tw.points[0][0])) * 180 / Math.PI : NaN;
   ok('验收3 走到：点地面（无 ⇧）不创建、留在绘制态', twGround.mode === 'toward' && twGround.toast.includes('请点击目标对象'), JSON.stringify(twGround));
   ok('验收3 走到方块：终点到方块中心水平距离 0.8 ± 0.01 m，方向偏差 < 1°', tw?.points.length === 2 && Math.abs(twD - 0.8) <= 0.01 && twAng < 1,
     `距离 ${twD.toFixed(4)} m，偏差 ${twAng.toFixed(4)}°`);
-
   // ---- 4 环绕：圆柱以方块为中心（替换走到路径）----
   await pathMenu('环绕');
   const replaceToast = await toastText();
-
   await page.mouse.move(...await scr([1.6, 0.25, 2.6]));
   await settle();
   await page.screenshot({ path: `${OUT}/13_arc.png` });
@@ -125,10 +143,15 @@ export async function run() {
     const R = Math.hypot(s[0] - c[0], s[2] - c[2]);
     return { R, d: p.points.map((q) => Math.hypot(q[0] - c[0], q[2] - c[2])), closed: p.closed, start: p.start, speed: p.speed, n: p.points.length };
   }, { id: ids.cyl, c: boxC });
-  await page.evaluate(() => { [...document.querySelectorAll('.ptabs button')].find(b=>b.textContent==='运动轨迹')?.click(); document.querySelector('#inspector [data-sec="path"]')?.scrollIntoView(); });
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.ptabs button')].find(b => b.textContent === '运动轨迹')?.click();
+    document
+      .querySelector('#inspector [data-sec="path"]')?.scrollIntoView();
+  });
   const setSweep = await page.evaluate(() => {
     const f = [...document.querySelectorAll('#inspector [data-sec="path"] .field')].find((x) => x.querySelector('label')?.textContent === '扫过角度');
-    if (!f) return false;
+    if (!f)
+      return false;
     const inp = f.querySelector('input');
     inp.value = '360';
     inp.dispatchEvent(new Event('change', { bubbles: true }));
@@ -138,10 +161,10 @@ export async function run() {
   const arc2 = await pathOf(ids.cyl);
   const arc2d = arc2.points.map((q) => hdist(q, boxC));
   ok('验收4 环绕：直接绘制，无替换确认', !replaceToast.includes('重新绘制将替换现有路径'), replaceToast);
-  ok('验收4 环绕方块：半径由当前位置得出，所有点到中心距离 = 半径 ± 1 cm',
-    arc.n > 2 && arc.d.every((x) => Math.abs(x - arc.R) <= 0.01) && !arc.closed, `R=${arc.R.toFixed(3)} 点距=${arc.d.map((x) => x.toFixed(3)).join(',')}`);
-  ok('验收4 Inspector 改扫过角度为 360 → closed=true，仍在圆上', setSweep && arc2.closed === true && arc2d.every((x) => Math.abs(x - arc.R) <= 0.01), `closed=${arc2.closed} n=${arc2.points.length}`);
-
+  ok('验收4 环绕方块：半径由当前位置得出，所有点到中心距离 = 半径 ± 1 cm', arc.n > 2 && arc.d.every((x) => Math.abs(x - arc.R) <= 0.01) && !arc.closed,
+    `R=${arc.R.toFixed(3)} 点距=${arc.d.map((x) => x.toFixed(3)).join(',')}`);
+  ok('验收4 Inspector 改扫过角度为 360 → closed=true，仍在圆上', setSweep && arc2.closed === true && arc2d.every((x) => Math.abs(x - arc.R) <= 0.01),
+    `closed=${arc2.closed} n=${arc2.points.length}`);
   // ---- 11 往返（含手绘路径）----
   const rt = await page.evaluate(async () => {
     const a = window.__app;
@@ -152,16 +175,13 @@ export async function run() {
     const selectedPaths = d2.paths.filter(p => a.selectedIds.has(p.target)).length;
     return { eq: strip(d1) === strip(d2), paths: d2.paths.length, items: a.pathOverlay.itemCount, selectedPaths, visible: a.pathOverlay.visible };
   });
-  ok('验收11 含手绘路径的文档往返一致；导入重置选择，无轨迹机位不显示其他对象路径',
-    rt.eq && rt.paths === 4 && rt.selectedPaths === 0 && rt.items === 0 && rt.visible, JSON.stringify(rt));
+  ok('验收11 含手绘路径的文档往返一致；导入重置选择，无轨迹机位不显示其他对象路径', rt.eq && rt.paths === 4 && rt.selectedPaths === 0 && rt.items === 0 && rt.visible, JSON.stringify(rt));
   const selectedPath = await page.evaluate(id => {
     const a = window.__app;
     a.select(id, { user: true });
     return { expected: a.timeline.paths.find(p => p.target === id).id, shown: a.pathOverlay.displayState.paths.map(item => item.source.id) };
   }, ids.A);
-  ok('验收11 显式选中角色只显示该角色路径',
-    selectedPath.shown.length === 1 && selectedPath.shown[0] === selectedPath.expected, JSON.stringify(selectedPath));
-
+  ok('验收11 显式选中角色只显示该角色路径', selectedPath.shown.length === 1 && selectedPath.shown[0] === selectedPath.expected, JSON.stringify(selectedPath));
   // ---- 5 Explicitly enter editing before dragging existing vertices (round 4). ----
   await pickInOutliner(ids.An);
   await page.evaluate(() => [...document.querySelectorAll('.ptabs button')].find(b => b.textContent === '运动轨迹')?.click());
@@ -170,7 +190,11 @@ export async function run() {
   await page.evaluate(() => {
     const tl = window.__app.timeline;
     window.__upd = 0;
-    if (!tl.__spied) { const f = tl.updatePath.bind(tl); tl.updatePath = (...x) => { window.__upd++; return f(...x); }; tl.__spied = true; }
+    if (!tl.__spied) {
+      const f = tl.updatePath.bind(tl);
+      tl.updatePath = (...x) => { window.__upd++; return f(...x); };
+      tl.__spied = true;
+    }
   });
   const H0 = await page.evaluate(() => window.__app.history.entries.length);
   const v1 = pA.points[1];
@@ -186,13 +210,15 @@ export async function run() {
   const afterDrag = await page.evaluate(() => ({ n: window.__upd, H: window.__app.history.entries.length }));
   const pA2 = await pathOf(ids.A);
   const moved = [pA2.points[1][0] - v1[0], pA2.points[1][2] - v1[2]];
-  ok('验收5 拖第 2 个顶点 1 m：拖动中文档不变；松手 updatePath 恰好 1 次、撤销栈 +1',
-    JSON.stringify(during.paths) === JSON.stringify((await animJSON()).paths.map((p) => (p.id === pA.id ? pA : p))) && afterDrag.n === 1 && afterDrag.H === H0 + 1
-      && Math.abs(moved[0] - 1) < 0.03 && Math.abs(moved[1]) < 0.03 && pA2.points.every((q, i) => i === 1 || JSON.stringify(q) === JSON.stringify(pA.points[i])),
-    `updatePath×${afterDrag.n} history ${H0}→${afterDrag.H} 位移=${moved.map((x) => x.toFixed(3))}`);
+  ok('验收5 拖第 2 个顶点 1 m：拖动中文档不变；松手 updatePath 恰好 1 次、撤销栈 +1', JSON.stringify(during.paths) === JSON.stringify((await animJSON()).paths.map((p) => (p
+    .id === pA.id ? pA : p))) && afterDrag.n === 1 && afterDrag.H === H0 + 1
+    && Math.abs(moved[0] - 1) < 0.03 && Math.abs(moved[1]) < 0.03 && pA2.points.every((q, i) => i === 1 || JSON.stringify(q) === JSON.stringify(pA
+    .points[i])), `updatePath×${afterDrag.n} history ${H0}→${afterDrag.H} 位移=${moved.map((x) => x.toFixed(3))}`);
   const v2 = pA2.points[2];
   const a0 = await scr(v2);
-  await page.mouse.move(...a0); await page.mouse.down(); await page.mouse.move(a0[0] + 70, a0[1] - 40, { steps: 6 });
+  await page.mouse.move(...a0);
+  await page.mouse.down();
+  await page.mouse.move(a0[0] + 70, a0[1] - 40, { steps: 6 });
   await page.keyboard.press('Escape');
   await page.mouse.up();
   await settle(120);
@@ -204,8 +230,11 @@ export async function run() {
   ok('验收5 ⇧拖整体平移：所有点位移一致', dl.every((d) => Math.abs(d[0] - dl[0][0]) < 1e-3 && Math.abs(d[1] - dl[0][1]) < 1e-3) && Math.hypot(...dl[0]) > 0.5,
     `位移=${dl.map((d) => d.map((x) => x.toFixed(3)).join('/')).join(' ')}`);
   // 平移回去（首点重新对齐角色，供后面的播放亮点检查）
-  await page.evaluate((id) => { const a = window.__app; const p = a.timeline.toJSON().paths.find((x) => x.target === id); a.timeline.updatePath(p.id, { points: [a.pathTool.startPoint(a.findEntity(id)), ...p.points.slice(1)] }); }, ids.A);
-
+  await page.evaluate((id) => {
+    const a = window.__app;
+    const p = a.timeline.toJSON().paths.find((x) => x.target === id);
+    a.timeline.updatePath(p.id, { points: [a.pathTool.startPoint(a.findEntity(id)), ...p.points.slice(1)] });
+  }, ids.A);
   // ---- 6 插入 / 删除 ----
   const before6 = await pathOf(ids.A);
   const mid = await page.evaluate((pid) => {
@@ -214,7 +243,13 @@ export async function run() {
     const n = a.timeline.toJSON().paths.find((p) => p.id === pid).points.length;
     const u = 1.5 / (n - 1); // 第 2、3 个顶点之间的中点（参数域）
     let lo = 0, hi = path.length;
-    for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (path.uAt(m) < u) lo = m; else hi = m; }
+    for (let i = 0; i < 60; i++) {
+      const m = (lo + hi) / 2;
+      if (path.uAt(m) < u)
+        lo = m;
+      else
+        hi = m;
+    }
     const q = path.positionAt(lo);
     return [q.x, q.y, q.z];
   }, before6.id);
@@ -230,7 +265,8 @@ export async function run() {
   await settle(150);
   const del = await pathOf(ids.A);
   const stillThere = await page.evaluate((id) => !!window.__app.findEntity(id), ids.A);
-  ok('验收6 选中顶点 Del → 点数 −1（实体不被删除）', selV?.index === 2 && del.points.length === before6.points.length && stillThere, `${ins.points.length} → ${del.points.length}`);
+  ok('验收6 选中顶点 Del → 点数 −1（实体不被删除）', selV?.index === 2 && del.points.length === before6.points.length && stillThere,
+    `${ins.points.length} → ${del.points.length}`);
   await pickInOutliner(ids.box2N);
   await page.evaluate(() => [...document.querySelectorAll('.ptabs button')].find(b => b.textContent === '运动轨迹')?.click());
   await pathMenu('编辑现有轨迹');
@@ -239,11 +275,20 @@ export async function run() {
   await settle();
   await page.keyboard.press('Delete');
   await settle(150);
-  const two = { n: (await pathOf(ids.box2)).points.length, toast: await toastText(), ent: await page.evaluate((id) => !!window.__app.findEntity(id), ids.box2) };
+  const two = { n: (await pathOf(ids.box2)).points.length, toast: await toastText(), ent: await page.evaluate((id) => !!window.__app.findEntity(id),
+    ids.box2) };
   ok('验收6 2 个点时 Del 被拒绝（toast）', two.n === 2 && two.toast.includes('至少需要 2 个顶点') && two.ent, JSON.stringify(two));
-
   // ---- 7 冲突：方块有 pos 轨道 ----
-  await page.evaluate((id) => { const a = window.__app; const e = a.findEntity(id); const tl = a.timeline; const t = tl.addTrack({ target: id, property: 'pos' }); tl.setKey(t.id, 0, e.toJSON().transform.pos); tl.setKey(t.id, 2, [1.6, 0, 1.2]); a.playback.stop(); }, ids.box);
+  await page.evaluate((id) => {
+    const a = window.__app;
+    const e = a.findEntity(id);
+    const tl = a.timeline;
+    const t = tl.addTrack({ target: id,
+      property: 'pos' });
+    tl.setKey(t.id, 0, e.toJSON().transform.pos);
+    tl.setKey(t.id, 2, [1.6, 0, 1.2]);
+    a.playback.stop();
+  }, ids.box);
   await settle(200);
   await pickInOutliner(ids.boxN);
   const doc7 = JSON.stringify(await animJSON());
@@ -254,23 +299,31 @@ export async function run() {
   const same7 = JSON.stringify(await animJSON()) === doc7;
   const H7 = await page.evaluate(() => window.__app.history.entries.length);
   await pathMenu('直线');
-
   await page.mouse.click(...await scr([2.8, 0, 3.4]));
   await settle(200);
   await sleep(50);
-  const after7 = await page.evaluate((id) => { const a = window.__app; const j = a.timeline.toJSON(); return { tracks: j.timeline.tracks.filter((t) => t.target === id).length, path: !!j.paths.find((p) => p.target === id), H: a.history.entries.length }; }, ids.box);
-  await page.keyboard.down('Meta'); await page.keyboard.press('z'); await page.keyboard.up('Meta');
+  const after7 = await page.evaluate((id) => {
+    const a = window.__app;
+    const j = a.timeline.toJSON();
+    return { tracks: j.timeline.tracks.filter((t) => t.target === id).length, path: !!j.paths.find((p) => p.target === id), H: a.history.entries.length };
+  }, ids.box);
+  await page.keyboard.down('Meta');
+  await page.keyboard.press('z');
+  await page.keyboard.up('Meta');
   await sleep(400);
-  const undo7 = await page.evaluate((id) => { const j = window.__app.timeline.toJSON(); return { tracks: j.timeline.tracks.filter((t) => t.target === id).length, path: !!j.paths.find((p) => p.target === id) }; }, ids.box);
+  const undo7 = await page.evaluate((id) => {
+    const j = window.__app.timeline.toJSON();
+    return { tracks: j.timeline.tracks.filter((t) => t
+        .target === id).length, path: !!j.paths.find((p) => p.target === id) };
+  }, ids.box);
   ok('验收7 有 pos 轨道直接绘制；Esc 取消后文档不变', !t7.includes('该对象已有位置关键帧') && same7 && mode7 === null, t7);
-  ok('验收7 绘制完成 → pos 轨道删除且路径创建，为一次撤销（⌘Z 后轨道恢复、路径消失）',
-    after7.tracks === 0 && after7.path && after7.H === H7 + 1 && undo7.tracks === 1 && !undo7.path, `after=${JSON.stringify(after7)} undo=${JSON.stringify(undo7)}`);
-
+  ok('验收7 绘制完成 → pos 轨道删除且路径创建，为一次撤销（⌘Z 后轨道恢复、路径消失）', after7.tracks === 0 && after7.path && after7.H === H7 + 1 && undo7.tracks === 1 && !undo7.path,
+    `after=${JSON.stringify(after7)} undo=${JSON.stringify(undo7)}`);
   // ---- 8（补）⌥ + 左键拖动仍可环绕 ----
   await pickInOutliner(ids.An);
   const doc8 = JSON.stringify(await animJSON());
   await pathMenu('点击落点');
-   // 已有路径：直接重绘，Esc 取消后文档不变
+  // 已有路径：直接重绘，Esc 取消后文档不变
   const cv0 = await page.evaluate(() => window.__app.stage.camera.position.toArray());
   await page.keyboard.down('Alt');
   await dragPath([await scr([0, 0, -1.5]), await scr([1.5, 0, -1.5])], { steps: 10 });
@@ -280,12 +333,15 @@ export async function run() {
   await page.keyboard.press('Escape');
   await settle();
   const esc8 = await page.evaluate(() => window.__app.pathTool.mode);
-  ok('验收8 绘制态 ⌥ + 左键拖动 = 环绕（不落点）；Esc 退出、替换未执行', Math.hypot(...cv0.map((v, i) => v - cv1.pos[i])) > 0.1 && cv1.n === 1 && esc8 === null && JSON.stringify(await animJSON()) === doc8,
-    `相机位移 ${Math.hypot(...cv0.map((v, i) => v - cv1.pos[i])).toFixed(3)} 草稿点数 ${cv1.n}`);
-  await page.evaluate(() => { const a = window.__app; // 时间轴覆盖画布下部；绘制测试向上构图，点击点必须处于可见舞台。
-    a.rig.controls.target.set(0, -1.5, 0.6); a.stage.camera.position.set(0, 7, 7.5); a.rig.controls.update(); });
+  ok('验收8 绘制态 ⌥ + 左键拖动 = 环绕（不落点）；Esc 退出、替换未执行', Math.hypot(...cv0.map((v, i) => v - cv1.pos[i])) > 0.1 && cv1.n === 1 && esc8 === null && JSON
+    .stringify(await animJSON()) === doc8, `相机位移 ${Math.hypot(...cv0.map((v, i) => v - cv1.pos[i])).toFixed(3)} 草稿点数 ${cv1.n}`);
+  await page.evaluate(() => {
+    const a = window.__app; // 时间轴覆盖画布下部；绘制测试向上构图，点击点必须处于可见舞台。
+    a.rig.controls.target.set(0, -1.5, 0.6);
+    a.stage.camera.position.set(0, 7, 7.5);
+    a.rig.controls.update();
+  });
   await settle(200);
-
   // ---- 9 可视化 ----
   await page.screenshot({ path: `${OUT}/9_selected.png` });
   await page.evaluate(() => window.__app.select(null));
@@ -306,19 +362,26 @@ export async function run() {
   await pickInOutliner(ids.An);
   ok('验收9 播放亮点与角色脚底水平距离 < 5 cm；机位视角下路径不显示', vis.d < 0.05 && vis.pov === false, `距离 ${(vis.d * 100).toFixed(3)} cm`);
   await page.evaluate(() => window.__app.playback.stop());
-
   // ---- 13 Inspector 路径段截图 ----
-  await page.evaluate(() => { [...document.querySelectorAll('.ptabs button')].find(b=>b.textContent==='运动轨迹')?.click(); document.querySelector('#inspector [data-sec="path"]')?.scrollIntoView(); });
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.ptabs button')].find(b => b.textContent === '运动轨迹')?.click();
+    document
+      .querySelector('#inspector [data-sec="path"]')?.scrollIntoView();
+  });
   await settle();
   await page.screenshot({ path: `${OUT}/13_inspector.png`, clip: await panelClip() });
-
   // ---- 10 播放：角色 B 画一条 6 m 直线（替换手绘）后直接 Space ----
   // 长直线左端需落在可见画布内，不能点到左侧场景树。
-  await page.evaluate(() => { const a = window.__app; a.rig.controls.target.set(-1.5, -1.5, 0); a.stage.camera.position.set(-1.5, 9, 11); a.rig.controls.update(); });
+  await page.evaluate(() => {
+    const a = window.__app;
+    a.rig.controls.target.set(-1.5, -1.5, 0);
+    a.stage.camera.position.set(-1.5, 9, 11);
+    a.rig
+      .controls.update();
+  });
   await settle();
   await pickInOutliner(ids.Bn);
   await pathMenu('直线');
-
   const bStart = await page.evaluate((id) => window.__app.pathTool.startPoint(window.__app.findEntity(id)), ids.B);
   const bEnd = [bStart[0] - 6, 0, bStart[2] - 0.3];
   await page.mouse.click(...await scr(bEnd));
@@ -328,15 +391,23 @@ export async function run() {
   await page.evaluate(() => { window.__timelinePanel.setPref('loop', false); document.activeElement?.blur(); });
   await page.keyboard.press('Space');
   await page.waitForFunction((t) => window.__app.playback.time >= t, { timeout: 15000 }, p10.duration * 0.5);
-  const walk = await page.evaluate((id) => { const e = window.__app.findEntity(id); return Object.values(e.values).reduce((s, v) => s + Math.abs(v), 0); }, ids.B);
+  const walk = await page.evaluate((id) => {
+    const e = window.__app.findEntity(id);
+    return Object.values(e.values).reduce((s, v) => s + Math.abs(v), 0);
+  }, ids.B);
   await page.waitForFunction((t) => window.__app.playback.time >= t, { timeout: 15000 }, p10.start + p10.duration);
-  const end10 = await page.evaluate((id) => { const a = window.__app; a.playback.pause(); return window.__app.findEntity(id).toJSON({ base: null }).transform.pos; }, ids.B);
+  const end10 = await page.evaluate((id) => {
+    const a = window.__app;
+    a.playback.pause();
+    return window.__app.findEntity(id).toJSON({ base: null })
+      .transform.pos;
+  }, ids.B);
   const end10root = await page.evaluate((id) => { const e = window.__app.findEntity(id); return [e.root.position.x, e.root.position.z]; }, ids.B);
   const e10 = Math.hypot(end10root[0] - p10.points[1][0], end10root[1] - p10.points[1][2]);
   await page.evaluate(() => window.__app.playback.stop());
-  ok('验收10 6 m 直线直接 Space：中途在走路（姿势非零），t ≥ 结束时停在终点（误差 < 1 cm）',
-    Math.abs(hdist(p10.points[0], p10.points[1]) - 6) < 0.05 && walk > 1 && e10 < 0.01,
-    `长 ${hdist(p10.points[0], p10.points[1]).toFixed(3)} m 时长 ${p10.duration}s 姿势Σ|v|=${walk.toFixed(1)} 终点误差 ${(e10 * 100).toFixed(3)} cm ${JSON.stringify(end10).length ? '' : ''}`);
+  ok('验收10 6 m 直线直接 Space：中途在走路（姿势非零），t ≥ 结束时停在终点（误差 < 1 cm）', Math.abs(hdist(p10.points[0], p10.points[1]) - 6) < 0.05 && walk > 1 && e10 < 0.01,
+    `长 ${hdist(p10.points[0], p10.points[1]).toFixed(3)} m 时长 ${p10.duration}s 姿势Σ|v|=${walk.toFixed(1)} 终点误差 ${(e10 * 100).toFixed(3)} cm ${JSON
+    .stringify(end10).length ? '' : ''}`);
   // 角色匀速路径从首帧朝向切线，不使用机位的 0.8 m 转身过渡。
   const turn10 = await page.evaluate(async (pid, id) => {
     const a = window.__app, pb = a.playback;
@@ -351,24 +422,33 @@ export async function run() {
     const tan = P.tangentAt(P.length / 2);
     const tanYaw = Math.atan2(tan.x, tan.z) * R2D;
     let t06 = P.json.start;
-    while (P.distanceAt(t06) < TURN_IN_DIST) t06 += 1 / 120;
-    pb.seek(P.json.start); const s0 = d(yaw(), tanYaw);
-    pb.seek(t06); const s1 = d(yaw(), tanYaw);
+    while (P.distanceAt(t06) < TURN_IN_DIST)
+      t06 += 1 / 120;
+    pb.seek(P.json.start);
+    const s0 = d(yaw(), tanYaw);
+    pb.seek(t06);
+    const s1 = d(yaw(), tanYaw);
     let maxStep = 0, prev = null;
-    for (let t = P.json.start; t <= t06 + 0.1; t += 1 / 30) { pb.seek(t); const y = yaw(); if (prev !== null) maxStep = Math.max(maxStep, d(y, prev)); prev = y; }
+    for (let t = P.json.start; t <= t06 + 0.1; t += 1 / 30) {
+      pb.seek(t);
+      const y = yaw();
+      if (prev !== null)
+        maxStep = Math.max(maxStep, d(y, prev));
+      prev = y;
+    }
     pb.stop();
     return { manual, tanYaw, s0, s1, maxStep, t06 };
   }, p10.id, ids.B);
-  ok('角色匀速直线：t=start 与走过 0.8 m 均朝向切线（< 0.5°），每帧 < 15°', turn10.s0 < 0.5 && turn10.s1 < 0.5 && turn10.maxStep < 15,
-    JSON.stringify(Object.fromEntries(Object.entries(turn10).map(([k, v]) => [k, +v.toFixed(3)]))));
+  ok('角色匀速直线：t=start 与走过 0.8 m 均朝向切线（< 0.5°），每帧 < 15°', turn10.s0 < 0.5 && turn10.s1 < 0.5 && turn10.maxStep < 15, JSON.stringify(Object
+    .fromEntries(Object.entries(turn10).map(([k, v]) => [k, +v.toFixed(3)]))));
   // 收尾 1 · 停顿：点线插入一个中间顶点（自动选中）→ Inspector「在选中顶点处停顿」真实点击 → stops = [1]；该顶点处速度 0
   await page.evaluate((pid) => { const a = window.__app; const P = a.pathOverlay.pathOf(pid); a.pathEditor.insertAt(pid, P.length / 2); }, p10.id);
   await settle(200);
-  await page.evaluate(id => { const p=window.__timelinePanel; p.trackRows.expandedEnts.add(id); p.rebuild(); }, ids.B);
+  await page.evaluate(id => { const p = window.__timelinePanel; p.trackRows.expandedEnts.add(id); p.rebuild(); }, ids.B);
   await settle();
-  await page.click(`.tl-track[data-path="${p10.id}"] .tl-path-node[data-node-index="1"]`, {button:'right'});
+  await page.click(`.tl-track[data-path="${p10.id}"] .tl-path-node[data-node-index="1"]`, { button: 'right' });
   const stopUI0 = await page.$eval('.ctxmenu', n => n.innerText);
-  await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find(n=>n.textContent.includes('在此节点停顿')).click());
+  await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find(n => n.textContent.includes('在此节点停顿')).click());
   await settle(150);
   const stopUI = await page.evaluate(async (pid) => {
     const a = window.__app;
@@ -378,12 +458,207 @@ export async function run() {
     return { stops: json.stops, v: P.speedAt(json.start + P.segmentTimes[0]), info: '第五轮停顿通过节点右键操作', hist: a.history.entries.length };
   }, p10.id);
   await page.screenshot({ path: `${OUT}/14_stop_inspector.png`, clip: await panelClip() });
-  await page.keyboard.down('Meta'); await page.keyboard.press('z'); await page.keyboard.up('Meta');
+  await page.keyboard.down('Meta');
+  await page.keyboard.press('z');
+  await page.keyboard.up('Meta');
   await settle(200);
   const stopUndo = await pathOf(ids.B);
-  ok('停顿（节点右键）：选中中间顶点 → 勾「在选中顶点处停顿」→ stops=[1]、该顶点处速度 0；⌘Z 撤掉',
-    stopUI0.includes('停顿') && JSON.stringify(stopUI.stops) === '[1]' && stopUI.v < 1e-9 && !('stops' in stopUndo) && stopUndo.points.length === 3,
-    `「${stopUI0}」 stops=${JSON.stringify(stopUI.stops)} v=${stopUI.v} 撤销后 ${JSON.stringify(stopUndo.stops)} | ${stopUI.info.replace(/\s+/g, ' ')}`);
-
+  ok('停顿（节点右键）：选中中间顶点 → 勾「在选中顶点处停顿」→ stops=[1]、该顶点处速度 0；⌘Z 撤掉', stopUI0.includes('停顿') && JSON.stringify(stopUI.stops) === '[1]' && stopUI.v < 1e-9 &&
+    !('stops' in stopUndo) && stopUndo.points.length === 3,
+      `「${stopUI0}」 stops=${JSON.stringify(stopUI.stops)} v=${stopUI.v} 撤销后 ${JSON.stringify(stopUndo.stops)} | ${stopUI.info.replace(/\s+/g, ' ')}`);
   console.log(`📁 产物：${OUT}/`);
+}
+await checkDrawingModes();
+await checkDrawingDuration();
+async function checkDrawingModes() {
+  await page.evaluate(() => localStorage.clear());
+  await page.setViewport({ width: 1440, height: 810, deviceScaleFactor: 1 });
+  await openApp();
+  const OUT = 'test-output/path/checkDrawingModes';
+  fs.mkdirSync(OUT, { recursive: true });
+  const shot = async (name) => { await settle(100); await page.screenshot({ path: `${OUT}/${name}.png` }); };
+  const ids = await page.evaluate(() => { window.__seed = window.__app.exportDocument(); return window.__app.entities.map(e => e.id); });
+  await page.evaluate(() => window.__timelinePanel.setCollapsed(false));
+  await page.evaluate(() => {
+    const a = window.__app;
+    a.directorDetached = true;
+    a.rig.controls.target.set(0, 0, 0);
+    a.stage.camera.position.set(0, 8, 8);
+    a.rig.controls.update();
+  });
+  // 路径替换用例显式创建自己的路径，不依赖已取消的双路径启动场景。
+  await page.evaluate(id => { const a = window.__app; a.timeline.addPath({ target: id, points: [[.7, 0, 0], [1, 0, -1]], duration: 5 }); }, ids[1]);
+  for (const [mode, label] of [['circle', '圆环路径'], ['line', '直线路径'], ['rectangle', '矩形路径'], ['freehand', '铅笔路径'], ['points', '钢笔路径']]) {
+    await page.click(`.tl-head[data-ent="${ids[1]}"] .tl-addkey`);
+    await page.evaluate(label => [...document.querySelectorAll('.ctx-item')].find(e => e.textContent === label).click(), label);
+    const prior = await page.evaluate(() => JSON.stringify(window.__app.timeline.toJSON()));
+    ok(`${label}锁定点击行对象`, await page.evaluate(id => window.__app.pathTool.ent?.id === id, ids[1]));
+    if (mode === 'freehand')
+      await dragPath([await scr([.7, 0, 0]), await scr([1.3, 0, -.5]), await scr([1.8, 0, -1])], { steps: 12 });
+    else {
+      await page.mouse.click(...await scr(mode === 'circle' ? [1.7, 0, 0] : [2, 0, -1.5]));
+      if (mode === 'points')
+        await page.keyboard.press('Enter');
+    }
+    await settle(120);
+    await shot(`path-${mode}`);
+    ok(`${label}完成`, await page.evaluate(() => !window.__app.pathTool.mode));
+    const persistence = await page.evaluate(async (before) => {
+      const a = window.__app, after = JSON.stringify(a.timeline.toJSON());
+      await a.history.undo();
+      const undo = JSON.stringify(a.timeline.toJSON()) === before;
+      await a.history.redo();
+      const redo = JSON.stringify(a.timeline.toJSON()) === after;
+      const doc = a.exportDocument();
+      await a.loadDocument(doc);
+      return undo && redo && JSON.stringify(a.timeline.toJSON()) === after;
+    }, prior);
+    ok(`${label}一步撤销、重做、保存往返`, persistence);
+  }
+  const roundtrip = await page.evaluate(async () => {
+    const a = window.__app;
+    const d = a.exportDocument();
+    await a.loadDocument(d);
+    return JSON
+      .stringify(d.paths) === JSON.stringify(a.exportDocument().paths);
+  });
+  ok('路径导入导出保留', roundtrip);
+  fs.writeFileSync(`${OUT}/camera-parameters.json`, JSON.stringify(await page.evaluate(() => ({ director: window.__app.stage.camera.position
+      .toArray(), seed: window.__seed })), null, 2));
+}
+async function checkDrawingDuration() {
+  await page.evaluate(() => localStorage.clear());
+  await page.setViewport({ width: 1440, height: 810, deviceScaleFactor: 1 });
+  await openApp();
+  const OUT = 'test-output/path/checkDrawingDuration';
+  const snap = async (name) => { await page.mouse.move(450, 30); await settle(220); await page.screenshot({ path: `${OUT}/${name}.png` }); };
+  fs.mkdirSync(OUT, { recursive: true });
+  const seed = await page.evaluate(() => window.__app.exportDocument());
+  // 长度与场景总长矩阵经过UI公共提交入口，验证原子扩时、提示及终点。
+  const timing = [];
+  for (const total of [5, 10, 30])
+    for (const length of [1, 8, 20]) {
+      const data = await page.evaluate(async ({ seed, total, length }) => {
+        const a = window.__app;
+        await a.loadDocument(seed, { applyView: true });
+        a.timeline.setDuration(total);
+        const e = a.entities[0];
+        a.select(e.id);
+        a.history.reset();
+        const from = e.toJSON().transform.pos, to = [from[0] + length, from[1], from[2]];
+        a.pathTool.begin('points', e);
+        a.pathTool.draft = [from, to];
+        a.pathTool.finish();
+        const id = a.timeline.paths.find(p => p.target === e.id).id;
+        const p = a.timeline.paths.find(p => p.id === id);
+        a.history.capture();
+        const one = a.history.entries.length === 2;
+        a.playback.seek(10);
+        const endpoint = a.timeline.valueOf(e, 'pos');
+        const toast = document.querySelector('#toast').textContent;
+        const result = { total, length, start: p.start, duration: p.duration, scene: a.timeline.duration, one, endError: Math.hypot(...endpoint
+            .map((v, i) => v - to[i])), toast };
+        await a.history.undo();
+        result.undo = a.timeline.duration === total && a.timeline.paths.length === 0;
+        await a.history.redo();
+        a.emit('inspect', { id: e.id, section: 'path' });
+        window.__timelinePanel.setCollapsed(false);
+        window.__timelinePanel.trackRows.expandedEnts.add(e.id);
+        window.__timelinePanel.rebuild();
+        return result;
+      }, { seed, total, length });
+      timing.push(data);
+      ok(`${length}m / ${total}s场景：0～10秒、终点正确、一步撤销总长`, data.start === 0 && data.duration === 10 && data.scene === Math.max(10, total) && data.one &&
+        data.undo && data.endError < 1e-5 && data.toast.includes('0–10 s'), JSON.stringify(data));
+      if (total === 10)
+        await snap(`path-${length}m-10s`);
+    }
+  // 真实鼠标绘制五类路径，角色和机位各一次（重绘同样重置10秒）。
+  for (const type of ['character', 'camera'])
+    for (const mode of ['circle', 'line', 'rectangle', 'freehand', 'points']) {
+      await page.evaluate(async ({ seed, type, mode }) => {
+        const a = window.__app;
+        await a.loadDocument(seed, { applyView: true });
+        const e = a.entities.find(e => e.type === type);
+        a.select(e.id);
+        a.directorDetached = true;
+        a.rig.applyView(a.stage.camera.position.clone().set(0, 12, 20), a.rig.controls.target.clone().set(0, 0, 4), 50);
+        window.__timelinePanel.setCollapsed(true);
+        a.timeline.addPath({ target: e.id, points: [e.toJSON().transform.pos, [3, 0, 0]], duration: 5.1 });
+        a.pathTool.begin(mode, e);
+      }, { seed, type, mode });
+      await settle();
+      const start = await page.evaluate(() => window.__app.pathTool.start);
+      const end = [start[0] + 2, start[1], start[2] - 2];
+      if (mode === 'freehand')
+        await dragPath([await scr(start), await scr([start[0] + 1, start[1], start[2] - 1]), await scr(end)], { steps: 10 });
+      else {
+        await page.mouse.click(...await scr(end));
+        if (mode === 'points')
+          await page.keyboard.press('Enter');
+      }
+      await settle();
+      ok(`${type} ${mode}真实重绘为10秒`, await page.evaluate(() => {
+        const a = window.__app, p = a.timeline.paths[0];
+        return !a.pathTool.mode && p
+          .start === 0 && p.duration === 10;
+      }));
+    }
+  const extra = await page.evaluate(async (seed) => {
+    const a = window.__app;
+    await a.loadDocument(seed, { applyView: true });
+    const prop = a.addProp('box'), group = await a.addCrowd(1, 2, 1);
+    const durations = [];
+    for (const e of [prop, group]) {
+      a.select(e.id);
+      a.pathTool.begin('points', e);
+      const p = a.pathTool.start;
+      a.pathTool.draft = [p, [p[0] + 2, p[1], p[2]]];
+      a.pathTool.finish();
+      const id = a.timeline.paths.find(p => p.target === e.id).id;
+      durations.push(a.timeline.paths.find(p => p.id === id).duration);
+    }
+    const e = a.entities.find(e => e.type === 'character');
+    const old = a.timeline.addPath({ target: e.id, points: [[0, 0, 0], [4, 1, 0]], duration: 5.1, interpolation: 'polyline' });
+    a.select(e.id);
+    a.pathOverlay.setSelectedPath(old.id);
+    a.pathEditor.insertAt(old.id, 1);
+    const after = a.timeline.paths.find(p => p.id === old.id);
+    a.timeline.updatePath(old.id, { points: after.points.map(p => [p[0] + 1, p[1], p[2]]) });
+    const kept = a.timeline.paths.find(p => p.id === old.id).duration === 5.1;
+    const doc = a.exportDocument();
+    await a.loadDocument(doc);
+    const loaded = a.timeline.paths.find(p => p.id === old.id).duration === 5.1;
+    a.timeline.updatePath(old.id, { duration: 6 });
+    const explicit = a.timeline.paths.find(p => p.id === old.id).duration === 6;
+    const { setPath } = await import('/src/doc/edit.js');
+    a.store.transact('显式AI业务时长', d => setPath(d, e.id, [[0, 0, 0], [8, 0, 0]], { set: { duration: 6 } }));
+    return { durations, kept, loaded, explicit, api: a.timeline.paths.find(p => p.id === old.id).duration === 6 };
+  }, seed);
+  ok('群众/道具10秒；旧5.1秒插点/移动/载入保持；显式6秒保持', extra.durations.every(x => x === 10) && extra.kept && extra.loaded && extra.explicit && extra.api, JSON
+    .stringify(extra));
+  const exported = await page.evaluate(async (seed) => {
+    const a = window.__app;
+    await a.loadDocument(seed, { applyView: true });
+    const e = a.entities[0];
+    a.select(e.id);
+    a.pathTool.begin('points', e);
+    a.pathTool.draft = [[0, 0, 0], [1, 0, 0]];
+    a.pathTool.finish();
+    const samples = [];
+    for (let i = 0; i < 60; i++) {
+      a.playback.seek(i / 6);
+      samples.push(JSON.stringify({ pos: a.timeline.valueOf(e, 'pos'), pose: e.values }));
+    }
+    const { renderFrames } = await import('/src/app/VideoExporter.js');
+    let index = 0, match = true;
+    await renderFrames(a, { width: 160, height: 90, fps: 6, range: [0, 10], labels: false }, () => {
+      match &&= samples[index] === JSON.stringify({ pos: a.timeline.valueOf(e, 'pos'), pose: e.values });
+      index++;
+    });
+    a.playback.seek(10);
+    return { match, index, end: a.timeline.valueOf(e, 'pos') };
+  }, seed);
+  ok('1m短路径离线导出与逐帧跳转一致，第10秒抵达终点', exported.match && exported.index === 60 && Math.abs(exported.end[0] - 1) < 1e-6, JSON.stringify(exported));
+  fs.writeFileSync(`${OUT}/measurements.json`, JSON.stringify({ timing, extra, exported }, null, 2));
 }

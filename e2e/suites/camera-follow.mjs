@@ -1,6 +1,5 @@
 import { page, ok } from '../harness.mjs';
 import { settle, camAim } from '../helpers.mjs';
-
 export async function run() {
   const ids = await page.evaluate(() => {
     const a = window.__app, cam = a.cameras[0], actors = a.entities.filter(e => e.type === 'character');
@@ -29,7 +28,6 @@ export async function run() {
     return !rot.querySelector('input').disabled && root.querySelector('[data-constraint-type="lookAt"] select').value === '__point'
       && !window.__app.timeline.constraints.some(c => c.target === window.__app.selectedId && c.type === 'lookAt');
   }));
-
   await page.select('[data-constraint-type="lookAt"] select', ids.a);
   await settle();
   ok('跟随 B、注视 A：只改变朝向，不改变位置', near(after.pos, (await pose()).pos) && (await camAim(ids.cam, ids.a)).angle < .01);
@@ -37,11 +35,12 @@ export async function run() {
   const beforeSwitch = await pose();
   await page.select('[data-constraint-type="follow"] select', ids.a);
   await settle();
-  ok('切换跟随目标重新计算偏移，机位不跳且不改注视约束', near(beforeSwitch.pos, (await pose()).pos) && await page.evaluate(look => JSON.stringify(window.__app.timeline.constraints.filter(c => c.type === 'lookAt')) === look, look));
+  ok('切换跟随目标重新计算偏移，机位不跳且不改注视约束', near(beforeSwitch.pos, (await pose()).pos) && await page.evaluate(look => JSON.stringify(window.__app.timeline
+    .constraints.filter(c => c.type === 'lookAt')) === look, look));
   await page.evaluate(async () => { const a = window.__app; a.history.capture(); await a.history.undo(); });
   await settle();
-  ok('撤销切换恢复跟随 B，独立注视 A 不变', await page.$eval('[data-constraint-type="follow"] select', (s, id) => s.value === id, ids.b) && (await camAim(ids.cam, ids.a)).angle < .01);
-
+  ok('撤销切换恢复跟随 B，独立注视 A 不变', await page.$eval('[data-constraint-type="follow"] select', (s, id) => s.value === id, ids.b) && (await camAim(ids.cam,
+    ids.a)).angle < .01);
   await page.evaluate(ids => {
     const a = window.__app;
     a.timeline.addPath({ target: ids.a, points: [[-.7, 0, 0], [3, 0, 2]], duration: 4 });
@@ -52,7 +51,6 @@ export async function run() {
     samples.push({ ...(await pose()), aim: await camAim(ids.cam, ids.a) });
   }
   ok('跟随静止 B、注视移动 A：相机位置固定，朝向持续跟住 A', samples.every(s => near(s.pos, after.pos) && s.aim.angle < .01) && !near(samples[0].rot, samples[3].rot));
-
   await page.select('[data-constraint-type="follow"] select', ids.a);
   await page.select('[data-constraint-type="lookAt"] select', ids.b);
   await settle();
@@ -63,6 +61,6 @@ export async function run() {
   }
   ok('跟随移动 A、注视静止 B：相机随 A 移动，始终对准 B', moving.every(s => s.aim.angle < .01) && !near(moving[0].pos, moving[3].pos));
   const snapshot = await page.evaluate(() => window.__app.exportDocument());
-  await page.evaluate(async doc => { await window.__app.loadDocument(doc); window.__app.playback.seek(2); }, snapshot);
+  await page.evaluate(async (doc) => { await window.__app.loadDocument(doc); window.__app.playback.seek(2); }, snapshot);
   ok('保存重载后两个目标仍独立生效', (await camAim(ids.cam, ids.b)).angle < .01 && near((await pose()).pos, moving[2].pos));
 }

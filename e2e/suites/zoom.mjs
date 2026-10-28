@@ -1,5 +1,4 @@
 import { page, ok } from '../harness.mjs';
-
 // 检查真正渲出的角色像素，避免仅断言 visible 却漏掉雾效导致的隐形。
 export async function run() {
   const samples = await page.evaluate(() => {
@@ -12,7 +11,8 @@ export async function run() {
       const pixels = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
       let blue = 0;
       for (let i = 0; i < pixels.length; i += 4) {
-        if (pixels[i + 2] > 50 && pixels[i + 2] > pixels[i] * 1.7 && pixels[i + 2] > pixels[i + 1] * 1.1) blue++;
+        if (pixels[i + 2] > 50 && pixels[i + 2] > pixels[i] * 1.7 && pixels[i + 2] > pixels[i + 1] * 1.1)
+          blue++;
       }
       return blue;
     };
@@ -29,5 +29,6 @@ export async function run() {
     samples.push({ scale: 0.1, pixels: count() });
     return samples;
   });
-  for (const sample of samples) ok('缩小后仍渲染人物', sample.pixels > 10, JSON.stringify(sample));
+  for (const sample of samples)
+    ok('缩小后仍渲染人物', sample.pixels > 10, JSON.stringify(sample));
 }

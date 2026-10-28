@@ -1,10 +1,11 @@
-import { test } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fitPathToDuration } from '../src/anim/pathGen.js';
+import { fakeApp, addProp, addCamera, closeVec, animatedPropFixture } from './helpers.mjs';
+import { Path, WALK_RAMP } from '../src/anim/Path.js';
 import { setPath, addCharacter, addCrowd } from '../src/doc/edit.js';
 import { createEmptyDocument } from '../src/doc/schema.js';
-import { fakeApp, addProp, addCamera, closeVec } from './helpers.mjs';
-import { Path, WALK_RAMP } from '../src/anim/Path.js';
+import { fitPathToDuration } from '../src/anim/pathGen.js';
+
 
 const points = [[0, 0, 0], [20, 0, 0], [40, 0, 0]];
 
@@ -95,3 +96,16 @@ for (const [type, speed, initialDuration, redrawnDuration] of [
     assert.deepEqual([linear.speed, linear.duration], ['linear', type === 'character' || type === 'group' ? 6 : 5]);
   });
 }
+
+
+test('20% faster defaults only affect new character paths; saved timing and camera pace remain unchanged', () => {
+  const doc=createEmptyDocument(); doc.timeline.duration=100;
+  const actor=addCharacter(doc,{name:'角色A',body:'male'});
+  const path=setPath(doc,actor.id,[[0,0,0],[72,0,0]]).path;
+  assert.equal(path.duration,50); // 原 1.2 m/s 需要60秒。
+  setPath(doc,actor.id,[[0,0,0],[36,0,0]]);
+  assert.equal(doc.paths[0].duration,50);
+  const {app,ent}=animatedPropFixture();
+  const propDoc=structuredClone(app.store.document); propDoc.timeline.duration=100;
+  assert.equal(setPath(propDoc,ent.id,[[0,0,0],[12,0,0]],{set:{speed:'linear'}}).path.duration,10);
+});

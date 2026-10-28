@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPresetScene, SCENE_PRESETS } from '../src/ai/presets.js';
-import { validate } from '../src/doc/schema.js';
 import { Path, pathOptionsFor } from '../src/anim/Path.js';
+import { validate } from '../src/doc/schema.js';
+import { createPresetScene, SCENE_PRESETS } from '../src/ai/presets.js';
+
 
 const at = (doc, name) => {
   const ent = doc.entities.find(e => e.name === `角色${name}`);
@@ -91,4 +92,19 @@ test('timed custom prefix retains holds and times when appending', async () => {
   const json = { points: [[0, 1, 5], [1, 1, 5], [2, 1, 5]], start: 1, duration: 8, closed: false, speed: 'smooth', orient: 'keep', timedSegments: [{ from: 0, to: 1, start: 0, end: 2 }, { from: 1, to: 2, start: 4, end: 6 }] };
   const path = new Path(json), next = new Path(appendMove(json, cameraMove('crane', { position: json.points.at(-1), aim: [0, 1, 0] })));
   for (let t = 0; t <= 9; t += .05) assert.ok(path.positionAt(path.distanceAt(t)).distanceTo(next.positionAt(next.distanceAt(t))) < 1e-8);
+});
+
+
+test('fallback fixture contains two separate 10-second paths starting at the actors', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const d = JSON.parse(await readFile(new URL('../e2e/fixtures/round4-default.json', import.meta.url), 'utf8'));
+  assert.equal(validate(d).ok, true);
+  assert.equal(d.entities.length,3); assert.equal(d.paths.length,2);
+  assert.equal(d.timeline.duration,10); assert.equal(d.timeline.fps,30);
+  for (const p of d.paths) {
+    const e=d.entities.find(e=>e.id===p.target);
+    assert.deepEqual(p.points[0],e.transform.pos);
+    assert.deepEqual(p.points[1],[e.transform.pos[0],0,-.8]);
+    assert.equal(p.duration,10);
+  }
 });

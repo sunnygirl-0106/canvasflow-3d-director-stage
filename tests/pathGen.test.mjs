@@ -1,9 +1,10 @@
-// pathGen 单元测试（阶段 E 第 1 步）：node 直接跑，不起浏览器。
-// 运行：npm run test:unit（= node --test tests/）
-import { test } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
-import { line, arc, polar, toward, simplify, pathLength, defaultDuration, WALK_PACE } from '../src/anim/pathGen.js';
 import { Path, WALK_RAMP } from '../src/anim/Path.js';
+import { rectangle, arcPoints, defaultDuration, line, arc, polar, toward, simplify, pathLength, WALK_PACE } from '../src/anim/pathGen.js';
+import { createEmptyDocument, validate } from '../src/doc/schema.js';
+import { addCharacter, setPath } from '../src/doc/edit.js';
+
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
@@ -128,4 +129,49 @@ test('defaultDuration：匀速段速度 = 步速（含 0.4 s 起步 / 收步）�
   const L = pathLength(ring.points, true);
   assert.ok(Math.abs(L - 2 * Math.PI) < 0.05, `整圆长 ${L}`);
   assert.equal(defaultDuration(ring.points, { closed: true }), Math.ceil((L / WALK_PACE + WALK_RAMP) * 10 - 1e-9) / 10);
+});
+
+
+test('rectangle uses exact edges, closure, unequal lengths and correct insertion indices', () => {
+  const points = rectangle([0, 2, 0], [3, 99, 4]);
+  const json = { points, closed: true, interpolation: 'polyline', start: 0, duration: 14, speed: 'linear' };
+  const p = new Path(json);
+  assert.equal(p.length, 14);
+  assert.deepEqual(p.positionAt(3).toArray(), [3, 2, 0]);
+  assert.deepEqual(p.positionAt(7).toArray(), [3, 2, 4]);
+  assert.deepEqual(p.positionAt(14).toArray(), [0, 2, 0]);
+  assert.equal(p.edgeAt(5), 1);
+  for (let s = 0; s <= 14; s += .01) {
+    const v = p.positionAt(s);
+    assert.ok(v.x >= 0 && v.x <= 3 && v.z >= 0 && v.z <= 4);
+    assert.ok(v.x === 0 || v.x === 3 || v.z === 0 || v.z === 4);
+  }
+  assert.equal(rectangle([0, 0, 0], [.01, 0, 4]), null);
+  assert.equal(defaultDuration(points, { closed: true, interpolation: 'polyline', speed: 1, ramp: 0 }), 14);
+});
+
+
+test('polyline validates and survives JSON; legacy curves unchanged; redraw clears interpolation', () => {
+  const d = createEmptyDocument();
+  const e = addCharacter(d, { body: 'male' });
+  const points = rectangle([0, 0, 0], [3, 0, 4]);
+  setPath(d, e.id, points, { closed: true, set: { interpolation: 'polyline' } });
+  assert.equal(validate(d).ok, true, JSON.stringify(validate(d).errors));
+  const p = new Path(d.paths[0]);
+  const q = new Path(JSON.parse(JSON.stringify(d)).paths[0]);
+  assert.deepEqual(p.positionAt(4).toArray(), q.positionAt(4).toArray());
+  const legacy = { ...d.paths[0] }; delete legacy.interpolation;
+  assert.deepEqual(new Path(legacy).positionAt(3).toArray(), new Path({...legacy, interpolation:'centripetal'}).positionAt(3).toArray());
+  setPath(d, e.id, [[0,0,0],[1,0,0]]);
+  assert.equal(d.paths[0].interpolation, undefined);
+  d.paths[0].interpolation = 'bad'; assert.equal(validate(d).ok, false);
+});
+
+
+test('circle is full 360 degrees and closes without duplicate endpoint', () => {
+  const r = arcPoints({kind:'arc',center:[0,0,0],radius:2,startDeg:0,sweepDeg:360}, 0);
+  assert.equal(r.closed, true);
+  const p = new Path({...r,start:0,duration:10,speed:'linear'});
+  assert.ok(Math.abs(p.length - 4 * Math.PI) < .03);
+  assert.ok(p.positionAt(0).distanceTo(p.positionAt(p.length)) < 1e-9);
 });

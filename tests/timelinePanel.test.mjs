@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { fakeApp, addProp, addCamera, animatedPropFixture } from './helpers.mjs';
+import { hitTime, toggleKey } from '../src/ui/timeline/animState.js';
 import { TimelinePanel } from '../src/ui/timeline/TimelinePanel.js';
-import { fakeApp, addProp, addCamera } from './helpers.mjs';
+
 
 test('读取关键帧保留精确时刻和独立值副本；缺失的键返回 null', () => {
   const app = fakeApp(), ent = addProp(app);
@@ -36,4 +38,30 @@ test('删除对象全部动画在一次事务内完成，保留其他对象和�
   assert.deepEqual(app.timeline.constraints.map(c => c.id), [look.id]);
   assert.equal(before.paths[0].id, path.id);
   assert.equal(before.timeline.tracks.length, 3);
+});
+
+
+test('UI frame hit preserves imported precision, nearest match and deterministic ties', () => {
+  const keys = [{t:1.012}, {t:1.001}, {t:1.03}];
+  assert.equal(hitTime(keys, 1.01, 30).t, 1.012);
+  assert.equal(hitTime(keys, 1, 30).t, 1.001);
+  assert.equal(hitTime([{t:0}, {t:0.125}], .0625, 1).t, 0);
+  assert.equal(hitTime(keys, 2, 30), null);
+  assert.equal(keys[0].t, 1.012);
+});
+
+
+test('key command pauses at captured time, rejects driven properties without empty tracks', () => {
+  const {app, ent} = animatedPropFixture();
+  const p = app.timeline.addPath({target:ent.id,points:[[0,0,0],[5,0,0]],duration:5});
+  app.playback.seek(2); app.playback.play();
+  assert.throws(()=>toggleKey(app, ent, 'pos'), /驱动/);
+  assert.equal(app.playback.time, 2); assert.equal(app.playback.playing, false);
+  assert.equal(app.timeline.tracks.length, 0);
+  assert.throws(()=>toggleKey(app, ent, 'rot'), /关闭/);
+  app.timeline.setPathOrientation(p.id, 'keep');
+  app.history.scheduled=0;
+  toggleKey(app, ent, 'rot');
+  assert.equal(app.timeline.tracks.length, 1); assert.equal(app.timeline.tracks[0].keys[0].t, 2);
+  assert.equal(app.history.scheduled, 1);
 });

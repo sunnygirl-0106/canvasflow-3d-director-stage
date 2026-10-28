@@ -1,9 +1,9 @@
-import { removeEntity } from '../src/doc/edit.js';
-// Timeline 单测：编辑 API 的校验与撤销记录、关键帧 / 路径 / 约束求值、idle ↔ active 的手动值保持。node 直接跑。
-import { test } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
+import { fakeApp, addProp, addCamera, closeVec, close, animatedPropFixture } from './helpers.mjs';
+import { removeEntity } from '../src/doc/edit.js';
 import * as THREE from 'three';
-import { fakeApp, addProp, addCamera, closeVec, close } from './helpers.mjs';
+
 
 const posOf = (ent) => ent.transformJSON().pos;
 
@@ -170,4 +170,32 @@ test('机位位置键前缀在接续路径开始前保持求值，衔接与随�
   for (let i = 30; i >= 0; i--) { app.timeline.evaluate(i / 10); assert.ok(closeVec(posOf(cam), samples[i])); }
   app.timeline.evaluate(7); assert.ok(closeVec(posOf(cam), [3, 2, 5]));
   app.timeline.evaluate(3); assert.ok(closeVec(posOf(cam), [1, 2, 5]));
+});
+
+
+test('translation moves path and base in the same local document space, preserves times and stops', () => {
+  const {app, ent} = animatedPropFixture();
+  const path = app.timeline.addPath({target:ent.id,points:[[0,0,0],[2,1,0],[4,2,0]],start:1,duration:6,interpolation:'polyline'});
+  app.timeline.updatePath(path.id, {stops:[1],stopTimes:[3]});
+  app.playback.seek(3); const before = structuredClone(app.timeline.paths[0]);
+  const pos=app.timeline.valueOf(ent,'pos'); app.history.scheduled=0;
+  app.timeline.translatePathTo(ent,pos.map((v,i)=>v+[3,2,-1][i]));
+  const after=app.timeline.paths[0];
+  assert.deepEqual(after.points,before.points.map(p=>p.map((v,i)=>v+[3,2,-1][i])));
+  assert.deepEqual(app.store.document.entities[0].transform.pos,[3,2,-1]);
+  assert.deepEqual(after.stops,before.stops); assert.deepEqual(after.stopTimes,before.stopTimes);
+  assert.equal(after.duration,6); assert.equal(after.start,1); assert.equal(app.history.scheduled,1);
+  app.timeline.valueOf(ent,'pos').forEach((v,i)=>assert.ok(Math.abs(v-pos[i]-[3,2,-1][i])<1e-6));
+});
+
+
+test('orientation handoff uses existing rotation track and keeps current quaternion', () => {
+  const {app, ent} = animatedPropFixture();
+  const p=app.timeline.addPath({target:ent.id,points:[[0,0,0],[5,0,0]],duration:5});
+  const track=app.timeline.addTrack({target:ent.id,property:'rot'});
+  app.timeline.setKey(track.id,0,[0,10,0]); app.timeline.setKey(track.id,5,[0,30,0]);
+  app.playback.seek(2); const q=ent.root.quaternion.clone(); app.history.scheduled=0;
+  app.timeline.setPathOrientation(p.id,'keep');
+  assert.ok(q.angleTo(ent.root.quaternion)<1e-6); assert.equal(app.history.scheduled,1);
+  assert.equal(app.timeline.tracks.length,1); assert.equal(app.timeline.tracks[0].keys.length,3);
 });

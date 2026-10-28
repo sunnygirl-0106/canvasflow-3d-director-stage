@@ -26,3 +26,5 @@ test-output/
 !/AGENTS.md
 !/docs/开发参考.md
 .claude/settings.local.json
+
+!/docs/e2e迁移表.md

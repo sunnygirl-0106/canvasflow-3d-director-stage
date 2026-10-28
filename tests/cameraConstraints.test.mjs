@@ -1,9 +1,10 @@
-import { test } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
+import { applyCameraMove } from '../src/doc/edit.js';
 import * as THREE from 'three';
 import { fakeApp, addProp, addCamera, closeVec } from './helpers.mjs';
 import { aimPoint } from '../src/anim/Constraint.js';
-import { applyCameraMove } from '../src/doc/edit.js';
+
 
 test('默认环绕、半弧和螺旋逐帧注视手动坐标，跳转和文档往返保持一致', () => {
   for (const name of ['circle', 'half_orbit', 'spiral']) {
@@ -82,4 +83,30 @@ test('跟随移动主体时旋转轨道仍独立生效；注视另一主体不�
   assert.ok(dir.angleTo(aimPoint(app, focus.id).sub(pos).normalize()) < 1e-6);
   app.timeline.removeConstraint(look.id);
   assert.ok(cam.root.quaternion.angleTo(expected) < 1e-6, '取消注视后恢复独立旋转轨道');
+});
+
+
+test('frustum tracks true projection, world transform and finite depth without touching far', async () => {
+  const { CameraEntity } = await import('../src/entities/Camera.js');
+  const THREE = await import('three');
+  const c = new CameraEntity('test');
+  c.root.position.set(2, 1.55, 5);
+  c.aimAt(new THREE.Vector3(0, 1, 0));
+  const geometry = c.helper.geometry, far = c.cam.far;
+  c.cam.aspect = 4 / 3; c.setFov(60); c.update();
+  assert.equal(c._viz.aspect, 4 / 3);
+  assert.equal(c._viz.fov, 60);
+  assert.equal(c.cam.far, far);
+  assert.ok(c._viz.far > 5 && c._viz.far < 7);
+  const width = 2 * c._viz.far * Math.tan(Math.PI / 6) * 4 / 3;
+  const pos = c.helper.geometry.getAttribute('position');
+  const f1 = c.helper.pointMap.f1[0], f2 = c.helper.pointMap.f2[0];
+  assert.ok(Math.abs(Math.abs(pos.getX(f1) - pos.getX(f2)) - width) < 1e-5);
+  for (let i = 0; i < 100; i++) c.update();
+  assert.equal(c.helper.geometry, geometry);
+  c.lookTarget.set(2, 1.55, 20); c.update();
+  assert.equal(c._viz.far, 4);
+  c.setHelpersVisible(false); assert.equal(c.helper.visible, false);
+  c.setHelpersVisible(true); assert.equal(c.helper.visible, true);
+  c.dispose();
 });

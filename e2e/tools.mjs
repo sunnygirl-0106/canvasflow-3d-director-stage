@@ -2,11 +2,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { page, URL_, errs } from './harness.mjs';
-
-
-
 export async function calib(ids) {
-  if (!ids.length) ids = ['xbot', 'bodykun_male', 'bodychan_female'];
+  if (!ids.length)
+    ids = ['xbot', 'bodykun_male', 'bodychan_female'];
   fs.mkdirSync('test-output', { recursive: true });
   for (const id of ids) {
     await page.goto(new URL(`calib.html?profile=${id}`, URL_).href, { waitUntil: 'networkidle0', timeout: 30000 });
@@ -16,10 +14,10 @@ export async function calib(ids) {
     await page.screenshot({ path: out, fullPage: true });
     console.log(`${err ? '❌' : '📸'} ${out}${err ? ' — ' + err : ''}`);
   }
-  if (errs.length) console.log('❌ console 错误：\n' + errs.join('\n'));
+  if (errs.length)
+    console.log('❌ console 错误：\n' + errs.join('\n'));
   return errs.length ? 1 : 0;
 }
-
 /** 穿模检测：三个档案逐个预设 + 步态（正常 / 加速走各 8 相位）。返回退出码。 */
 export async function collide(only) {
   await page.goto(new URL('calib.html?profile=xbot', URL_).href, { waitUntil: 'networkidle0', timeout: 30000 });
@@ -34,7 +32,8 @@ export async function collide(only) {
     for (const p of Object.values(PROFILES)) {
       const ch = await Character.load(p.id, { url: p.file, profile: p, height: p.heightM });
       for (const pr of POSE_PRESETS) {
-        if (only && !only.split(',').includes(pr.key)) continue;
+        if (only && !only.split(',').includes(pr.key))
+          continue;
         ch.applyPosePreset(pr.key);
         out.push({ profile: p.id, preset: pr.key, hits: detectPenetration(ch.model) });
       }
@@ -55,14 +54,14 @@ export async function collide(only) {
   }, only || '');
   let bad = 0;
   for (const r of report) {
-    if (!r.hits.length) continue;
+    if (!r.hits.length)
+      continue;
     bad++;
     console.log(`❌ ${r.profile.padEnd(16)} ${r.preset.padEnd(7)} ` + r.hits.map((h) => `${h.pair} ${(h.depth * 100).toFixed(1)}cm×${h.count}`).join('  '));
   }
   console.log(`\n=== ${report.length - bad}/${report.length} 无穿模 ===`);
   return bad ? 1 : 0;
 }
-
 export async function shootPoses(outDir, bodyKey) {
   fs.mkdirSync(outDir, { recursive: true });
   const keys = await page.evaluate(async (bodyKey) => {
@@ -72,14 +71,22 @@ export async function shootPoses(outDir, bodyKey) {
     const key = bodyKey || (BODY_TYPES.xbot ? 'xbot' : Object.keys(BODY_TYPES)[0]);
     const c = await a.addCharacter(key);
     a.select(null);
-    for (const e of a.entities) if (e !== c) e.setVisible(false);
+    for (const e of a.entities)
+      if (e !== c)
+        e.setVisible(false);
     a.setLabelsVisible(false);
     a.stage.grid.visible = false; // 姿势比较保留地面阴影，排除编辑网格密度的变化。
     c.root.position.set(0, c.root.position.y, 0);
     c.root.rotation.set(0, 0, 0);
     c.root.updateMatrixWorld(true);
     const Cam = a.stage.camera.constructor; // THREE.PerspectiveCamera（页面内无法直接 import 裸模块名）
-    const mk = (x, z) => { const cam = new Cam(30, 1, 0.05, 100); cam.position.set(x, 1.0, z); cam.lookAt(0, 0.9, 0); cam.updateMatrixWorld(true); return cam; };
+    const mk = (x, z) => {
+      const cam = new Cam(30, 1, 0.05, 100);
+      cam.position.set(x, 1.0, z);
+      cam.lookAt(0, 0.9, 0);
+      cam.updateMatrixWorld(true);
+      return cam;
+    };
     window.__poseCams = [mk(0, 5.2), mk(3.7, 3.7)];
     window.__poseChar = c;
     return { body: key, presets: POSE_PRESETS.map((p) => p.key) };
@@ -91,7 +98,9 @@ export async function shootPoses(outDir, bodyKey) {
       c.applyPosePreset(preset);
       c.root.updateMatrixWorld(true);
       const W = 360, H = 480;
-      const out = document.createElement('canvas'); out.width = W * 2; out.height = H;
+      const out = document.createElement('canvas');
+      out.width = W * 2;
+      out.height = H;
       const g = out.getContext('2d');
       window.__poseCams.forEach((cam, i) => g.drawImage(window.__app.stage.snapshot(cam, { width: W, height: H }), i * W, 0, W, H));
       window.__app.stage.render();
@@ -100,5 +109,6 @@ export async function shootPoses(outDir, bodyKey) {
     fs.writeFileSync(path.join(outDir, preset + '.png'), Buffer.from(url.split(',')[1], 'base64'));
     console.log('  📸 ' + preset);
   }
-  if (errs.length) console.log('❌ console 错误：\n' + errs.join('\n'));
+  if (errs.length)
+    console.log('❌ console 错误：\n' + errs.join('\n'));
 }

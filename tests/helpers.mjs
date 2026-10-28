@@ -1,3 +1,4 @@
+import { Playback } from '../src/anim/Playback.js';
 // 单测共用：一个不需要浏览器的最小 App 替身 —— 真实的 Prop / CameraEntity 实体（node 里可直接构造）+ Timeline。
 import { Prop } from '../src/entities/Prop.js';
 import { CameraEntity } from '../src/entities/Camera.js';
@@ -45,3 +46,15 @@ export function addCamera(app, pos = [0, 1.6, 5]) {
 
 export const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 export const closeVec = (a, b, eps = 1e-6) => a.length === b.length && a.every((v, i) => close(v, b[i], eps));
+
+
+
+export function animatedPropFixture() {
+  const app = fakeApp(), ent = addProp(app);
+  app.playback = new Playback(app.timeline);
+  app.store.project = () => {
+    const json = app.store.document.entities.find(e => e.id === ent.id);
+    ent.applyTransform(json.transform); app.timeline.invalidateBase(ent); app.timeline.documentChanged();
+  };
+  return {app, ent};
+}

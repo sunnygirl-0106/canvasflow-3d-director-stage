@@ -5,7 +5,6 @@ import { execFileSync } from 'node:child_process';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 import { page } from './harness.mjs';
-
 /** 视口截图（含名牌 / 取景框叠加层），先等两帧让按需渲染出图。 */
 export async function shootViewport(file) {
   await page.evaluate(() => new Promise((r) => { window.__app.stage.invalidate(); requestAnimationFrame(() => requestAnimationFrame(r)); }));
@@ -14,18 +13,18 @@ export async function shootViewport(file) {
   await vp.screenshot({ path: file });
   return file;
 }
-
 /** 两张 PNG 的差异像素占比（pixelmatch threshold 0.1），差异图写到 diffFile。 */
 export function pixelDiff(fa, fb, diffFile) {
   const a = PNG.sync.read(fs.readFileSync(fa));
   const b = PNG.sync.read(fs.readFileSync(fb));
-  if (a.width !== b.width || a.height !== b.height) return 1;
+  if (a.width !== b.width || a.height !== b.height)
+    return 1;
   const diff = new PNG({ width: a.width, height: a.height });
   const n = pixelmatch(a.data, b.data, diff.data, a.width, a.height, { threshold: 0.1 });
-  if (n && diffFile) fs.writeFileSync(diffFile, PNG.sync.write(diff));
+  if (n && diffFile)
+    fs.writeFileSync(diffFile, PNG.sync.write(diff));
   return n / (a.width * a.height);
 }
-
 /** 动画验收场景：2 角色、1 道具、2 机位（从空场景搭起）。返回各实体 id。 */
 export async function buildAnimScene() {
   return page.evaluate(async () => {
@@ -34,63 +33,66 @@ export async function buildAnimScene() {
     a.playback?.stop();
     await a.loadDocument(createEmptyDocument());
     const m = await a.addCharacter('male');
-    m.root.position.x = -1.2; m.root.rotation.y = 0.4; a.edited(m);
+    m.root.position.x = -1.2;
+    m.root.rotation.y = 0.4;
+    a.edited(m);
     const f = await a.addCharacter('female');
     f.root.position.set(1.0, f.root.position.y, 0.6);
-    f.applyPosePreset('think'); a.edited(f);
-    const p = a.addProp('box'); p.root.position.set(0.2, 0, -1.4); a.edited(p);
+    f.applyPosePreset('think');
+    a.edited(f);
+    const p = a.addProp('box');
+    p.root.position.set(0.2, 0, -1.4);
+    a.edited(p);
     a.select(m.id);
     const c1 = a.addCamera('front_mid');
     a.select(f.id);
     const c2 = a.addCamera('front_closeup');
     a.select(null);
-    a.rig.controls.target.set(0, 0.9, -0.5); a.stage.camera.position.set(3.5, 3.2, 8.5); a.rig.controls.update();
+    a.rig.controls.target.set(0, 0.9, -0.5);
+    a.stage.camera.position.set(3.5, 3.2, 8.5);
+    a.rig.controls.update();
     a.history.reset();
     return { m: m.id, f: f.id, p: p.id, c1: c1.id, c2: c2.id };
   });
 }
-
 // ---- 时间轴面板验收（阶段 D）：真实点击 / 拖拽 ----
 // 用函数声明（会提升）：子命令分发在文件前部，调用时这些定义还没执行到
 export function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
-
 /** 等界面刷新：两帧 rAF（Inspector / 标尺都是 rAF 节流）+ 一点余量。 */
 export async function settle(ms = 60) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await sleep(ms);
 }
-
 export async function centerOf(sel) {
   const r = await page.$eval(sel, (n) => { const b = n.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; });
   return r;
 }
-
 // 属性树增加子行后目标可能在滚动区外；真实点击先由浏览器滚动到可见位置。
 export async function clickSel(sel, opts) { await page.click(sel, opts); }
-
 export async function dragFromTo([x0, y0], [x1, y1], { steps = 10, hold } = {}) {
   await page.mouse.move(x0, y0);
   await sleep(30);
   await page.mouse.down();
   await page.mouse.move(x1, y1, { steps });
-  if (hold) await hold();
+  if (hold)
+    await hold();
   await page.mouse.up();
   await settle();
 }
-
 /** 左栏点选实体（按名字）。 */
 export async function pickInOutliner(name) {
   const xy = await page.evaluate((name) => {
     const n = [...document.querySelectorAll('#outliner .node')].find((x) => x.querySelector('.nm')?.textContent === name);
-    if (!n) return null;
+    if (!n)
+      return null;
     const b = n.getBoundingClientRect();
     return [b.x + 40, b.y + b.height / 2];
   }, name);
-  if (!xy) throw new Error('左栏找不到 ' + name);
+  if (!xy)
+    throw new Error('左栏找不到 ' + name);
   await page.mouse.click(...xy);
   await settle();
 }
-
 /** 时刻 t 在标尺上的屏幕坐标。 */
 export async function rulerPoint(t) {
   return page.evaluate((t) => {
@@ -100,17 +102,15 @@ export async function rulerPoint(t) {
     return [r.left + p.timeToX(t) - p.scroll.scrollLeft, rr.top + rr.height / 2];
   }, t);
 }
-
 /** 拖播放头：从当前位置按下，拖到 t。 */
 export async function dragPlayhead(t) {
   const cur = await page.evaluate(() => window.__app.playback.time);
   await dragFromTo(await rulerPoint(cur), await rulerPoint(t), { steps: 8 });
 }
-
 /**
- * 真实拖 gizmo 的某个轴箭头，使选中对象沿该轴移动 worldDelta（世界坐标）：
- * 按在箭头上（拾取体 0..0.6 × 手柄尺度），拖到"箭头点 + 位移"的投影处。
- */
+* 真实拖 gizmo 的某个轴箭头，使选中对象沿该轴移动 worldDelta（世界坐标）：
+* 按在箭头上（拾取体 0..0.6 × 手柄尺度），拖到"箭头点 + 位移"的投影处。
+*/
 export async function gizmoDrag(axis, delta, { hold } = {}) {
   const pts = await page.evaluate((axis, delta) => {
     const a = window.__app;
@@ -130,18 +130,17 @@ export async function gizmoDrag(axis, delta, { hold } = {}) {
   await sleep(40);
   await page.mouse.down();
   await page.mouse.move(...pts[1], { steps: 16 });
-  if (hold) await hold();
+  if (hold)
+    await hold();
   await page.mouse.up();
   await settle();
 }
-
 /** 视口画布像素（同步渲染后立即读，时刻与画面严格对应），写成 PNG。 */
 export async function canvasShot(file) {
   const url = await page.evaluate(() => { const a = window.__app; a.stage.render(); return a.stage.renderer.domElement.toDataURL('image/png'); });
   fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));
   return file;
 }
-
 // ---- 角色路径验收（阶段 E）：真实点击 / 拖拽 ----
 /** 文档口径的点（stage.world 局部坐标）→ 屏幕坐标。 */
 export async function scr(p) {
@@ -154,54 +153,53 @@ export async function scr(p) {
     return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height];
   }, p);
 }
-
 /** Dock「路径」→ 选一种方式。 */
 export async function pathMenu(label) {
-  if (label === '环绕') { await page.evaluate(() => window.__app.pathTool.request('arc')); await settle(); return; }
-  const names = {'点击落点':'钢笔路径','手绘':'铅笔路径','直线':'直线路径','走到':'走到目标','推到':'推到目标'};
+  if (label === '环绕') {
+    await page.evaluate(() => window.__app.pathTool.request('arc'));
+    await settle();
+    return;
+  }
+  const names = { '点击落点': '钢笔路径', '手绘': '铅笔路径', '直线': '直线路径', '走到': '走到目标', '推到': '推到目标' };
   await page.evaluate(() => [...document.querySelectorAll('.ptabs button')].find(b => b.textContent === '运动轨迹')?.click());
   await settle();
-  await page.evaluate(() => { const p=window.__timelinePanel; p.setCollapsed(false); });
-  const head = '.tl-head[data-ent="' + await page.evaluate(()=>window.__app.selectedId) + '"] .tl-addkey';
+  await page.evaluate(() => { const p = window.__timelinePanel; p.setCollapsed(false); });
+  const head = '.tl-head[data-ent="' + await page.evaluate(() => window.__app.selectedId) + '"] .tl-addkey';
   // 未动画的道具尚不列在时间轴，用 Inspector 中同一注册菜单。
   await clickSel(await page.$(head) ? head : '#inspector [data-sec="path"] .sec-btn');
   await settle();
   await page.evaluate(l => [...document.querySelectorAll('.ctx-item')].find(n => n.textContent === l).click(), names[label] || label);
   await settle();
 }
-
 export function toastText() { return page.$eval('#toast', (n) => (n.classList.contains('show') ? n.textContent : '')); }
-
 export async function toastClick(label) {
   await page.evaluate((l) => [...document.querySelectorAll('#toast .toast-action')].find((b) => b.textContent === l).click(), label);
   await settle();
 }
-
 export function animJSON() { return page.evaluate(() => window.__app.timeline.toJSON()); }
-
 export async function pathOf(id) { return (await animJSON()).paths.find((p) => p.target === id); }
-
 /** 洁净渲染（无 gizmo / 选中环 / 路径 overlay）导演视角画面，写成 PNG。 */
 export async function cleanShot(file) {
   const url = await page.evaluate(() => { const a = window.__app; return a.withCleanRender(() => a.stage.snapshot(a.stage.camera)).toDataURL('image/png'); });
   fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));
   return file;
 }
-
 export async function dragPath(points, { steps = 3, hold, shift } = {}) {
-  if (shift) await page.keyboard.down('Shift');
+  if (shift)
+    await page.keyboard.down('Shift');
   await page.mouse.move(...points[0]);
   await sleep(30);
   await page.mouse.down();
-  for (const p of points.slice(1)) await page.mouse.move(...p, { steps });
-  if (hold) await hold();
+  for (const p of points.slice(1))
+    await page.mouse.move(...p, { steps });
+  if (hold)
+    await hold();
   await page.mouse.up();
-  if (shift) await page.keyboard.up('Shift');
+  if (shift)
+    await page.keyboard.up('Shift');
   await settle(120);
 }
-
 export function hdist(a, b) { return Math.hypot(a[0] - b[0], a[2] - b[2]); }
-
 // ---- 阶段 F：机位运镜 ----
 /** 机位 −Z 与主体注视点方向的夹角（度）+ 注视点投影到画面的偏差（占画幅比例）。 */
 export function camAim(camId, subjectId) {
@@ -220,18 +218,18 @@ export function camAim(camId, subjectId) {
     return { angle: fwd.angleTo(to) * 180 / Math.PI, off: Math.max(Math.abs(ndc.x), Math.abs(ndc.y)) / 2 };
   }, camId, subjectId);
 }
-
 /** 机位位姿（场景根节点坐标）+ 各角色脚底位置（水平距离用）。 */
 export function camPose(camId) {
   return page.evaluate((camId) => {
     const a = window.__app;
     const c = a.findEntity(camId);
     const foot = {};
-    for (const e of a.entities) if (e.type === 'character') foot[e.id] = e.toJSON().transform.pos;
+    for (const e of a.entities)
+      if (e.type === 'character')
+        foot[e.id] = e.toJSON().transform.pos;
     return { pos: c.root.position.toArray(), rot: c.root.rotation.toArray().slice(0, 3), foot };
   }, camId);
 }
-
 /** 机位的动画数据：路径 / 约束 / rot 轨道。 */
 export function camAnim(camId) {
   return page.evaluate((id) => {
@@ -243,7 +241,6 @@ export function camAnim(camId) {
     };
   }, camId);
 }
-
 /** 机位画面（洁净渲染 stage.snapshot），写成 PNG。 */
 export async function camShot(camId, file) {
   const url = await page.evaluate((id) => {
@@ -254,12 +251,9 @@ export async function camShot(camId, file) {
   fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));
   return file;
 }
-
 // ---- 阶段 G：导出视频 ----
 export function md5(buf) { return crypto.createHash('md5').update(buf).digest('hex'); }
-
 export function dataURLBuf(url) { return Buffer.from(url.split(',')[1], 'base64'); }
-
 /** 导出验收场景：走路角色（直线路径）+ 第二个角色 + 半环绕盯人的主机位 + 全景图。 */
 export async function buildExportScene() {
   return page.evaluate(async () => {
@@ -269,29 +263,34 @@ export async function buildExportScene() {
     a.playback.stop();
     await a.loadDocument(createEmptyDocument());
     const m = await a.addCharacter('male');
-    m.root.position.x = -1.6; a.edited(m);
+    m.root.position.x = -1.6;
+    a.edited(m);
     const f = await a.addCharacter('female');
-    f.root.position.set(1.2, f.root.position.y, -0.8); a.edited(f);
+    f.root.position.set(1.2, f.root.position.y, -0.8);
+    a.edited(f);
     const tl = a.timeline;
     tl.setDuration(6);
     tl.addPath({ target: m.id, points: [[-1.6, 0, 0], [1.6, 0, 0.4]], start: 0, duration: 4, speed: 'smooth', orient: 'tangent' });
     a.select(m.id);
     const c = a.addCamera('front_full');
-    c.aimAt(a.stage.world.localToWorld(aimPoint(a, m.id).clone())); a.edited(c);
+    c.aimAt(a.stage.world.localToWorld(aimPoint(a, m.id).clone()));
+    a.edited(c);
     const { applyCameraMove } = await import('/src/doc/edit.js');
     const seg = a.store.transact('导出场景运镜', doc => {
       applyCameraMove(doc, c.id, { name: 'half_orbit', subject: m.id, aim: aimPoint(a, m.id).toArray() });
     });
     tl.setMainCamera(c.id);
     await a.panorama.setFromAsset({ url: './assets/panoramas/pano-sunset.jpg', title: '威尼斯黄昏' });
-    for (let i = 0; i < 50 && !a.panorama.active; i++) await new Promise((r) => setTimeout(r, 100));
+    for (let i = 0; i < 50 && !a.panorama.active; i++)
+      await new Promise((r) => setTimeout(r, 100));
     a.select(null);
-    a.rig.controls.target.set(0, 0.9, 0); a.stage.camera.position.set(2.5, 4.5, 9); a.rig.controls.update();
+    a.rig.controls.target.set(0, 0.9, 0);
+    a.stage.camera.position.set(2.5, 4.5, 9);
+    a.rig.controls.update();
     a.history.reset();
     return { m: m.id, f: f.id, c: c.id, mName: m.name, cName: c.name, seg: !!seg, pano: a.panorama.active };
   });
 }
-
 /** 播放头 / 文档 / 撤销栈的状态指纹（导出前后比对）。 */
 export function exportState() {
   return page.evaluate(() => {
@@ -301,7 +300,6 @@ export function exportState() {
     return { active: a.timeline.active, time: a.playback.time, doc: JSON.stringify(d), hist: a.history.entries.length, idx: a.history.index };
   });
 }
-
 /** ffprobe 读时长 / 帧数 / 编码 / 宽高；本机没有 ffprobe 返回 null。 */
 export function ffprobe(file) {
   try {
@@ -310,9 +308,11 @@ export function ffprobe(file) {
     const j = JSON.parse(out);
     const st = j.streams[0];
     return { duration: +j.format.duration, frames: +st.nb_read_frames, codec: st.codec_name, width: st.width, height: st.height };
-  } catch { return null; }
+  }
+  catch {
+    return null;
+  }
 }
-
 /** 最小 mp4 盒子解析：mvhd 时长、首个视频轨 tkhd 宽高、stsd 编码、stsz 帧数。 */
 export function mp4Info(buf) {
   const out = {};
@@ -322,34 +322,41 @@ export function mp4Info(buf) {
       let size = buf.readUInt32BE(p);
       const type = buf.toString('latin1', p + 4, p + 8);
       let hdr = 8;
-      if (size === 1) { size = Number(buf.readBigUInt64BE(p + 8)); hdr = 16; }
-      if (size < hdr) break;
+      if (size === 1) {
+        size = Number(buf.readBigUInt64BE(p + 8));
+        hdr = 16;
+      }
+      if (size < hdr)
+        break;
       const body = p + hdr;
-      if (CONTAINERS.has(type)) walk(body, p + size);
+      if (CONTAINERS.has(type))
+        walk(body, p + size);
       else if (type === 'mvhd') {
         const v = buf[body];
         const ts = v === 1 ? buf.readUInt32BE(body + 20) : buf.readUInt32BE(body + 12);
         const du = v === 1 ? Number(buf.readBigUInt64BE(body + 24)) : buf.readUInt32BE(body + 16);
         out.duration = du / ts;
-      } else if (type === 'tkhd' && out.width == null) {
+      }
+      else if (type === 'tkhd' && out.width == null) {
         const v = buf[body];
         const off = body + (v === 1 ? 88 : 76);
         out.width = buf.readUInt32BE(off) / 65536;
         out.height = buf.readUInt32BE(off + 4) / 65536;
-      } else if (type === 'stsd' && !out.codec) out.codec = buf.toString('latin1', body + 12, body + 16);
-      else if (type === 'stsz' && out.frames == null) out.frames = buf.readUInt32BE(body + 8);
+      }
+      else if (type === 'stsd' && !out.codec)
+        out.codec = buf.toString('latin1', body + 12, body + 16);
+      else if (type === 'stsz' && out.frames == null)
+        out.frames = buf.readUInt32BE(body + 8);
       p += size;
     }
   };
   walk(0, buf.length);
   return out;
 }
-
 // ---- 阶段 H：AI 生成（全部用 MockProvider，不依赖网络）----
 // 预录回复：按用户输入里的关键字命中（MockProvider 只匹配「用户：」之后的输入）。
 // 函数声明（会提升）：子命令在文件前部的顶层 await 里就会调用 aiTest
 export function aiInputs() { return { gen: '两个人在广场对话，一个女的站着挥手，一个男的坐着，一个机位半环绕拍他们，5 秒', mod: '让男的站起来走到女的旁边，机位改成推' }; }
-
 export function aiFixturesSrc() {
   return `({
   gen: { ops: [
@@ -369,21 +376,26 @@ export function aiFixturesSrc() {
   ], note: '小王站起来走到小红旁边 0.8 m 处；机位1 改为推近小红' },
 })`;
 }
-
 export async function aiSend(mode, text, { confirm = true } = {}) {
-  if (await page.$eval('.ai-details', n => n.hidden)) await page.click('.ai-plus');
+  if (await page.$eval('.ai-details', n => n.hidden))
+    await page.click('.ai-plus');
   await page.click(`.ai-mode[data-mode="${mode}"]`);
   await page.$eval('.ai-text', (t) => { t.value = ''; });
-  if (text) await page.type('.ai-text', text);
+  if (text)
+    await page.type('.ai-text', text);
   await page.focus('.ai-text');
   await page.keyboard.press('Enter');
   await sleep(80);
-  if (confirm && await page.$('#toast.show .toast-action')) await toastClick('清空并生成');
+  if (confirm && await page.$('#toast.show .toast-action'))
+    await toastClick('清空并生成');
   await page.waitForFunction(() => !window.__app.ai.busy, { timeout: 30000 });
   await settle(150);
-  return page.evaluate(() => { const t = window.__app.ai.turns.at(-1); return { status: t.status, attempts: t.attempts.length, errors: t.attempts.at(-1).errors, result: t.result, mode: t.mode }; });
+  return page.evaluate(() => {
+    const t = window.__app.ai.turns.at(-1);
+    return { status: t.status, attempts: t.attempts.length, errors: t.attempts
+        .at(-1).errors, result: t.result, mode: t.mode };
+  });
 }
-
 /** 文档指纹（不含 updatedAt / 导演视角）+ 撤销栈长度。 */
 export function aiState() {
   return page.evaluate(() => {
@@ -393,7 +405,6 @@ export function aiState() {
     return { doc: JSON.stringify(d), hist: a.history.entries.length, idx: a.history.index };
   });
 }
-
 export async function aiPanelShot(file) {
   const clip = await page.$eval('.ai-capsule', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; });
   await page.screenshot({ path: file, clip });
