@@ -68,6 +68,8 @@ const hdist = (a, b) => Math.hypot(b[0] - a[0], b[2] - a[2]);
 /** 运镜参数不合法 / 几何上做不出来（文案直接给用户看）。 */
 export class MoveError extends Error {}
 
+/** @typedef {{duration?:number, amount?:number, sweep?:number, rise?:number, dir?:string, minSubjectDist?:number}} MoveParams */
+
 /**
  * 预设默认参数（含 duration）。
  * @param {string} name 预设名
@@ -75,6 +77,7 @@ export class MoveError extends Error {}
  */
 export function defaultParams(name, { position, aim }) {
   const d = hdist(position, aim);
+  /** @type {MoveParams} */
   const p = { duration: MOVE_DURATION[name] };
   switch (name) {
     case 'push_in': p.amount = d * 0.4; break;
