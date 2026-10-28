@@ -155,7 +155,7 @@ export class DocumentController {
   _applyEditorView(view) {
     const { app } = this;
     app.defaultCameraId = null;
-    app.directorDetached = true;
+    app.setView({ director: 'free' });
     app.stage.camera.fov = view?.fov ?? 40; // 缺字段的旧文件保持旧投影。
     app.stage.camera.updateProjectionMatrix();
     if (!view) { app.frameSubjects(); return; }
