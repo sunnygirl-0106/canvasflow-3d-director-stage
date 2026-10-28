@@ -26,7 +26,7 @@ export async function run() {
       base: a.store.document.entities.find(e => e.id === ids.actor)?.transform, actor: a.timeline.valueOf(a.findEntity(ids.actor), 'pos'), other: a.timeline.valueOf(a.findEntity(ids.other), 'pos'),
       ref: ed.ref, rev: a.store.revision, history: a.history.entries.length, drag: !!ed.drag, time: a.playback.time,
       proxy: ed.proxy.position.toArray(), gizmo: a.gizmo.visible, binding: a.gizmo.attached === ed.proxy, orbit: a.rig.controls.enabled,
-      preview: !!a.pathOverlay._preview, count: a.pathOverlay.itemCount,
+      preview: !!a.pathOverlay.displayState.preview, count: a.pathOverlay.itemCount,
     };
   }, ids);
   const selectPath = async () => {
@@ -67,8 +67,8 @@ export async function run() {
     a.stage.render=()=>{
       const d=a.pathEditor.drag;
       if(d?.moved) {
-        const it=a.pathOverlay._items.find(it=>it.json.id===d.ref.sourceId), p=a.pathEditor.point(d.ref,d.candidate);
-        window.motionFrames.push({consistent:it?.json===d.candidate && p.every((v,i)=>Math.abs(v-a.pathEditor.proxy.position.getComponent(i))<1e-6) && p.every((v,i)=>Math.abs(v-a.timeline.valueOf(a.selected,'pos')[i])<1e-5),revision:a.store.revision,history:a.history.entries.length});
+        const it=a.pathOverlay.displayState.paths.find(it=>it.source.id===d.ref.sourceId), p=a.pathEditor.point(d.ref,d.candidate);
+        window.motionFrames.push({consistent:JSON.stringify(it?.source)===JSON.stringify(d.candidate) && p.every((v,i)=>Math.abs(v-a.pathEditor.proxy.position.getComponent(i))<1e-6) && p.every((v,i)=>Math.abs(v-a.timeline.valueOf(a.selected,'pos')[i])<1e-5),revision:a.store.revision,history:a.history.entries.length});
       }
       return render();
     };
@@ -149,17 +149,17 @@ export async function run() {
     a.select(ids.other);
     const tr = a.timeline.tracks.find(t => t.id === ids.track);
     a.store.batch('边界测试', () => { for (const k of tr.keys.slice(1)) a.timeline.removeKey(tr.id, k.t); });
-    const hidden = !a.pathOverlay._items.some(it => it.json.id === tr.id);
+    const hidden = !a.pathOverlay.displayState.paths.some(it => it.source.id === tr.id);
     a.pathEditor.selectNode({ kind:'pos',sourceId:tr.id,keyTime:tr.keys[0].t });
-    const it = a.pathOverlay._items.find(it => it.json.id === tr.id);
-    const single = hidden && it.vertices.length === 1 && !it.line;
+    const it = a.pathOverlay.displayState.paths.find(it => it.source.id === tr.id);
+    const single = hidden && it.nodes.length === 1 && !it.hasLine;
     const point = a.pathEditor.point().slice();
     a.pathEditor.begin('direct'); a.pathEditor.candidate([point[0],point[1]+1,point[2]]); a.pathEditor.preview();
     const rev = a.store.revision;
     a.withCleanRender(() => { if (a.gizmo.visible || a.pathOverlay.visible) throw new Error('辅助层未隐藏'); });
     const clean = !a.pathEditor.drag && a.store.revision === rev && JSON.stringify(a.pathEditor.point()) === JSON.stringify(point);
     a.timeline.removeKey(tr.id,tr.keys[0].t);
-    return { single,clean,empty:!a.pathEditor.hasPoint && !a.pathOverlay._items.some(it=>it.json.id===tr.id) };
+    return { single,clean,empty:!a.pathEditor.hasPoint && !a.pathOverlay.displayState.paths.some(it=>it.source.id===tr.id) };
   },ids);
   ok('单键仅在明确编辑时显示点、空轨道无点、截图统一取消预览', edge.single && edge.clean && edge.empty, JSON.stringify(edge));
   const boundaries = await page.evaluate(ids => {
@@ -212,7 +212,7 @@ export async function run() {
     a.timeline.addConstraint({type:'follow',target:c.id,subject:ids.actor,offset:[0,1,3]});
     a.select(c.id);a.playback.seek(0);
     const noEdit=!a.pathEditor.selectNode({kind:'pos',sourceId:tr.id,keyTime:0});
-    return noEdit && !a.pathOverlay._items.find(it=>it.json.id===tr.id).group.visible && !a.pathEditor.hasPoint;
+    return noEdit && !a.pathOverlay.displayState.paths.find(it=>it.source.id===tr.id).visible && !a.pathEditor.hasPoint;
   },ids);
   ok('follow 覆盖位置时隐藏误导轨迹并拒绝空间入口',follow);
 

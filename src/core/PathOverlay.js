@@ -108,6 +108,21 @@ export class PathOverlay {
     this.setDraft(null); this.setMovePreview(null); this.setSnap(null);
   }
 
+  /** 当前显示来源及节点的只读快照；不暴露可变的渲染对象。 */
+  get displayState() {
+    return {
+      preview: !!this._preview,
+      paths: this._items.map(it => ({
+        source: structuredClone(it.json),
+        nodes: it.vertices.map(m => ({ position: m.position.toArray(), geometry: m.geometry.type })),
+        visible: it.group.visible,
+        hasLine: !!it.line,
+        resolution: it.line?.material.resolution.toArray(),
+        matrix: it.group.matrixWorld.toArray(),
+      })),
+    };
+  }
+
   // ---- 构建 ----
   get selectedPathId() { return this.selection?.sourceId || null; }
   get selVertex() {

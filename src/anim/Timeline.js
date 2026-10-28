@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Emitter } from '../util/Emitter.js';
 import { updateDraft } from '../doc/Store.js';
 import { genId } from '../entities/Entity.js';
-import { pruneAnim, usedIds, newId } from '../doc/edit.js';
+import { usedIds, newId } from '../doc/edit.js';
 import { Pose } from '../rig/Pose.js';
 import { Track } from './Track.js';
 import { sameKeyTime, upsertKeys } from './keyframes.js';
@@ -509,17 +509,6 @@ export class Timeline extends Emitter {
   removeConstraint(id) {
     const old = this._find(this.constraints, id, '约束');
     this._commit({ constraints: this.constraints.filter((x) => x !== old) });
-  }
-
-  // ---- 实体增删联动 ----
-  /**
-   * 实体被删除：引用它的轨道 / 路径 / 约束（target 或 subject）与主机位一并删除（一次提交）。
-   * @param {Iterable<string>} ids
-   */
-  pruneEntities(ids) {
-    const dead = new Set(ids);
-    const anim = pruneAnim(this, dead);
-    return this._commit({ ...anim, mainCameraId: dead.has(this.mainCameraId) ? null : this.mainCameraId });
   }
 
   /**

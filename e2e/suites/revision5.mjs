@@ -88,7 +88,7 @@ export async function run() {
     const data=await page.evaluate(async({seed,total,length})=>{
       const a=window.__app;await a.loadDocument(seed,{applyView:true});a.timeline.setDuration(total);const e=a.entities[0];a.select(e.id);a.history.reset();
       const from=e.toJSON().transform.pos,to=[from[0]+length,from[1],from[2]];
-      a.pathTool.begin('line',e);const id=a.pathTool._commit([from,to],{interpolation:'polyline'});
+      a.pathTool.begin('points',e);a.pathTool.draft=[from,to];a.pathTool.finish();const id=a.timeline.paths.find(p=>p.target===e.id).id;
       const p=a.timeline.paths.find(p=>p.id===id);a.history.capture();const one=a.history.entries.length===2;
       a.playback.seek(10);const endpoint=a.timeline.valueOf(e,'pos');const toast=document.querySelector('#toast').textContent;
       const result={total,length,start:p.start,duration:p.duration,scene:a.timeline.duration,one,endError:Math.hypot(...endpoint.map((v,i)=>v-to[i])),toast};
@@ -115,7 +115,7 @@ export async function run() {
   }
   const extra=await page.evaluate(async seed=>{
     const a=window.__app;await a.loadDocument(seed,{applyView:true});const prop=a.addProp('box'),group=await a.addCrowd(1,2,1);
-    const durations=[];for(const e of [prop,group]){a.select(e.id);a.pathTool.begin('line',e);const p=a.pathTool.start;const id=a.pathTool._commit([p,[p[0]+2,p[1],p[2]]]);durations.push(a.timeline.paths.find(p=>p.id===id).duration);}
+    const durations=[];for(const e of [prop,group]){a.select(e.id);a.pathTool.begin('points',e);const p=a.pathTool.start;a.pathTool.draft=[p,[p[0]+2,p[1],p[2]]];a.pathTool.finish();const id=a.timeline.paths.find(p=>p.target===e.id).id;durations.push(a.timeline.paths.find(p=>p.id===id).duration);}
     const e=a.entities.find(e=>e.type==='character');const old=a.timeline.addPath({target:e.id,points:[[0,0,0],[4,1,0]],duration:5.1,interpolation:'polyline'});
     a.select(e.id);a.pathOverlay.setSelectedPath(old.id);a.pathEditor.insertAt(old.id,1);const after=a.timeline.paths.find(p=>p.id===old.id);a.timeline.updatePath(old.id,{points:after.points.map(p=>[p[0]+1,p[1],p[2]])});
     const kept=a.timeline.paths.find(p=>p.id===old.id).duration===5.1;const doc=a.exportDocument();await a.loadDocument(doc);const loaded=a.timeline.paths.find(p=>p.id===old.id).duration===5.1;
@@ -125,7 +125,7 @@ export async function run() {
   },seed);
   ok('群众/道具10秒；旧5.1秒插点/移动/载入保持；显式6秒保持',extra.durations.every(x=>x===10)&&extra.kept&&extra.loaded&&extra.explicit&&extra.api,JSON.stringify(extra));
   const exported=await page.evaluate(async seed=>{
-    const a=window.__app;await a.loadDocument(seed,{applyView:true});const e=a.entities[0];a.select(e.id);a.pathTool.begin('line',e);a.pathTool._commit([[0,0,0],[1,0,0]],{interpolation:'polyline'});
+    const a=window.__app;await a.loadDocument(seed,{applyView:true});const e=a.entities[0];a.select(e.id);a.pathTool.begin('points',e);a.pathTool.draft=[[0,0,0],[1,0,0]];a.pathTool.finish();
     const samples=[];for(let i=0;i<60;i++){a.playback.seek(i/6);samples.push(JSON.stringify({pos:a.timeline.valueOf(e,'pos'),pose:e.values}));}
     const {renderFrames}=await import('/src/app/VideoExporter.js');let index=0,match=true;
     await renderFrames(a,{width:160,height:90,fps:6,range:[0,10],labels:false},()=>{match&&=samples[index]===JSON.stringify({pos:a.timeline.valueOf(e,'pos'),pose:e.values});index++;});

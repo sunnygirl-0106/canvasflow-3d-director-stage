@@ -1,3 +1,4 @@
+import { removeEntity } from '../src/doc/edit.js';
 // Timeline 单测：编辑 API 的校验与撤销记录、关键帧 / 路径 / 约束求值、idle ↔ active 的手动值保持。node 直接跑。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -108,14 +109,14 @@ test('toJSON 深拷贝可随意改；view() 是同一份数据的只读引用；
   assert.equal(app.timeline.tracks[0].keys.length, 2);
 });
 
-test('pruneEntities：删实体时清掉引用它的轨道 / 路径 / 约束', () => {
+test('removeEntity：删实体时清掉引用它的轨道 / 路径 / 约束', () => {
   const app = fakeApp();
   const box = addProp(app);
   const cam = addCamera(app);
   app.timeline.addTrack({ target: box.id, property: 'scale' }); // pos 轨道与路径不能共存
   app.timeline.addPath({ target: box.id, points: [[0, 0, 0], [1, 0, 0]] });
   app.timeline.addConstraint({ type: 'lookAt', target: cam.id, subject: box.id });
-  app.timeline.pruneEntities([box.id]);
+  app.store.transact('删除实体', doc => removeEntity(doc, box.id));
   const v = app.timeline.view();
   assert.equal(v.timeline.tracks.length + v.paths.length + v.constraints.length, 0);
   assert.ok(close(app.timeline.duration, 10));

@@ -133,10 +133,11 @@ export async function run() {
   const roundtrip = await page.evaluate(async () => { const a=window.__app; const doc=a.exportDocument({view:false}); await a.loadDocument(doc); const restored=a.exportDocument({view:false}); delete doc.meta.updatedAt; delete restored.meta.updatedAt; return JSON.stringify(doc)===JSON.stringify(restored); });
   ok('六字段编辑后保存恢复一致', roundtrip);
   const performance = await page.evaluate(async () => {
-    const a=window.__app,p=window.__timelinePanel; let rebuilds=0;
-    const original=p._rebuildNow;p._rebuildNow=function(){rebuilds++;return original.call(this);};
+    const a=window.__app; let rebuilds=0;
+    const observer = new MutationObserver(records => { rebuilds += records.filter(r => r.type === 'childList').length; });
+    observer.observe(document.querySelector('.tl-rows'), { childList: true });
     for(let i=0;i<30;i++)a.playback.seek(i/30);
-    await new Promise(resolve=>requestAnimationFrame(resolve));p._rebuildNow=original;
+    await new Promise(resolve=>requestAnimationFrame(resolve));observer.disconnect();
     return rebuilds;
   });
   ok('播放tick不重建时间轴DOM', performance === 0, String(performance));

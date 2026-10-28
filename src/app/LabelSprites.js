@@ -40,6 +40,9 @@ export class LabelSprites {
     this._layoutKey = null;
   }
 
+  /** 当前名牌文字的只读快照，按实体 ID 索引。 */
+  get labels() { return Object.fromEntries([...this._items].map(([entity, item]) => [entity.id, item.text])); }
+
   get enabled() { return this._enabled > 0; }
 
   enable() {

@@ -20,13 +20,13 @@ const cases=await h.page.evaluate(async seed=>{
  await a.loadDocument(seed);a.setCameraView(false);a.select(a.entities[0].id);
  const ent=a.entities[0];
  const path=a.timeline.addPath({target:ent.id,points:[[-3,0,0],[-1,1,-2],[1,2,1],[3,1,-1]],start:1,duration:8,orient:'tangent'});
- panel.setCollapsed(false);panel.trackRows.expandedEnts.add(ent.id);panel._rebuildNow();
+ panel.setCollapsed(false);panel.trackRows.expandedEnts.add(ent.id);panel.rebuild();
  a.playback.seek(3);const old=new Path(a.timeline.paths[0],pathOptionsFor('character'));const sample=old.positionAt(old.distanceAt(3));
- a.startPreview();panel.trackRows._pathPoint(ent.id,path.id);
+ a.startPreview();a.pathEditor.selectNode({ kind: 'path', sourceId: path.id, index: 0 });
  const node=a.pathOverlay.selVertex,next=new Path(a.timeline.paths[0],pathOptionsFor('character'));
  const inserted=next.positionAt(next.distanceAt(a.playback.time));
  results.playingCurve={paused:!a.playback.playing,editView:!a.cameraView,selected:node.index,sampleError:sample.distanceTo(inserted),time:a.playback.time,noPos:!a.timeline.tracks.some(t=>t.property==='pos')};
- const before=JSON.stringify(a.timeline.paths);a.playback.seek(0);panel.trackRows._pathPoint(ent.id,path.id);
+ const before=JSON.stringify(a.timeline.paths);a.playback.seek(0);a.pathEditor.selectNode({ kind: 'path', sourceId: path.id, index: 0 });
  results.outsideUnchanged=JSON.stringify(a.timeline.paths)===before;
  a.playback.seek(4);a.emit('inspect',{id:ent.id,section:'path'});
  // 同步浮点到达时间和高亮，不用显示舍入伪造命中。

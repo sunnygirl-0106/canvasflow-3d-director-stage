@@ -49,7 +49,7 @@ export async function run() {
     const b = await app.addCharacter('male');
     const a = app.entities.find((e) => e.type === 'character' && e !== b && e.spec.url === b.spec.url);
     const geo = (c) => { let g = null; c.model.traverse((o) => { if (!g && o.isSkinnedMesh) g = o.geometry; }); return g; };
-    const res = !!a && geo(a) && geo(a) === geo(b) && a._mats[0] !== b._mats[0];
+    const res = !!a && geo(a) && geo(a) === geo(b) && a.model.getObjectsByProperty('isSkinnedMesh', true)[0].material !== b.model.getObjectsByProperty('isSkinnedMesh', true)[0].material;
     app.remove(b.id); app.select(null);
     return res;
   });
@@ -124,8 +124,15 @@ export async function run() {
     const base = PROFILES.xbot;
     const joints = { ...base.joints, lHand: { bone: 'mixamorig:NoSuchBone', axis: 'x' } };
     delete joints.rHand;
-    const c = await a.entityActions._loadCharacter({ body: 'xbot', url: './assets/Xbot.glb', profile: { ...base, id: 'broken_test', joints }, height: 1.7 });
-    a.entityActions._registerEntity(c, { msg: a.entityActions._rigWarning(c) });
+    const { Character } = await import('/src/entities/Character.js');
+    const original = Character.fromJSON;
+    let c;
+    try {
+      Character.fromJSON = json => Character.load(json.name, {
+        body: 'xbot', url: './assets/Xbot.glb', profile: { ...base, id: 'broken_test', joints }, height: 1.7,
+      });
+      c = await a.addCharacter('male');
+    } finally { Character.fromJSON = original; }
     const toastTxt = document.getElementById('toast').textContent;
     a.select(c.id);
     const tab = (t) => [...document.querySelectorAll('#inspector .ptabs button')].find((x) => x.textContent === t)?.click();
@@ -146,18 +153,24 @@ export async function run() {
     const c = window.__app.entities.find((e) => e.type === 'character');
     const hips = c.bones.get('mixamorighips');
     const hipY = () => { c.root.updateMatrixWorld(true); return hips.getWorldPosition(hips.position.clone()).y; };
-    const rootY0 = c.root.position.y, h0 = hipY();
+    const lowest = () => {
+      c.root.updateMatrixWorld(true);
+      return Math.min(...c.model.getObjectsByProperty('isBone', true).map(b =>
+        c.root.worldToLocal(b.getWorldPosition(b.position.clone())).y));
+    };
+    const rootY0 = c.root.position.y, h0 = hipY(), groundY = lowest();
     c.applyPosePreset('sit');
-    const h1 = hipY(), ground = Math.abs(c._lowestBoneY() - c._groundY) < 1e-4, rootKept = c.root.position.y === rootY0;
+    const h1 = hipY(), ground = Math.abs(lowest() - groundY) < 1e-4, rootKept = c.root.position.y === rootY0;
     c.resetPose();
     return { drop: +(h0 - h1).toFixed(3), ground, rootKept, restored: Math.abs(hipY() - h0) < 1e-4 };
   });
   ok('坐姿自动贴地：整体下沉 / 脚着地 / root 不动 / 复位还原', sit.drop > 0.25 && sit.ground && sit.rootKept && sit.restored, JSON.stringify(sit));
 
   // 4b 角色命名超过 26 个不溢出成标点
-  const names = await page.evaluate(() => {
+  const names = await page.evaluate(async () => {
     const a = window.__app; const saved = a.charSeq;
-    a.charSeq = 25; const z = a.entityActions._nextCharName(); const a2 = a.entityActions._nextCharName();
+    a.charSeq = 25; const first = await a.addCharacter('male'), second = await a.addCharacter('male');
+    const z = first.name, a2 = second.name; a.remove(first.id); a.remove(second.id);
     a.charSeq = saved; return { z, a2 };
   });
   ok('角色命名：Z 之后为 A2', names.z === '角色Z' && names.a2 === '角色A2', JSON.stringify(names));

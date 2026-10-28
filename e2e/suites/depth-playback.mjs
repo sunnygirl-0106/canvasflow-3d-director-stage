@@ -8,14 +8,14 @@ const OUT = 'test-output/depth-playback';
 // Measure the rendered stroke across its screen-space normal, away from edit nodes.
 async function strokeWidths(file) {
   const samples = await page.evaluate(() => {
-    const a = window.__app, it = a.pathOverlay._items[0], camera = a.getRenderCamera();
+    const a = window.__app, it = a.pathOverlay.displayState.paths[0], camera = a.getRenderCamera();
     const rect = a.stage.renderer.domElement.getBoundingClientRect();
     const project = s => {
-      const p = it.path.positionAt(s); p.y += .01; it.group.localToWorld(p); p.project(camera);
+      const p = a.timeline.pathModel(it.source).positionAt(s); p.y += .01; p.applyMatrix4(a.stage.world.matrixWorld.clone().fromArray(it.matrix)); p.project(camera);
       return [(p.x+1)*rect.width/2, (1-p.y)*rect.height/2];
     };
     return [.07,.11,.15,.83,.87,.91].map(t => {
-      const s = it.path.length*t, p = project(s), q = project(s+.01);
+      const s = a.timeline.pathModel(it.source).length*t, p = project(s), q = project(s+.01);
       const dx = q[0]-p[0], dy = q[1]-p[1], len = Math.hypot(dx,dy);
       return { p, normal: [-dy/len, dx/len] };
     });
@@ -80,11 +80,11 @@ export async function run() {
   await shootViewport(`${OUT}/depth-front.png`);
   const frontWidths = await strokeWidths(`${OUT}/depth-front.png`);
   ok('远处细线仍有独立的 6px 拾取范围', await page.evaluate(() => {
-    const a = window.__app, it = a.pathOverlay._items[0], p = it.path.positionAt(it.path.length * .85);
-    p.y += .01; it.group.localToWorld(p); p.project(a.getRenderCamera());
+    const a = window.__app, it = a.pathOverlay.displayState.paths[0], p = a.timeline.pathModel(it.source).positionAt(a.timeline.pathModel(it.source).length * .85);
+    p.y += .01; p.applyMatrix4(a.stage.world.matrixWorld.clone().fromArray(it.matrix)); p.project(a.getRenderCamera());
     const r = a.stage.renderer.domElement.getBoundingClientRect();
     const hit = a.pathOverlay.hitTest(r.left + (p.x+1)*r.width/2 + 4, r.top + (1-p.y)*r.height/2);
-    return hit?.pathId === it.json.id;
+    return hit?.pathId === it.source.id;
   }));
   await page.evaluate(() => {
     const a = window.__app, V = a.stage.camera.position.constructor;
@@ -106,10 +106,10 @@ export async function run() {
     a.pathTool.cancel();
     const cancelled = JSON.stringify(a.store.document) === original;
     a.pathTool.request('points', chars[0].id);
-    a.pathTool._commit([[0,0,0],[0,0,0]]);
+    a.pathTool.draft = [[0,0,0],[0,0,0]]; a.pathTool.finish();
     const invalid = JSON.stringify(a.store.document) === original;
     a.pathTool.cancel(); a.pathTool.request('points', chars[0].id);
-    a.pathTool._commit([[0,0,0],[2,0,3]]);
+    a.pathTool.draft = [[0,0,0],[2,0,3]]; a.pathTool.finish();
     const scoped = JSON.stringify(a.timeline.paths.find(p => p.target === chars[1].id)) === other && a.timeline.paths.length === 2;
     await a.history.undo();
     return { direct, cancelled, invalid, scoped, undo: JSON.stringify(a.store.document) === original };
@@ -156,7 +156,7 @@ export async function run() {
       a.stopPreview(); a.setCameraView(false); p.seek(n === 2 ? a.timeline.duration : 2);
       p.play(); pass &&= !a.cameraView && a.getRenderCamera() === a.cameras[0].cam && p.playing && (n !== 2 || p.time === 0);
     }
-    p.loop = true; p._last -= 11000; p.update(); pass &&= p.playing && !a.cameraView;
+    p.loop = true; p.seek(a.timeline.duration); p.update(); pass &&= p.playing && !a.cameraView;
     p.loop = false; p.seek(a.timeline.duration); p.update(); pass &&= !p.playing && !a.cameraView && a.playbackHint.hidden;
     return pass;
   }));

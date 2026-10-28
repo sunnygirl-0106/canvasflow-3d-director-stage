@@ -8,7 +8,7 @@ export async function run() {
   const seed = await page.evaluate(() => {
     const a=window.__app;
     window.__seed=a.exportDocument();
-    return {n:a.entities.length,paths:a.timeline.toJSON().paths.length,collapsed:window.__timelinePanel.collapsed,h:document.querySelector('#timeline').offsetHeight,playing:a.playback.playing,handles:a.pathOverlay._items.reduce((n,i)=>n+i.vertices.length,0)};
+    return {n:a.entities.length,paths:a.timeline.toJSON().paths.length,collapsed:window.__timelinePanel.collapsed,h:document.querySelector('#timeline').offsetHeight,playing:a.playback.playing,handles:a.pathOverlay.displayState.paths.reduce((n,i)=>n+i.nodes.length,0)};
   });
   ok('新鲜双人无路径、不自动播放、无控制点、时间轴零高度',seed.n===3&&seed.paths===0&&seed.collapsed&&seed.h===0&&!seed.playing&&seed.handles===0,JSON.stringify(seed));
   for(const [width,height] of [[2048,1120],[1440,900],[1440,810]]) { await page.setViewport({width,height});await shot(`initial-${width}x${height}`); }
@@ -26,9 +26,9 @@ export async function run() {
   ok('播放中打开/取消菜单不暂停，导演页签保持且继续临时出画',await page.evaluate(()=>window.__app.playback.playing&&!window.__app.cameraView&&window.__app.preview&&!window.__app.pathTool.mode));
   await page.evaluate(()=>window.__app.stopPreview());
   const projection=await page.evaluate(()=>{
-    const a=window.__app,c=a.cameras[0];a.beforeRender();const before=c._viz.far,far=c.cam.far,g=c.helper.geometry;
+    const a=window.__app,c=a.cameras[0];a.beforeRender();const before=c.helper.camera.far,far=c.cam.far,g=c.helper.geometry;
     c.setFov(65);a.beforeRender();
-    return {before,far:far===c.cam.far,fov:c._viz.fov,aspect:c._viz.aspect===c.cam.aspect,geometry:g===c.helper.geometry,width:2*c._viz.far*Math.tan(c._viz.fov*Math.PI/360)*c._viz.aspect};
+    return {before,far:far===c.cam.far,fov:c.helper.camera.fov,aspect:c.helper.camera.aspect===c.cam.aspect,geometry:g===c.helper.geometry,width:2*c.helper.camera.far*Math.tan(c.helper.camera.fov*Math.PI/360)*c.helper.camera.aspect};
   });await shot('frustum-fov65');
   ok('视锥延伸主体、同步FOV/aspect、不改变真实far或重建几何',projection.before>.5&&projection.far&&projection.fov===65&&projection.aspect&&projection.geometry,JSON.stringify(projection));
   await page.evaluate(()=>{window.__app.startPreview();});await shot('playback-clean');

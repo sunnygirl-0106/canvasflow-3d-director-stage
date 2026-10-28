@@ -44,7 +44,8 @@ export async function run() {
       {op:'set_path',target:'红',path:{kind:'points',points:[[2.4,0,0],[.75,0,0]]},duration:6},
       {op:'timeline',duration:6,mainCamera:'主机位'}
     ]}}]));
-    await p._run({input:'迎面相遇',mode:'generate',image:null});
+    p.textarea.value='迎面相遇';p.mode='generate';p.send();
+    while(p.agent.busy) await new Promise(resolve=>setTimeout(resolve,10));
     a.select(a.entities.find(e=>e.type==='character').id);
   });
   ok('生成成功进入继续对话、成功卡片隐藏、导演视角',await page.evaluate(()=>window.__app.entities.filter(e=>e.type==='character').length===2&&window.__aiPanel.continuing&&!window.__app.cameraView&&document.querySelector('.ai-result').hidden));
@@ -91,7 +92,8 @@ export async function run() {
     const {MockProvider}=await import('/src/ai/provider.js');
     const before=a.stage.camera.position.toArray().join();
     p.agent.setProvider(new MockProvider([{match:'改名',reply:{ops:[{op:'set_pose',target:'蓝',preset:'wave'}]}}]));
-    await p._run({input:'改名',mode:'modify',image:null});
+    p.textarea.value='改名';p.mode='modify';p.send();
+    while(p.agent.busy) await new Promise(resolve=>setTimeout(resolve,10));
     return {same:before===a.stage.camera.position.toArray().join(),mode:p.effectiveMode,ok:p.agent.turns.at(-1).status==='ok'};
   });
   ok('继续对话默认修改，修改不改变导演视角',modify.ok&&modify.same&&modify.mode==='modify');
@@ -101,7 +103,8 @@ export async function run() {
     const undo = a.history.undo;
     try {
       a.history.undo = async () => false;
-      await panel._undoTurn(turn);
+      document.querySelectorAll('.ai-undo')[panel.agent.turns.length - 1].click();
+      await new Promise(resolve => setTimeout(resolve, 0));
       return !turn.undone && !turn.undoing;
     } finally { a.history.undo = undo; }
   }));

@@ -112,7 +112,6 @@ export class App extends Emitter {
     this.pathTool = new PathTool(this);       // 路径绘制
     this.pathEditor = new PathEditor(this);   // 顶点编辑
     this.pathMeta = {};                       // 会话态：pathId → 生成器参数（环绕三参数），不进文档
-    this.moveMeta = {};                       // 会话态：cameraId → 运镜段列表，不进文档
     this.cameraMoves = new CameraMoveTool(this); // 机位运镜
     this.selection.setSkipPredicate(() => this.gizmo.dragging || (this.gizmo.visible && this.gizmo.overAxis) || this.pathTool.busy || this.pathEditor.busy);
 
@@ -702,6 +701,9 @@ export class App extends Emitter {
 
   // ---- 每帧 ----
   /** 推进播放与相机阻尼；返回画面是否仍在动。 */
+  /** 当前洁净渲染嵌套层数（包括嵌套截图与播放预览）。 */
+  get cleanRenderDepth() { return this._cleanDepth; }
+
   tick() {
     const playing = this.playback.update();
     return (this.rig.controls.enabled && this.rig.update()) || playing;

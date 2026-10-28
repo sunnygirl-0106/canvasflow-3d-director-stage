@@ -95,11 +95,11 @@ export async function run() {
     const stable = (v) => JSON.stringify(v, (_, value) => value && !Array.isArray(value) && typeof value === 'object'
       ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, value[key]])) : value);
     const before = stable(a.store.document);
-    const originalValidate = a.store._validate;
-    a.store._validate = () => { throw new Error('模拟校验失败'); };
+    const originalPrepare = a.store.prepare;
+    a.store.prepare = function (label, recipe) { return originalPrepare.call(this, label, doc => { recipe(doc); doc.timeline.fps = -1; }); };
     let rejected = false;
     try { a.groupCharacters([m, f]); } catch { rejected = true; }
-    a.store._validate = originalValidate;
+    a.store.prepare = originalPrepare;
     const groupAtomic = rejected && stable(a.store.document) === before
       && [m, f].every((id) => a.entities.includes(a.findEntity(id)) && a.findEntity(id).root.parent === a.stage.world);
     const group = a.groupCharacters([m, f, m]);
@@ -112,10 +112,10 @@ export async function run() {
     current.root.rotation.y = 0.6; a.edited(current); a.history.capture();
     const positions = current.members.map((e) => e.root.getWorldPosition(e.root.position.clone()).toArray());
     const groupedDoc = stable(a.store.document);
-    a.store._validate = () => { throw new Error('模拟校验失败'); };
+    a.store.prepare = function (label, recipe) { return originalPrepare.call(this, label, doc => { recipe(doc); doc.timeline.fps = -1; }); };
     rejected = false;
     try { a.ungroupCrowd(group.id); } catch { rejected = true; }
-    a.store._validate = originalValidate;
+    a.store.prepare = originalPrepare;
     const ungroupAtomic = rejected && stable(a.store.document) === groupedDoc
       && current.members.every((e) => e.root.parent === current.root);
     a.ungroupCrowd(group.id); a.history.capture();
@@ -152,11 +152,11 @@ export async function run() {
     a.playback.seek(1);
     const before = a.store.document;
     const pos = a.findEntity(m).root.position.toArray();
-    const validate = a.store._validate;
-    a.store._validate = () => { throw new Error('模拟动画预览期间校验失败'); };
+    const prepare = a.store.prepare;
+    a.store.prepare = function (label, recipe) { return prepare.call(this, label, doc => { recipe(doc); doc.timeline.fps = -1; }); };
     let rejected = false;
     try { a.groupCharacters([m, f]); } catch { rejected = true; }
-    finally { a.store._validate = validate; }
+    finally { a.store.prepare = prepare; }
     const kept = a.store.document === before && a.timeline.active
       && a.findEntity(m).root.position.toArray().every((v, i) => Math.abs(v - pos[i]) < 1e-6);
     a.playback.stop();

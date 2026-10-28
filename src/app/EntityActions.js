@@ -18,9 +18,6 @@ export class EntityActions {
   /** A…Z，之后 A2…Z2，依此类推（不会溢出成标点符号）。 */
   _nextCharName() { return edit.charName(this.app.charSeq++); }
 
-  /** 按 spec 加载一个角色（不入场；自测用它构造缺关节的骨骼档案）。 */
-  _loadCharacter(spec) { return Character.load(this._nextCharName(), spec); }
-
   /** 骨骼兼容性校验：缺关节时 console.warn 列出并返回提示文案；完整兼容返回 null。 */
   _rigWarning(c) {
     const miss = c.missingJoints || [];

@@ -13,7 +13,7 @@ async function load(index = 4, duration) {
     const c = a.entities.find(e => e.type === 'character');
     a.select(c.id, { user: true });
     p.setCollapsed(false); p.setHeight(300); p.trackRows.expandedEnts.add(c.id); p.rebuild();
-    p.setZoom(p._fitPps()); p.scroll.scrollLeft = 0; p.scroll.scrollTop = 0;
+    p.setZoom(0); p.scroll.scrollLeft = 0; p.scroll.scrollTop = 0;
     a.history.reset();
     return c.id;
   }, { index, duration });
@@ -52,13 +52,13 @@ export async function run() {
       let clean = true;
       for (const ent of a.entities.filter(e => ['character', 'camera'].includes(e.type))) {
         a.select(ent.id, { user: true });
-        for (const item of a.pathOverlay._items) item.group.traverse(o => { if (o.isSprite || item.label) clean = false; });
+        a.pathOverlay.group.traverse(o => { if (o.isSprite) clean = false; });
       }
       a.setLabelPreview(true); a.beforeRender();
-      const spriteNames = chars.every(c => a.labelSprites._items.get(c)?.text === c.name);
+      const spriteNames = chars.every(c => a.labelSprites.labels[c.id] === c.name);
       a.setLabelPreview(false);
       a.playback.play(); a.playback.pause(); a.pathOverlay.rebuild();
-      for (const item of a.pathOverlay._items) item.group.traverse(o => { if (o.isSprite || item.label) clean = false; });
+      a.pathOverlay.group.traverse(o => { if (o.isSprite) clean = false; });
       return names && clean && spriteNames;
     }));
     if (i === 7) {
@@ -96,7 +96,7 @@ export async function run() {
   ok('播放临时机位画面，导演页签保持，洁净渲染且文档不变', await page.evaluate(before => {
     const a = window.__app;
     return !a.cameraView && a.playback.playing && a.preview && a.getRenderCamera() === a.cameras[0].cam &&
-      document.querySelector('#viewtabs .on').dataset.v === 'director' && a._cleanDepth === 1 && !a.pathOverlay.visible &&
+      document.querySelector('#viewtabs .on').dataset.v === 'director' && a.cleanRenderDepth === 1 && !a.pathOverlay.visible &&
       !a.rig.controls.enabled && a.cameras.every(c => !c.helper.visible) && JSON.stringify(a.store.document) === before.doc;
   }, snapshot));
   await page.click('.tl-play');
@@ -105,27 +105,27 @@ export async function run() {
   ok('第3秒暂停：恢复原导演位置/中心/缩放、选择、展开/滚动、轨迹和相机模型', await page.evaluate(before => {
     const a = window.__app, p = window.__timelinePanel; a.beforeRender();
     const cam = a.cameras[0], at3 = cam.root.position.clone(); a.timeline.evaluate(3);
-    return a.playback.time === 3 && !a.cameraView && !a.preview && !a.stage.activeCamera && a._cleanDepth === 0 &&
-      a.rig.controls.enabled && a.pathOverlay.visible && a.pathOverlay._items.every(it => it.json.target === a.selectedId && !it.label) &&
+    return a.playback.time === 3 && !a.cameraView && !a.preview && !a.stage.activeCamera && a.cleanRenderDepth === 0 &&
+      a.rig.controls.enabled && a.pathOverlay.visible && a.pathOverlay.displayState.paths.every(it => it.source.target === a.selectedId && !a.pathOverlay.group.children.some(o => o.isSprite)) &&
       a.selectedId === before.selected && JSON.stringify([...p.trackRows.expandedEnts]) === JSON.stringify(before.expanded) &&
       p.scroll.scrollLeft === before.scroll[0] && p.scroll.scrollTop === before.scroll[1] &&
       a.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8) &&
       a.rig.controls.target.toArray().every((v, i) => v === before.target[i]) && a.stage.camera.zoom === before.zoom &&
-      cam._helpersOn && at3.distanceTo(cam.root.position) < 1e-9 && JSON.stringify(a.store.document) === before.doc && a.history.entries.length === before.history;
+      cam.helper.visible && at3.distanceTo(cam.root.position) < 1e-9 && JSON.stringify(a.store.document) === before.doc && a.history.entries.length === before.history;
   }, snapshot));
   ok('五次播放/暂停、手动机位开始、自然结束、循环、Esc及编辑暂停统一清理', await page.evaluate(async before => {
     const a = window.__app, pb = a.playback; delete pb.update;
     let pass = true;
     for (let i = 0; i < 5; i++) {
-      pb.play(); pass &&= !a.cameraView && a.preview && a._cleanDepth === 1;
-      pb.pause(); pass &&= !a.cameraView && !a.preview && a._cleanDepth === 0 && a.rig.controls.enabled;
+      pb.play(); pass &&= !a.cameraView && a.preview && a.cleanRenderDepth === 1;
+      pb.pause(); pass &&= !a.cameraView && !a.preview && a.cleanRenderDepth === 0 && a.rig.controls.enabled;
     }
     a.setCameraView(true); pb.play(); pass &&= a.cameraView && document.querySelector('#viewtabs .on').dataset.v === 'camera';
     pb.pause(); pass &&= !a.cameraView && document.querySelector('#viewtabs .on').dataset.v === 'director';
-    pb.loop = true; pb.play(); pb._last -= 12000; pb.update(); pass &&= pb.playing && a.preview && !a.cameraView;
-    pb.loop = false; pb._last -= 12000; pb.update(); pass &&= !pb.playing && !a.preview && pb.time === a.timeline.duration;
-    pb.play(); a.endPreview(); pass &&= !pb.playing && !a.preview && a._cleanDepth === 0;
-    pb.play(); a.stopPreview(); pass &&= pb.time === 0 && !a.timeline.active && !a.cameraView && a._cleanDepth === 0;
+    pb.loop = true; pb.play(); pb.seek(a.timeline.duration); pb.update(); pass &&= pb.playing && a.preview && !a.cameraView;
+    pb.loop = false; pb.seek(a.timeline.duration); pb.update(); pass &&= !pb.playing && !a.preview && pb.time === a.timeline.duration;
+    pb.play(); a.endPreview(); pass &&= !pb.playing && !a.preview && a.cleanRenderDepth === 0;
+    pb.play(); a.stopPreview(); pass &&= pb.time === 0 && !a.timeline.active && !a.cameraView && a.cleanRenderDepth === 0;
     pb.seek(3); pass &&= !a.preview && !a.cameraView;
     a.stage.camera.updateMatrixWorld(true);
     return pass && a.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8);

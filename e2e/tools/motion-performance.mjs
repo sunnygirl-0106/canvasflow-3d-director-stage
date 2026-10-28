@@ -52,7 +52,7 @@ while (Date.now() - start < 5000) {
   await page.mouse.move(pts[0][0] + (pts[1][0]-pts[0][0])*t, pts[0][1] + (pts[1][1]-pts[0][1])*t);
   await new Promise(resolve => setTimeout(resolve, 30));
 }
-const held = await page.evaluate(() => ({ drag: !!window.__app.pathEditor.drag, candidate: !!window.__app.pathOverlay._preview }));
+const held = await page.evaluate(() => ({ drag: !!window.__app.pathEditor.drag, candidate: !!window.__app.pathOverlay.displayState.preview }));
 await page.mouse.up(); await settle();
 const full = await page.evaluate(async () => {
   const a = window.__app, p = window.motionPerf; p.done = true; p.after = { ...a.stage.renderer.info.memory }; p.commits = a.store.revision-p.rev;

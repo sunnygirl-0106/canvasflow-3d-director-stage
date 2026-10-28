@@ -1,11 +1,10 @@
 import { toast, toastError } from '../util/dom.js';
 import { aimPoint } from '../anim/Constraint.js';
-import { cameraMove, defaultParams, MoveError, MOVE_LABEL, PANEL_LABEL, PANEL_DURATION } from '../anim/cameraMoves.js';
-import { cameraAnimation, moveContext, aheadPoint, nearestSubject, applyCameraMove, clearCameraMoves, removeCameraMoveTail } from '../doc/edit.js';
+import { defaultParams, PANEL_LABEL, PANEL_DURATION } from '../anim/cameraMoves.js';
+import { cameraAnimation, moveContext, aheadPoint, applyCameraMove, clearCameraMoves, removeCameraMoveTail } from '../doc/edit.js';
 import { cameraMotionState, motionSignature } from '../doc/cameraMotionState.js';
 import { round4, clone, R2D } from '../util/math.js';
 
-const fmt = (s) => (Math.round(s * 10) / 10).toString();
 /** 机位当前朝向（XYZ 欧拉角，度；不舍入）。 */
 const rotationDeg = (cam) => [cam.root.rotation.x, cam.root.rotation.y, cam.root.rotation.z].map(v => v * R2D);
 
@@ -14,16 +13,11 @@ const rotationDeg = (cam) => [cam.root.rotation.x, cam.root.rotation.y, cam.root
  * Inspector「运镜」段只管显示，写操作全在这里（selftest 也直接调）。
  *
  * 手动卡片使用 doc.meta.cameraMoves 保存参数、主体、生成起始位姿与结果签名；
- * 节点编辑使签名失效后显示为自定义轨迹。旧 build/commit 段接口仍供自测场景搭建调用（e2e/helpers.mjs），
- * 它的表单与段列表使用 this.form / app.moveMeta 会话状态。
  */
 export class CameraMoveTool {
   constructor(app) {
     this.app = app;
-    this.form = {}; // cameraId → { name, subject: '' | id | '__point', point, params }
   }
-
-  get meta() { return this.app.moveMeta; }
 
   current(cam) { return cameraMotionState(this.app.store.document, cam.id); }
 
@@ -129,17 +123,6 @@ export class CameraMoveTool {
 
   _presetError(message) { this.error = message; return false; }
 
-  // ---- 表单 ----
-  formOf(cam) {
-    let f = this.form[cam.id];
-    if (!f) f = this.form[cam.id] = { name: 'push_in', subject: '__point', point: null, params: {} };
-    if (!f.point) f.point = cam.lookTarget.toArray();
-    return f;
-  }
-
-  /** 改预设：参数回到默认。 */
-  setName(cam, name) { const f = this.formOf(cam); f.name = name; f.params = {}; }
-
   // ---- 主体 ----
   /** 可选主体：除自己外的实体（含群众成员）。 */
   subjects(cam) {
@@ -151,43 +134,8 @@ export class CameraMoveTool {
     return out;
   }
 
-  /** 默认主体：离机位最近的角色（含群众成员）；没有角色取最近的其他实体；什么都没有 = 机位前方 3 m 的点。 */
-  nearestSubject(cam) {
-    const doc = this.app.store.document;
-    const aimOf = (id) => aimPoint(this.app, id)?.toArray() ?? null; // 场景实测注视点
-    return nearestSubject(doc, cam.id, this.context(cam).position, aimOf) ?? this._aheadPoint(cam);
-  }
-
-  _aheadPoint(cam) { return aheadPoint(cam.transformJSON(this.app.timeline.baseOf(cam) || cam.root)); }
-
-  /** 表单里的主体 → 约束 subject（实体 id 或 [x,y,z]）。 */
-  resolveSubject(cam) {
-    const f = this.formOf(cam);
-    if (f.subject === '__point') return f.point.slice();
-    if (f.subject && this.app.findEntity(f.subject)) return f.subject;
-    return this.nearestSubject(cam);
-  }
-
   // ---- 现状 ----
   _anim(cam) { return cameraAnimation(this.app.store.document, cam.id); }
-
-  /** 签名：机位路径 + rot 轨道键（判断会话态的段是否仍与文档一致）。 */
-  _sig({ path, rotTrack }) {
-    return JSON.stringify({
-      path: path && { points: path.points, closed: path.closed, start: path.start, duration: path.duration, stops: path.stops, stopTimes: path.stopTimes, timedSegments: path.timedSegments, waypointTimes: path.waypointTimes },
-      rot: rotTrack?.keys || null,
-    });
-  }
-
-  /** 签名为 sig 时仍有效的段：最后一段签名等于 sig 的最长前缀。 */
-  _prefix(cam, sig) {
-    const segs = this.meta[cam.id]?.segments || [];
-    for (let i = segs.length - 1; i >= 0; i--) if (segs[i].sig === sig) return segs.slice(0, i + 1);
-    return [];
-  }
-
-  /** 仍与文档一致的段。 */
-  segments(cam) { return this._prefix(cam, this._sig(this._anim(cam))); }
 
   /**
    * 下一段运镜从哪里开始：已有路径 → 路径终点 + 结束时刻；只有摇镜头段 → 最后一段结束时刻、摇到的朝向；
@@ -195,9 +143,8 @@ export class CameraMoveTool {
    */
   context(cam) {
     const { app } = this;
-    const segs = this.segments(cam);
     const saved = this.current(cam)?.segments.at(-1);
-    const pan = saved?.name === 'pan' ? { start: saved.origin.time, duration: saved.params.duration, rotEnd: this._anim(cam).rotTrack.keys.at(-1).value } : segs.at(-1) || null;
+    const pan = saved?.name === 'pan' ? { start: saved.origin.time, duration: saved.params.duration, rotEnd: this._anim(cam).rotTrack.keys.at(-1).value } : null;
     const ctx = moveContext(app.store.document, cam.id, { time: round4(app.playback.time), lastPan: pan });
     if (!ctx.path) {
       const { posTrack, rotTrack } = this._anim(cam);
@@ -218,70 +165,9 @@ export class CameraMoveTool {
     finally { if (active) tl.evaluate(previous); else tl.stop(); }
   }
 
-  /** 表单参数（缺省项 = 默认值，按当前起点与主体计算）。 */
-  params(cam) {
-    const f = this.formOf(cam);
-    const ctx = this.context(cam);
-    const aim = this._aim(this.resolveSubject(cam));
-    return { ...defaultParams(f.name, { position: ctx.position, aim: aim || ctx.position }), ...f.params };
-  }
-
   _aim(subject) {
     const p = aimPoint(this.app, subject);
     return p ? p.toArray() : null;
-  }
-
-  /**
-   * 按表单生成（不写文档）：→ { name, subject, ctx, move } 或 { error }。
-   * 摇镜头不能接在路径后面。
-   */
-  build(cam) {
-    const f = this.formOf(cam);
-    const ctx = this.context(cam);
-    const subject = this.resolveSubject(cam);
-    const aim = this._aim(subject);
-    if (!aim) return { error: '主体不存在' };
-    if (f.name === 'pan' && ctx.path) return { error: '摇镜头请单独使用或放在最前' };
-    try {
-      const move = cameraMove(f.name, { position: ctx.position, rot: ctx.rot, roll: ctx.roll, aim, params: this.params(cam) });
-      return { name: f.name, subject, ctx, move };
-    } catch (err) {
-      if (err instanceof MoveError) return { error: err.message };
-      throw err;
-    }
-  }
-
-  // ---- 写入 ----
-  /**
-   * 写入一段运镜（一次撤销）。b = build() 的结果。数据由 edit.applyCameraMove 生成（与 AI 同一份）。
-   * @returns {object|null} 新段（会话态），失败 null
-   */
-  commit(cam, b) {
-    const { app } = this;
-    const tl = app.timeline;
-    const { ctx, subject, name } = b;
-    const before = this._anim(cam);
-    const segs = this.segments(cam);
-    const params = this.params(cam);
-    let res;
-    try {
-      app.store.transact('应用运镜', (doc) => {
-        res = clone(applyCameraMove(doc, cam.id, {
-          name, subject, aim: this._aim(subject), params, time: ctx.time,
-          lastPan: segs[segs.length - 1] || null, ownPan: segs.some((s) => s.kind === 'pan'),
-        }));
-      });
-    } catch (err) { toastError(err); return null; }
-    const { move, start, undo } = res;
-    const seg = { name, params, subject, start, duration: move.duration, kind: move.points ? 'path' : 'pan' };
-    if (undo.rotEnd) seg.rotEnd = undo.rotEnd; // 摇镜头段：下一段从摇到的朝向接着生成（见 context）
-
-    seg.sig = this._sig(this._anim(cam));
-    this.meta[cam.id] = { segments: [...this._prefix(cam, this._sig(before)), seg] };
-    const end = start + move.duration;
-    const over = end > tl.duration ? `（结束于 ${fmt(end)} s，超出时间轴时长）` : '';
-    toast(`${ctx.append ? '已追加' : '已应用'}运镜：${MOVE_LABEL[name]} ${fmt(start)}–${fmt(end)} s${over}`);
-    return seg;
   }
 
   /** 清除运镜：删除位置与旋转动画，保留摄像机属性中的约束（一次撤销）。 */
@@ -290,7 +176,6 @@ export class CameraMoveTool {
     try {
       app.store.transact('清除运镜', (doc) => { clearCameraMoves(doc, cam.id, { preserveConstraints: true }); });
     } catch (err) { toastError(err); return; }
-    delete this.meta[cam.id];
     this.error = null; this.appendCameraId = null;
     toast('已清除运镜');
   }

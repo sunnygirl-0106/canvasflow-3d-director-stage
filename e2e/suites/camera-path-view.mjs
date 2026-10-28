@@ -42,7 +42,7 @@ export async function run() {
     if (mode === 'freehand') await page.mouse.up();
     const cancelled = await page.evaluate(before => {
       const a = window.__app;
-      return !a.pathTool.busy && !a.pathTool._stroke && !a.pathTool._orbiting && a.pathTool.hintEl.hidden && a.rig.controls.mouseButtons.LEFT === 0 && JSON.stringify(a.store.document) === before;
+      return !a.pathTool.busy && !a.pathOverlay.draftGroup.children.length && !a.pathOverlay.snapRing.visible && a.pathTool.hintEl.hidden && a.rig.controls.mouseButtons.LEFT === 0 && JSON.stringify(a.store.document) === before;
     }, before);
     ok(`${label}：默认同高视角可绘制、有草稿反馈，Esc 无文档副作用`, drawing && cancelled);
     await choose(label); await draw(mode);
@@ -90,7 +90,7 @@ export async function run() {
   await page.click('.tl-play');
   ok('播放/暂停回导演，导演位置与选择不变', await page.evaluate(before => {
     const a = window.__app;
-    return !a.cameraView && !a.playback.playing && a.playback.time > 0 && !a.stage.activeCamera && a.pathOverlay.visible && a._cleanDepth === 0 && a.selectedId === before.selected && a.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8) && a.cameras[0].root.position.distanceTo(a.stage.camera.position.clone().fromArray(before.pos)) > .01;
+    return !a.cameraView && !a.playback.playing && a.playback.time > 0 && !a.stage.activeCamera && a.pathOverlay.visible && a.cleanRenderDepth === 0 && a.selectedId === before.selected && a.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8) && a.cameras[0].root.position.distanceTo(a.stage.camera.position.clone().fromArray(before.pos)) > .01;
   }, beforePlay));
   await page.keyboard.press('Escape'); await page.keyboard.press('Space'); await settle(100); await page.keyboard.press('Space');
   ok('停止/Space重播进入机位，后台导演位置不变', await page.evaluate(before => !window.__app.cameraView && window.__app.stage.camera.matrixWorld.toArray().every((v, i) => Math.abs(v - before.view[i]) < 1e-8), beforePlay));
@@ -106,7 +106,7 @@ export async function run() {
   ok('机位视角停止回导演并归零', await page.evaluate(id => !window.__app.cameraView && window.__app.povCameraId === null && window.__app.playback.time === 0, camera.id));
   await page.keyboard.press('Space'); await settle(100);
   await page.click('#viewtabs [data-v="director"]');
-  ok('播放中导演入口锁定，继续机位播放', await page.evaluate(() => !window.__app.cameraView && window.__app.playback.playing && window.__app.preview && window.__app._cleanDepth === 1));
+  ok('播放中导演入口锁定，继续机位播放', await page.evaluate(() => !window.__app.cameraView && window.__app.playback.playing && window.__app.preview && window.__app.cleanRenderDepth === 1));
   await page.keyboard.press('Escape'); await page.keyboard.press('Space'); await settle(100); await page.keyboard.press('Escape');
   ok('停止/重播持续满足机位视角规则', await page.evaluate(() => !window.__app.cameraView));
 

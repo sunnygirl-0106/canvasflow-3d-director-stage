@@ -278,10 +278,10 @@ export async function buildExportScene() {
     a.select(m.id);
     const c = a.addCamera('front_full');
     c.aimAt(a.stage.world.localToWorld(aimPoint(a, m.id).clone())); a.edited(c);
-    const mv = a.cameraMoves;
-    mv.setName(c, 'half_orbit');
-    mv.formOf(c).subject = m.id;
-    const seg = mv.commit(c, mv.build(c));
+    const { applyCameraMove } = await import('/src/doc/edit.js');
+    const seg = a.store.transact('导出场景运镜', doc => {
+      applyCameraMove(doc, c.id, { name: 'half_orbit', subject: m.id, aim: aimPoint(a, m.id).toArray() });
+    });
     tl.setMainCamera(c.id);
     await a.panorama.setFromAsset({ url: './assets/panoramas/pano-sunset.jpg', title: '威尼斯黄昏' });
     for (let i = 0; i < 50 && !a.panorama.active; i++) await new Promise((r) => setTimeout(r, 100));

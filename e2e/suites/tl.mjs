@@ -20,7 +20,7 @@ export async function run() {
   await settle();
   ok('默认完整显示时间轴时长，标尺覆盖整个右侧', await page.evaluate(() => {
     const p = window.__timelinePanel;
-    return p.fit && p.timeToX(p.app.timeline.duration) < p.scroll.clientWidth && p.ruler._w === p.scroll.clientWidth - p.nameWidth;
+    return p.fit && p.timeToX(p.app.timeline.duration) < p.scroll.clientWidth && parseFloat(p.ruler.canvas.style.width) === p.scroll.clientWidth - p.nameWidth;
   }));
   await clickSel('.tl-tools .tl-addkey'); // 顶栏直接适配全长
 

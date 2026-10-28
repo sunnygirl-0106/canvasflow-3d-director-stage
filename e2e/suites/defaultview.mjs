@@ -80,13 +80,13 @@ export async function run() {
     const sidePoints = [];
     for (let edge=16; edge<24; edge+=2) for (let u=.1; u<1; u+=.1) {
       const side = new V().fromBufferAttribute(p, edge).lerp(new V().fromBufferAttribute(p, edge+1), u);
-      const point = project(side.applyMatrix4(c._viz.matrixWorld));
+      const point = project(side.applyMatrix4(c.helper.camera.matrixWorld));
       if (point[0]>5 && point[0]<s.renderer.domElement.width-5 && point[1]>5 && point[1]<s.renderer.domElement.height-5) sidePoints.push(point);
     }
     const snapshot = () => { s.render(); return s.renderer.domElement.toDataURL(); };
     const on = snapshot();
     s.grid.visible = false; const noGrid = snapshot(); s.grid.visible = true;
-    c._frustumSides.visible = false; const noSides = snapshot(); c._frustumSides.visible = true;
+    c.helper.children[0].visible = false; const noSides = snapshot(); c.helper.children[0].visible = true;
     s.invalidate();
     return { on, noGrid, noSides, gridPoint, farGridPoint, sidePoints };
   });

@@ -301,9 +301,9 @@ export async function run() {
     const a = window.__app, m = a.findEntity(id);
     const before = m.root.quaternion.clone();
     a.history.reset();
-    a.pathTool.ent = m;
+    a.pathTool.request('points', m.id);
     const x = m.root.position.x, z = m.root.position.z;
-    a.pathTool._commit([[x, 0, z], [x + 4, 0, z]]);
+    a.pathTool.draft = [[x, 0, z], [x + 4, 0, z]]; a.pathTool.finish();
     const facesDeparture = () => Math.abs(m.root.rotation.clone().reorder('YXZ').y - Math.PI / 2) < 1e-6;
     const immediate = !a.timeline.active && facesDeparture();
     await a.history.undo();

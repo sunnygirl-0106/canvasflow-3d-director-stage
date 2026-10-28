@@ -17,7 +17,7 @@ export async function run() {
   const names = await page.evaluate(ids => Object.fromEntries(Object.entries(ids).map(([k, id]) => [k, window.__app.findEntity(id).name])), ids);
   await pickInOutliner(names.m);
   ok('主动选择角色仅显示该角色；选中对象不铺控制点', await page.evaluate(id => {
-    const a = window.__app; return a.pathOverlay._items.length === 1 && a.pathOverlay._items[0].json.target === id && !a.pathOverlay._items[0].vertices.length;
+    const a = window.__app; return a.pathOverlay.displayState.paths.length === 1 && a.pathOverlay.displayState.paths[0].source.target === id && !a.pathOverlay.displayState.paths[0].nodes.length;
   }, ids.m));
   await pickInOutliner(names.f);
   ok('没有轨迹的角色不回退到机位', await page.evaluate(() => window.__app.pathOverlay.itemCount === 0));
@@ -68,27 +68,27 @@ export async function run() {
   const saved = await page.evaluate(() => window.__app.exportDocument());
   await page.reload({ waitUntil: 'networkidle0' }); await page.waitForFunction(() => window.__app?.ready);
   await page.evaluate(async saved => { const a = window.__app; await a.loadDocument(saved, { applyView: true }); }, saved);
-  ok('刷新并重新载入还原运镜身份及参数；默认机位轨迹', await page.evaluate(id => { const a = window.__app; return a.cameraMoves.current(a.findCamera(id))?.segments.length === 2 && a.pathOverlay._items[0]?.json.target === id && !a.userSelectedId; }, ids.c1));
+  ok('刷新并重新载入还原运镜身份及参数；默认机位轨迹', await page.evaluate(id => { const a = window.__app; return a.cameraMoves.current(a.findCamera(id))?.segments.length === 2 && a.pathOverlay.displayState.paths[0]?.source.target === id && !a.userSelectedId; }, ids.c1));
   await pickInOutliner(names.m);
   await page.evaluate(() => { const a = window.__app; a.pathOverlay.setSelectedPath(a.timeline.paths.find(p => p.target === a.selectedId).id); }); await settle();
   ok('编辑状态仅有扁平节点；点击热区与真实坐标', await page.evaluate(() => {
-    const a = window.__app, it = a.pathOverlay._items[0];
-    return it.vertices.length === it.json.points.length && it.vertices.every((m, i) => m.geometry.type === 'PlaneGeometry' && m.position.toArray().every((v, j) => v === it.json.points[i][j]));
+    const a = window.__app, it = a.pathOverlay.displayState.paths[0];
+    return it.nodes.length === it.source.points.length && it.nodes.every((m, i) => m.geometry === 'PlaneGeometry' && m.position.every((v, j) => v === it.source.points[i][j]));
   }));
   await page.screenshot({ path: 'test-output/manual-motion/nodes.png' });
   await page.keyboard.press('Escape'); await settle();
-  ok('Esc 退出保留角色轨迹，隐藏节点', await page.evaluate(() => !window.__app.pathOverlay.selectedPathId && window.__app.pathOverlay._items.length === 1 && !window.__app.pathOverlay._items[0].vertices.length));
+  ok('Esc 退出保留角色轨迹，隐藏节点', await page.evaluate(() => !window.__app.pathOverlay.selectedPathId && window.__app.pathOverlay.displayState.paths.length === 1 && !window.__app.pathOverlay.displayState.paths[0].nodes.length));
   await pickInOutliner(names.p);
-  ok('选道具恢复默认机位轨迹', await page.evaluate(id => window.__app.pathOverlay._items[0]?.json.target === id, ids.c1));
+  ok('选道具恢复默认机位轨迹', await page.evaluate(id => window.__app.pathOverlay.displayState.paths[0]?.source.target === id, ids.c1));
   await page.evaluate(id => { const a = window.__app; a.pathOverlay.setSelectedPath(a.timeline.paths.find(p => p.target === id).id); }, ids.p);
-  ok('明确编辑道具临时显示道具轨迹', await page.evaluate(id => window.__app.pathOverlay._items[0]?.json.target === id, ids.p));
+  ok('明确编辑道具临时显示道具轨迹', await page.evaluate(id => window.__app.pathOverlay.displayState.paths[0]?.source.target === id, ids.p));
   await page.keyboard.press('Escape');
-  ok('退出道具轨迹编辑恢复机位', await page.evaluate(id => window.__app.pathOverlay._items[0]?.json.target === id, ids.c1));
+  ok('退出道具轨迹编辑恢复机位', await page.evaluate(id => window.__app.pathOverlay.displayState.paths[0]?.source.target === id, ids.c1));
   await page.evaluate(() => window.__app.setCameraView(true));
   ok('机位视角隐藏全部轨迹且不能拾取', await page.evaluate(() => { const a = window.__app; return !a.pathOverlay.visible && !a.pathOverlay.hitTest(500, 400) && a.pathOverlay.nameHint.hidden; }));
   await page.evaluate(() => window.__app.setCameraView(false));
   await page.setViewport({ width: 1440, height: 810, deviceScaleFactor: 2 }); await settle();
-  ok('高分屏线宽仍使用 CSS 分辨率', await page.evaluate(() => { const a = window.__app, it = a.pathOverlay._items[0], rect = a.stage.renderer.domElement.getBoundingClientRect(); return Math.abs(it.line.material.resolution.x - rect.width) < 1; }));
+  ok('高分屏线宽仍使用 CSS 分辨率', await page.evaluate(() => { const a = window.__app, it = a.pathOverlay.displayState.paths[0], rect = a.stage.renderer.domElement.getBoundingClientRect(); return Math.abs(it.resolution[0] - rect.width) < 1; }));
   const rules = await page.evaluate(async ids => {
     const a = window.__app;
     a.setCameraView(false); a.select(null, { user: true });
@@ -96,13 +96,13 @@ export async function run() {
     const emptyMain = a.pathOverlay.itemCount === 0;
     a.timeline.setMainCamera(ids.c1);
     a.select(ids.m);
-    const internal = a.pathOverlay._items[0]?.json.target === ids.c1;
+    const internal = a.pathOverlay.displayState.paths[0]?.source.target === ids.c1;
     a.select(ids.m, { user: true });
     const modified = a.exportDocument(); modified.entities.find(e => e.id === ids.m).name = '保留聚焦';
     await a.loadDocument(modified, { applyView: false });
-    const retained = a.pathOverlay._items[0]?.json.target === ids.m;
+    const retained = a.pathOverlay.displayState.paths[0]?.source.target === ids.m;
     await a.loadDocument(modified, { newScene: true });
-    const reset = a.pathOverlay._items[0]?.json.target === ids.c1 && !a.userSelectedId && !a.pathOverlay.selectedPathId;
+    const reset = a.pathOverlay.displayState.paths[0]?.source.target === ids.c1 && !a.userSelectedId && !a.pathOverlay.selectedPathId;
     return { emptyMain, internal, retained, reset };
   }, ids);
   ok('无轨迹主机位不回退；内部选角色不聚焦；普通修改保留选择；新场景清空聚焦', Object.values(rules).every(Boolean), JSON.stringify(rules));

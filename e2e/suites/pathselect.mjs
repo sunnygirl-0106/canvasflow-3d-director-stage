@@ -26,7 +26,7 @@ export async function run() {
       selected: ov.selectedPathId, vertex: ov.selVertex,
       points: a.timeline.toJSON().paths.find(p => p.id === ids.path)?.points,
       paths: a.timeline.toJSON().paths.length, actor: !!a.findEntity(ids.actor),
-      handles: ov._items.reduce((n, it) => n + it.vertices.length, 0),
+      handles: ov.displayState.paths.reduce((n, it) => n + it.nodes.length, 0),
       gizmo: a.gizmo.visible, bar: !a.pathEditor.bar.hidden,
     };
   }, ids);

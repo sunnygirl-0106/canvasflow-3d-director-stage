@@ -267,7 +267,7 @@ export async function run() {
       catch (err) { error = { name: err.name, message: err.message }; }
       finally { window.VideoEncoder = native; }
       results.push({ phase, error, wasLocked, closes: encoder.closes, frames: encoder.frames,
-        restored: !a.exporting && !a.stage.suspended && !a.labelSprites.enabled && a._cleanDepth === 0
+        restored: !a.exporting && !a.stage.suspended && !a.labelSprites.enabled && a.cleanRenderDepth === 0
           && a.playback.time === before.time && a.timeline.active === before.active
           && JSON.stringify(a.store.document) === before.doc && a.history.entries.length === before.hist });
     }

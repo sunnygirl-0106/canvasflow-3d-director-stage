@@ -157,7 +157,7 @@ export async function run() {
   const selectedPath = await page.evaluate(id => {
     const a = window.__app;
     a.select(id, { user: true });
-    return { expected: a.timeline.paths.find(p => p.target === id).id, shown: a.pathOverlay._items.map(item => item.json.id) };
+    return { expected: a.timeline.paths.find(p => p.target === id).id, shown: a.pathOverlay.displayState.paths.map(item => item.source.id) };
   }, ids.A);
   ok('验收11 显式选中角色只显示该角色路径',
     selectedPath.shown.length === 1 && selectedPath.shown[0] === selectedPath.expected, JSON.stringify(selectedPath));
