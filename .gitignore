@@ -18,11 +18,12 @@ test-output/
 # 固定版本的测试浏览器缓存
 .cache/
 
-# 工程文档入库，交接文档和评审附件仅保留在本地
+# 仅放行四份长期文档，不新增文档白名单
 /docs/*
 !/docs/开发参考.md
 *.md
 !/README.md
 !/AGENTS.md
+!/CLAUDE.md
 !/docs/开发参考.md
 .claude/settings.local.json
