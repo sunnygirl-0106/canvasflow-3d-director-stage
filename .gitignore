@@ -8,7 +8,7 @@ selftest_*.png
 clean_*.png
 # 本地临时 / 源素材（不入库）
 _assets_src/
-# 姿势回归 / 校准截图
+# 自测报告与下载产物
 test-output/
 
 # 本机模型凭据
@@ -26,5 +26,3 @@ test-output/
 !/AGENTS.md
 !/docs/开发参考.md
 .claude/settings.local.json
-
-!/docs/e2e迁移表.md
