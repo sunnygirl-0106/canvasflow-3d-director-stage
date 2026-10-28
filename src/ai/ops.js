@@ -338,7 +338,7 @@ export function validateOps(ops, scene = [], { mode = 'modify' } = {}) {
         if (!shapeOk) break;
         need(`${p}.target`, o.target, ['camera']);
         if (o.subject !== undefined) refOrPoint(`${p}.subject`, o.subject, { not: o.target });
-        const params = MOVE_PARAMS[o.preset];
+        const params = MOVE_PARAMS[/** @type {string} */ (o.preset)]; // shapeOk 已通过 preset 枚举校验。
         for (const k of ['amount', 'dir', 'sweep']) {
           if (o[k] !== undefined && !params.includes(k)) err(`${p}.${k}`, `运镜 ${o.preset} 没有参数 ${k}（可用：${params.join(' / ') || '无'}）`);
         }

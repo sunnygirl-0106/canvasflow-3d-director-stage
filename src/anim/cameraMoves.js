@@ -16,38 +16,30 @@ import { D2R, R2D, round6 } from '../util/math.js';
 //   dir 以俯视为准，ccw = 逆时针（pathGen.arc 的正方向），cw = 顺时针。
 // - pan：机位不动，生成两个 rot 关键帧（起 = 当前朝向，止 = 对准主体并保留荷兰角 roll，与 Constraint lookAt 一致）。
 
-/** 预设表：[name, 中文名]（顺序即 Inspector 下拉顺序）。 */
-export const CAMERA_MOVES = [
-  ['push_in', '推'],
-  ['pull_out', '拉'],
-  ['truck', '横移'],
-  ['crane', '升降'],
-  ['pan', '摇'],
-  ['half_orbit', '半环绕'],
-  ['circle', '环绕'],
+/** 运镜目录：AI 顺序沿用词汇表；panelOrder 为面板顺序，null 表示不在面板中出现。
+ * params 为两端共用的参数列；aiLabel=null 的预设仅供面板使用。
+ * 保留 legacy AI defaults；面板默认时长仍全部为 2 秒。
+ */
+const MOVE_CATALOG = [
+  { name: 'push_in', aiLabel: '推', panelLabel: '推近', aiDuration: 3, panelDuration: 2, params: ['amount'], panelOrder: 2 },
+  { name: 'pull_out', aiLabel: '拉', panelLabel: '拉远', aiDuration: 3, panelDuration: 2, params: ['amount'], panelOrder: 3 },
+  { name: 'truck', aiLabel: '横移', panelLabel: '横移', aiDuration: 3, panelDuration: 2, params: ['amount', 'dir'], panelOrder: 5 },
+  { name: 'crane', aiLabel: '升降', panelLabel: '升降', aiDuration: 3, panelDuration: 2, params: ['amount', 'dir'], panelOrder: 4 },
+  { name: 'pan', aiLabel: '摇', panelLabel: '摇镜头', aiDuration: 2, panelDuration: 2, params: [], panelOrder: null },
+  { name: 'half_orbit', aiLabel: '半环绕', panelLabel: '半弧', aiDuration: 5, panelDuration: 2, params: ['sweep', 'dir'], panelOrder: 1 },
+  { name: 'circle', aiLabel: '环绕', panelLabel: '环绕', aiDuration: 8, panelDuration: 2, params: ['sweep', 'dir'], panelOrder: 0 },
+  { name: 'spiral', aiLabel: null, panelLabel: '螺旋上升', aiDuration: null, panelDuration: 2, params: ['sweep', 'rise', 'dir'], panelOrder: 6 },
 ];
+const AI_MOVES = MOVE_CATALOG.filter(move => move.aiLabel !== null);
+const PANEL_ORDER = [...MOVE_CATALOG].sort((a, b) => (a.panelOrder ?? Infinity) - (b.panelOrder ?? Infinity));
+export const CAMERA_MOVES = AI_MOVES.map(move => [move.name, move.aiLabel]);
 export const MOVE_LABEL = Object.fromEntries(CAMERA_MOVES);
-export const PANEL_LABEL = { ...MOVE_LABEL, push_in: '推近', pull_out: '拉远', half_orbit: '半弧', pan: '摇镜头', spiral: '螺旋上升' };
-
-// 手动面板统一使用 2 秒；AI 未指定时长时使用 MOVE_DURATION 的预设时长。
-export const PANEL_MOVES = ['circle', 'half_orbit', 'push_in', 'pull_out', 'crane', 'truck', 'spiral'];
-export const PANEL_DURATION = { circle: 2, half_orbit: 2, push_in: 2, pull_out: 2, crane: 2, truck: 2, spiral: 2, pan: 2 };
-
-/** 默认时长（秒）。 */
-export const MOVE_DURATION = { push_in: 3, pull_out: 3, truck: 3, crane: 3, pan: 2, half_orbit: 5, circle: 8 };
-
-/** 各预设的参数（Inspector 按它显示输入项）。 */
-export const MOVE_PARAMS = {
-  push_in: ['amount'],
-  pull_out: ['amount'],
-  truck: ['amount', 'dir'],
-  crane: ['amount', 'dir'],
-  pan: [],
-  half_orbit: ['sweep', 'dir'],
-  circle: ['sweep', 'dir'],
-};
-
-export const PANEL_PARAMS = { ...MOVE_PARAMS, spiral: ['sweep', 'rise', 'dir'] };
+export const MOVE_DURATION = Object.fromEntries(AI_MOVES.map(move => [move.name, move.aiDuration]));
+export const MOVE_PARAMS = Object.fromEntries(AI_MOVES.map(move => [move.name, move.params]));
+export const PANEL_LABEL = Object.fromEntries(MOVE_CATALOG.map(move => [move.name, move.panelLabel]));
+export const PANEL_MOVES = PANEL_ORDER.filter(move => move.panelOrder !== null).map(move => move.name);
+export const PANEL_DURATION = Object.fromEntries(PANEL_ORDER.map(move => [move.name, move.panelDuration]));
+export const PANEL_PARAMS = Object.fromEntries(MOVE_CATALOG.map(move => [move.name, move.params]));
 
 /** dir 的取值：[value, 中文]。 */
 export const MOVE_DIRS = {
