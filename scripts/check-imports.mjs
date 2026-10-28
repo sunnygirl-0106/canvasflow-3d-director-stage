@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const SRC = path.resolve('src');
-const LAYER = { util: 0, rig: 1, anim: 1, doc: 1, entities: 1, core: 1, dev: 1, ai: 2, app: 2, ui: 3 };
+const LAYER = { util: 0, rig: 1, anim: 1, doc: 1, entities: 1, core: 1, ai: 2, app: 2, ui: 3 };
 const layerOf = (f) => {
   const top = path.relative(SRC, f).split(path.sep)[0];
   return top.endsWith('.js') ? (top === 'config.js' ? 1 : 4) : LAYER[top] ?? 4;

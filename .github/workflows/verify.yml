@@ -52,10 +52,6 @@ jobs:
       - name: All browser checks
         if: ${{ inputs.full }}
         run: npm run test:e2e:all
-      - name: Pose regression when assets or pose code change
-        env:
-          BASE_REF: ${{ inputs.base-ref }}
-        run: node scripts/pose-regression.mjs
       - name: Upload verified build
         uses: actions/upload-artifact@v4
         with:

@@ -1,6 +1,6 @@
 // 骨骼档案注册表：id → 档案。三个人偶都是标准 T-Pose 的 Mixamo 骨骼、局部轴向已对齐，共用同一张关节表。
 //
-// joints：语义关节 key → { bone, axis, sign }。sign 缺省为 1；校准页（calib.html）发现方向反了就改 sign 或 axis。
+// joints：语义关节 key → { bone, axis, sign }。sign 缺省为 1。
 // axis 是【身体坐标系】轴（X=角色左侧，Y=上，Z=前方；以文件 T-pose 为准），'twist' = 沿骨头自转。
 // 加载时按骨头静止朝向换算成局部轴，所以与骨头 roll 无关；同一骨头上的多个轴按 JOINT_SCHEMA 顺序相乘。
 // sign 让左右两侧都满足「正值 = 标签上的动作」（前举/外展/外旋/弯曲/抬腿 为正）。
