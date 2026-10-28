@@ -272,10 +272,13 @@ export class AiPanel {
   }
 
   async _testConnection() {
-    this.testState = { ok: true, text: '测试中…' };
+    const settings = { ...this.settings };
+    const pending = this.testState = { ok: true, text: '测试中…' };
     this.renderSettings();
     const r = await this._provider().test();
-    this.testState = r.ok ? { ok: true, text: `连接正常（${r.ms} ms）` } : { ok: false, text: `连接失败：${r.error || '回复不符合预期：' + r.reply}` };
+    if (this.testState !== pending) return; // 已开始新检测，或已保存设置。
+    if (Object.entries(settings).some(([key, value]) => this.settings[key] !== value)) this.testState = null;
+    else this.testState = r.ok ? { ok: true, text: `连接正常（${r.ms} ms）` } : { ok: false, text: `连接失败：${r.error || '回复不符合预期：' + r.reply}` };
     this.renderSettings();
   }
 

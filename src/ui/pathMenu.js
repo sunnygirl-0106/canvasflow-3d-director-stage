@@ -14,11 +14,11 @@ export function openPathMenu(app, anchor, targetId) {
   if (!app.pathTool.canDraw(ent)) return;
   const r = anchor.getBoundingClientRect();
   const items = pathModes(ent).map(([mode, label]) => ({ label, icon: shapes[mode] ? `<svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3">${shapes[mode]}</svg>` : null, onClick: () => app.pathTool.request(mode, targetId) }));
-  if (app.timeline.toJSON().paths.some(p => p.target === targetId)) {
+  if (app.timeline.paths.some(p => p.target === targetId)) {
     items.push('-', { label: '编辑现有轨迹', onClick: () => {
       if (!app.findEntity(targetId)) return;
       app.playback.pause(); app.setCameraView(false); app.select(targetId);
-      const path = app.timeline.toJSON().paths.find(p => p.target === targetId);
+      const path = app.timeline.paths.find(p => p.target === targetId);
       app.pathOverlay.setSelectedPath(path?.id || null);
     } }, { label: '轨迹操作 ›', onClick: () => {
       const current = () => app.timeline.paths.find(p => p.target === targetId);

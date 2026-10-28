@@ -337,9 +337,11 @@ export class PathEditor {
   // ---- 编辑命令（selftest 也走这里）----
   /** 在弧长 s 处插入顶点（点在当前曲线上，插在其所在的两个顶点之间）。 */
   insertAt(pathId, s) {
-    const json = this.app.timeline.toJSON().paths.find((p) => p.id === pathId);
-    const path = this.app.pathOverlay.pathOf(pathId);
-    if (!json || !path || !Number.isFinite(s) || path.length < 1e-6) return null;
+    const json = this.app.timeline.paths.find((p) => p.id === pathId);
+    if (!json || !Number.isFinite(s)) return null;
+    // 时间轴也能插点，不能依赖当前视口是否绘制了这条路径。
+    const path = this.app.timeline.pathModel(json);
+    if (path.length < 1e-6) return null;
     s = Math.max(0, Math.min(path.length, s));
     const p = path.positionAt(s);
     const existing = json.points.findIndex(point => Math.hypot(point[0] - p.x, point[1] - p.y, point[2] - p.z) < 1e-4);
@@ -356,7 +358,7 @@ export class PathEditor {
   }
 
   deleteVertex(pathId, index) {
-    const json = this.app.timeline.toJSON().paths.find((p) => p.id === pathId);
+    const json = this.app.timeline.paths.find((p) => p.id === pathId);
     if (!json || !json.points[index]) { this.app.pathOverlay.setSelectedVertex(null); return; }
     if (json.points.length <= 2) { toast('路径至少需要 2 个顶点（Backspace 可删除整条轨迹）'); return; }
     const pts = json.points.filter((_, i) => i !== index);

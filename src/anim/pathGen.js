@@ -100,16 +100,31 @@ export function pathLength(points, closed = false, stops = null, interpolation) 
  */
 export function fitStops(old, next, patch = {}, roundTime = round4) {
   const out = { ...next };
-  if (old?.waypointTimes && patch.points?.length !== undefined && patch.points.length !== old.points.length && !patch.waypointTimes) delete out.waypointTimes;
-  else if (old?.waypointTimes && next.duration !== old.duration && !patch.waypointTimes && out.waypointTimes) {
-    out.waypointTimes = out.waypointTimes.map(t => roundTime(t * next.duration / old.duration));
+  const pointCountChanged = old && patch.points?.length !== undefined && patch.points.length !== old.points.length;
+  const durationChanged = old && next.duration !== old.duration;
+  // 顶点数变化优先清除旧时间表；显式传入的新时间表不再自动缩放。
+  if (old?.waypointTimes && !patch.waypointTimes) {
+    if (pointCountChanged) delete out.waypointTimes;
+    else if (durationChanged && out.waypointTimes) {
+      out.waypointTimes = out.waypointTimes.map(t => roundTime(t * next.duration / old.duration));
+    }
   }
-  if (old?.timedSegments && patch.points?.length !== undefined && patch.points.length !== old.points.length && !patch.timedSegments) delete out.timedSegments;
-  else if (old?.timedSegments && next.duration !== old.duration && !patch.timedSegments && out.timedSegments) {
-    out.timedSegments = out.timedSegments.map(s => ({ ...s, start: roundTime(s.start * next.duration / old.duration), end: roundTime(s.end * next.duration / old.duration) }));
+  if (old?.timedSegments && !patch.timedSegments) {
+    if (pointCountChanged) delete out.timedSegments;
+    else if (durationChanged && out.timedSegments) {
+      out.timedSegments = out.timedSegments.map(segment => ({
+        ...segment,
+        start: roundTime(segment.start * next.duration / old.duration),
+        end: roundTime(segment.end * next.duration / old.duration),
+      }));
+    }
   }
-  if (patch.points && out.timedSegments) out.timedSegments = out.timedSegments.map(s =>
-    s.closed && JSON.stringify(out.points[s.from]) !== JSON.stringify(out.points[s.to]) ? { ...s, closed: false } : s);
+  if (patch.points && out.timedSegments) {
+    out.timedSegments = out.timedSegments.map(segment => {
+      const opened = segment.closed && JSON.stringify(out.points[segment.from]) !== JSON.stringify(out.points[segment.to]);
+      return opened ? { ...segment, closed: false } : segment;
+    });
+  }
   let stops = 'stops' in patch ? patch.stops : out.stops;
   let times = 'stopTimes' in patch ? patch.stopTimes : out.stopTimes;
   delete out.stops;
@@ -126,7 +141,7 @@ export function fitStops(old, next, patch = {}, roundTime = round4) {
     if (times?.length === keep.length) times = times.filter((_, index) => keep[index]);
   }
 
-  if (times?.length && old && !('stopTimes' in patch) && out.duration !== old.duration) {
+  if (times?.length && durationChanged && !('stopTimes' in patch)) {
     times = times.map((t) => roundTime(t * out.duration / old.duration));
   }
   if (times) {
@@ -178,46 +193,56 @@ export function stopsAfterReverse(path) {
   };
 }
 
+/** 分段运镜用段边界表示停顿；拆分或合并时保留两侧的起止时刻。 */
+function toggleSegmentStop(path, index, on) {
+  const segments = path.timedSegments.map(segment => ({ ...segment }));
+  const boundary = segments.findIndex(segment => segment.to === index);
+  if (!on && boundary >= 0 && boundary < segments.length - 1) {
+    const left = segments[boundary], right = segments[boundary + 1];
+    segments.splice(boundary, 2, { from: left.from, to: right.to, start: left.start, end: right.end, speed: 'smooth' });
+  } else if (on && boundary < 0) {
+    const segmentIndex = segments.findIndex(segment => segment.from < index && index < segment.to);
+    if (segmentIndex >= 0) {
+      const segment = segments[segmentIndex];
+      const time = round6(new Path(path).vertexTime(index) - path.start);
+      segments.splice(segmentIndex, 1,
+        { from: segment.from, to: index, start: segment.start, end: time, speed: 'smooth' },
+        { from: index, to: segment.to, start: time, end: segment.end, speed: 'smooth' });
+    }
+  }
+  return { timedSegments: segments };
+}
+
 /**
  * 在顶点 index 处加 / 去停顿。已有 stopTimes 时新停顿的时刻 = 当前时间分配下到达该顶点的时刻（其余段不变）。
- * @returns {{stops:number[], stopTimes?:number[]}} 交给 updatePath 的 patch（stops 为空时 fitStops 会删掉字段）
+ * @returns {{stops?:number[], stopTimes?:number[], timedSegments?:object[]}} 交给 updatePath 的 patch（stops 为空时 fitStops 会删掉字段）
  */
 export function toggleStop(path, index, on) {
-  if (path.timedSegments) {
-    const segments = path.timedSegments.map(s => ({ ...s }));
-    const boundary = segments.findIndex(s => s.to === index);
-    if (!on && boundary >= 0 && boundary < segments.length - 1) {
-      const a = segments[boundary], b = segments[boundary + 1];
-      segments.splice(boundary, 2, { from: a.from, to: b.to, start: a.start, end: b.end, speed: 'smooth' });
-    } else if (on && boundary < 0) {
-      const i = segments.findIndex(s => s.from < index && index < s.to);
-      if (i >= 0) {
-        const s = segments[i], time = round6(new Path(path).vertexTime(index) - path.start);
-        segments.splice(i, 1, { from: s.from, to: index, start: s.start, end: time, speed: 'smooth' },
-          { from: index, to: s.to, start: time, end: s.end, speed: 'smooth' });
-      }
-    }
-    return { timedSegments: segments };
-  }
+  if (path.timedSegments) return toggleSegmentStop(path, index, on);
   const stops = (path.stops || []).slice(), times = path.stopTimes ? path.stopTimes.slice() : null;
-  const j = stops.indexOf(index);
+  const stopIndex = stops.indexOf(index);
   if (!on) {
-    if (j < 0) return { stops };
-    stops.splice(j, 1);
-    if (times) times.splice(j, 1);
+    if (stopIndex < 0) return { stops };
+    stops.splice(stopIndex, 1);
+    if (times) times.splice(stopIndex, 1);
     return times ? { stops, stopTimes: times } : { stops };
   }
-  if (j >= 0) return times ? { stops, stopTimes: times } : { stops };
-  const at = stops.findIndex((i) => i > index);
-  const k = at < 0 ? stops.length : at;
-  stops.splice(k, 0, index);
+  if (stopIndex >= 0) return times ? { stops, stopTimes: times } : { stops };
+  const nextStopIndex = stops.findIndex((i) => i > index);
+  const insertIndex = nextStopIndex < 0 ? stops.length : nextStopIndex;
+  stops.splice(insertIndex, 0, index);
   if (!times) return { stops };
-  const P = new Path(path);
-  const s = P.vertexDistance(index);
+  const curve = new Path(path);
+  const distance = curve.vertexDistance(index);
   let lo = 0, hi = path.duration; // 到达该顶点的时刻：distanceAt 单调，二分
-  for (let n = 0; n < 50; n++) { const mid = (lo + hi) / 2; if (P.distanceAt(path.start + mid) < s) lo = mid; else hi = mid; }
-  const lo2 = k ? times[k - 1] : 0, hi2 = k < times.length ? times[k] : path.duration;
-  times.splice(k, 0, round4(Math.min(Math.max(hi, lo2 + 0.05), hi2 - 0.05)));
+  for (let n = 0; n < 50; n++) {
+    const mid = (lo + hi) / 2;
+    if (curve.distanceAt(path.start + mid) < distance) lo = mid;
+    else hi = mid;
+  }
+  const previousTime = insertIndex ? times[insertIndex - 1] : 0;
+  const nextTime = insertIndex < times.length ? times[insertIndex] : path.duration;
+  times.splice(insertIndex, 0, round4(Math.min(Math.max(hi, previousTime + 0.05), nextTime - 0.05)));
   return { stops, stopTimes: times };
 }
 

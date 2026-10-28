@@ -145,7 +145,7 @@ export class Inspector {
   _renderAnimSections() {
     const host = this._animHost, ent = this.entity;
     if (!host || !ent) return;
-    const anim = this.app.timeline.toJSON();
+    const anim = this.app.timeline.view();
     const nodes = [];
     const path = anim.paths.find((p) => p.target === ent.id);
     const camera = ent.type === 'camera';

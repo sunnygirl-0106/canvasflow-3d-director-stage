@@ -12,6 +12,25 @@ const fixture = () => {
   const doc = createPresetScene(4), id = doc.entities.find(e => e.type === 'character').id;
   return { doc, id, path: doc.paths.find(p => p.target === id), rot: doc.timeline.tracks.find(t => t.target === id && t.property === 'rot') };
 };
+
+test('大量关键帧的范围计算不受函数参数数量上限影响', () => {
+  const doc = { paths: [], timeline: { tracks: ['pos', 'rot', 'scale'].map(property => ({
+    target: 'object', property, keys: Array.from({ length: 50000 }, (_, i) => ({ t: i / 10000 })),
+  })) } };
+  assert.deepEqual(objectAnimationRange(doc, 'object'), { start: 0, end: 4.9999 });
+});
+
+test('范围忽略非有限键时刻、FOV 与其他对象；不改变输入', () => {
+  const keys = Object.freeze([NaN, Infinity, -Infinity, 3, 1].map(t => Object.freeze({ t })));
+  const doc = { paths: [], timeline: { tracks: [
+    { target: 'object', property: 'pos', keys },
+    { target: 'object', property: 'fov', keys: [{ t: 10 }] },
+    { target: 'other', property: 'rot', keys: [{ t: 9 }] },
+  ] } };
+  assert.deepEqual(objectAnimationRange(doc, 'object'), { start: 1, end: 3 });
+  doc.timeline.tracks[0].keys = keys.slice(0, 3);
+  assert.equal(objectAnimationRange(doc, 'object'), null);
+});
 test('越过门槛：对象 0–6，路径 0–5，末秒原地转身', () => {
   const { doc, id, path, rot } = fixture();
   assert.deepEqual(objectAnimationRange(doc, id), { start: 0, end: 6 });

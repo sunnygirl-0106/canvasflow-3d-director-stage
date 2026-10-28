@@ -309,7 +309,7 @@ export class TrackRows {
       reason = st.forced === '路径' && property === 'rot' ? '请先关闭沿路径朝向' : `由${st.forced}驱动，不能打键`;
     }
     return { current, disabled, reason,
-      previous: items.filter(k => k.t < (current?.t ?? t) - 1e-6).at(-1),
+      previous: items.findLast(k => k.t < (current?.t ?? t) - 1e-6),
       next: items.find(k => k.t > (current?.t ?? t) + 1e-6),
     };
   }

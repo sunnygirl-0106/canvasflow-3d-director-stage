@@ -36,14 +36,27 @@ export async function run() {
   await page.evaluate(()=>window.__app.playback.pause());
   ok('暂停恢复导演视角及主机位视锥',await page.evaluate(()=>!window.__app.cameraView&&!window.__app.preview&&window.__app.cameras.some(c=>c.helper.visible)));
   await page.evaluate(()=>window.__app.stopPreview());
+  const presetBefore = await page.evaluate(() => {
+    window.__aiPanel.textarea.value = '保留这份草稿';
+    return JSON.stringify(window.__app.store.document);
+  });
   await page.click('#scenePresets');await shot('presets');
   await page.focus('.ai-preset'); await page.keyboard.press('Space');
   ok('托盘Space不启动播放',await page.evaluate(()=>!window.__app.playback.playing));
   await shot('preset-draft');
-  ok('预制只填草稿并收起，显式生成模式',await page.evaluate(()=>window.__aiPanel.textarea.value.length>0&&!window.__aiPanel.browsePresets&&window.__aiPanel.mode==='generate'&&!window.__app.ai.busy));
-  await page.click('#scenePresets');await page.click('.ai-preset');
-  ok('非空草稿要求托盘内确认',await page.evaluate(()=>!!document.querySelector('.ai-preset-confirm')));
-  await page.click('.ai-preset-confirm button');await page.keyboard.press('Escape');
+  ok('预制卡片只改变预览选择，保留草稿和场景且不请求模型', await page.evaluate(before => {
+    const panel = window.__aiPanel;
+    return panel.textarea.value === '保留这份草稿' && panel.browsePresets && !!panel.pendingPreset
+      && document.querySelectorAll('.ai-preset[aria-pressed="true"]').length === 1
+      && !window.__app.ai.busy && JSON.stringify(window.__app.store.document) === before;
+  }, presetBefore));
+  ok('选中预制后显示明确的创建按钮与替换场景提示', await page.evaluate(() => {
+    const footer = document.querySelector('.scene-preset-footer');
+    return footer.querySelector('.primary').textContent === '创建' && !footer.querySelector('.primary').disabled && footer.textContent.includes('将替换当前场景');
+  }));
+  await page.keyboard.press('Escape');
+  ok('取消预制保留当前文档和草稿', await page.evaluate(before => !document.querySelector('#scenePresetTray')
+    && window.__aiPanel.textarea.value === '保留这份草稿' && JSON.stringify(window.__app.store.document) === before, presetBefore));
   for(const title of ['添加角色','添加机位','全景图','选择画幅比例']) {
     await page.click(`#sideRail button[title^="${title}"]`);await shot(`nav-${title}`);await page.mouse.click(800,80);
   }

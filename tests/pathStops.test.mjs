@@ -96,6 +96,76 @@ test('插入 / 删除 / 反向 / 勾选停顿后的索引与时刻', () => {
   assert.deepEqual(toggleStop(on, 2, false), { stops: [1, 3], stopTimes: [2, 6] });
 });
 
+test('fitStops：节点时刻与分段时刻随时长缩放，保留间隙与输入数据', () => {
+  const old = P({
+    waypointTimes: [0, 1, 3, 5, 8],
+    timedSegments: [
+      { from: 0, to: 2, start: 0, end: 3, speed: 'linear' },
+      { from: 2, to: 4, start: 5, end: 8, speed: 'smooth' },
+    ],
+  });
+  const before = structuredClone(old);
+  const fitted = fitStops(old, { ...old, duration: 4 });
+  assert.deepEqual(fitted.waypointTimes, [0, 0.5, 1.5, 2.5, 4]);
+  assert.deepEqual(fitted.timedSegments, [
+    { from: 0, to: 2, start: 0, end: 1.5, speed: 'linear' },
+    { from: 2, to: 4, start: 2.5, end: 4, speed: 'smooth' },
+  ]);
+  fitted.waypointTimes[1] = 0;
+  fitted.timedSegments[0].end = 1;
+  assert.deepEqual(old, before);
+});
+
+test('fitStops：顶点数变化清除旧时间表，显式时间表（含空数组）优先', () => {
+  const old = P({ waypointTimes: [0, 1, 3, 5, 8], timedSegments: [{ from: 0, to: 4, start: 0, end: 8 }] });
+  const geometry = { points: PTS.slice(0, 3), duration: 4 };
+  const fitted = fitStops(old, { ...old, ...geometry }, geometry);
+  assert.equal('waypointTimes' in fitted, false);
+  assert.equal('timedSegments' in fitted, false);
+  for (const timing of [
+    { waypointTimes: [0, 1, 4], timedSegments: [{ from: 0, to: 2, start: 0, end: 4 }] },
+    { waypointTimes: [], timedSegments: [] },
+  ]) {
+    const patch = { ...geometry, ...timing };
+    const result = fitStops(old, { ...old, ...patch }, patch);
+    assert.deepEqual(result.waypointTimes, timing.waypointTimes);
+    assert.deepEqual(result.timedSegments, timing.timedSegments);
+  }
+});
+
+test('toggleStop：分段停顿拆分与合并保留外侧时刻，重复操作不修改输入', () => {
+  const path = P({
+    points: [[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]],
+    interpolation: 'polyline', start: 10,
+    timedSegments: [{ from: 0, to: 3, start: 0, end: 8, speed: 'linear' }],
+  });
+  const before = structuredClone(path);
+  const split = toggleStop(path, 1, true);
+  assert.deepEqual(split, { timedSegments: [
+    { from: 0, to: 1, start: 0, end: 2.666667, speed: 'smooth' },
+    { from: 1, to: 3, start: 2.666667, end: 8, speed: 'smooth' },
+  ] });
+  const stopped = { ...path, ...split };
+  assert.deepEqual(toggleStop(stopped, 1, true), split);
+  assert.deepEqual(toggleStop(stopped, 3, false), split);
+  assert.deepEqual(toggleStop(path, 0, true), { timedSegments: path.timedSegments });
+  assert.deepEqual(toggleStop(path, 1, false), { timedSegments: path.timedSegments });
+  assert.deepEqual(toggleStop(stopped, 1, false), {
+    timedSegments: [{ from: 0, to: 3, start: 0, end: 8, speed: 'smooth' }],
+  });
+  split.timedSegments[0].end = 0;
+  assert.deepEqual(path, before);
+});
+
+test('toggleStop：普通停顿重复操作保持现有返回字段约定', () => {
+  const path = P({ stops: [1, 3], stopTimes: [2, 6] });
+  const before = structuredClone(path);
+  assert.deepEqual(toggleStop(path, 1, true), { stops: [1, 3], stopTimes: [2, 6] });
+  assert.deepEqual(toggleStop(path, 2, false), { stops: [1, 3] });
+  assert.deepEqual(toggleStop(P({ stops: [1], stopTimes: [2] }), 1, false), { stops: [], stopTimes: [] });
+  assert.deepEqual(path, before);
+});
+
 test('角色起步：ramp 秒内加到匀速，之后匀速；首尾速度 0、终点 = 全长、位移连续；机位（ramp=0）仍整段 smoothstep', () => {
   const json = { points: [[0, 0, 0], [13, 0, 0]], closed: false, start: 1, duration: 10, speed: 'smooth' };
   const P = new Path(json, { ramp: WALK_RAMP }), C = new Path(json);

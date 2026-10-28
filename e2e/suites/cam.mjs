@@ -82,10 +82,15 @@ export async function run() {
   const camY = (await camPose(ids.c1)).pos[1];
   const camP = (await camPose(ids.c1)).pos;
   await page.evaluate(id => window.__app.emit('inspect', { id, section: 'path' }), ids.c1); await settle();
-  await clickSel('#inspector [data-sec="path"] .sec-btn');
+  await page.evaluate(() => window.__timelinePanel.setCollapsed(false));
+  await settle();
+  const pathMenuButton = `.tl-head[data-ent="${ids.c1}"] .tl-addkey`;
+  await clickSel(pathMenuButton);
   await settle();
   const towardLabel = await page.$$eval('.ctx-item', (ns) => ns.map((n) => n.textContent).join(' '));
   await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find((n) => n.textContent.includes('钢笔路径')).click());
+  // 时间轴浮层会遮住靠近机位的落点；选完工具后收起再进行画布点击。
+  await page.evaluate(() => window.__timelinePanel.setCollapsed(true));
   await settle();
   const hint8 = await page.$eval('.path-hint', (n) => n.textContent);
   for (const q of [[camP[0] + 1.5, camY, camP[2] + 0.6], [camP[0] + 3, camY, camP[2] - 0.8], [camP[0] + 3.4, camY, camP[2] - 2.8]]) { await page.mouse.click(...await scr(q)); await settle(); }
@@ -109,13 +114,16 @@ export async function run() {
   ok('验收8 overlay 画在机位高度（播放亮点 y ≈ 机位高度）、机位视角下不显示', Math.abs(dot[1] - camY) < 0.002 && ovVis && !ovPov, JSON.stringify({ dotY: dot[1], camY, ovVis, ovPov }));
 
   // 推到：停在目标前 1.5 m
-  await page.evaluate(() => [...document.querySelectorAll('#inspector [data-sec="path"] .minibtn')].find((b) => b.textContent === '删除路径').click());
+  await clickSel('#inspector .move-clear');
   await settle();
   await pickInOutliner(ids.c1n);
   await page.evaluate(id => window.__app.emit('inspect', { id, section: 'path' }), ids.c1); await settle();
-  await clickSel('#inspector [data-sec="path"] .sec-btn');
+  await page.evaluate(() => window.__timelinePanel.setCollapsed(false));
+  await settle();
+  await clickSel(pathMenuButton);
   await settle();
   await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find((n) => n.textContent.includes('推到')).click());
+  await page.evaluate(() => window.__timelinePanel.setCollapsed(true));
   await settle();
   const footA = (await camPose(ids.c1)).foot[ids.A];
   await page.mouse.click(...await scr([footA[0], 0.9, footA[2]]));
@@ -123,7 +131,7 @@ export async function run() {
   const tw = (await camAnim(ids.c1)).path;
   ok('机位「推到」角色：停在目标前 1.5 m（水平）、高度不变', !!tw && Math.abs(hdist(tw.points[1], footA) - 1.5) < 0.01 && Math.abs(tw.points[1][1] - camY) < 1e-4,
     JSON.stringify(tw?.points));
-  await page.evaluate(() => [...document.querySelectorAll('#inspector [data-sec="path"] .minibtn')].find((b) => b.textContent === '删除路径').click());
+  await clickSel('#inspector .move-clear');
   await settle();
 
   // ---- 9 主机位播放 ----

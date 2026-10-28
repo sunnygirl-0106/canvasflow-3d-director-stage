@@ -158,8 +158,10 @@ export class ExportModal {
 
   /** 能力检测：不支持则禁用「开始导出」并显示提示。 */
   async _checkSupport(p) {
+    const button = this.startBtn;
     const ok = hasWebCodecs() && (p.error || await isExportSupported(p.width, p.height, p.fps));
-    if (!this.overlay) return;
+    // 改规格或重新打开弹层会重建按钮；旧请求不能覆盖新表单的检测结果。
+    if (!this.overlay || this.startBtn !== button) return;
     this.unsupEl.hidden = !!ok;
     if (!ok) {
       this.unsupEl.textContent = hasWebCodecs() ? `当前浏览器不支持 ${p.width}×${p.height} 的 H.264 编码` : UNSUPPORTED_MSG;

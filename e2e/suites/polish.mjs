@@ -99,13 +99,19 @@ export async function run() {
     return input.height === 44 && button.width === 32 && button.height === 32 && !tooltip.hidden && tooltip.textContent.includes('预制场景');
   }));
   await page.screenshot({ path: `${out}/capsule-hover.png` });
-  const beforePreset = await page.evaluate(() => JSON.stringify(window.__app.store.document));
+  const beforePreset = await page.evaluate(() => ({ document: JSON.stringify(window.__app.store.document), draft: window.__aiPanel.textarea.value }));
   await page.click('#scenePresets');
   ok('入口打开 8 个场景并更新展开状态', await page.evaluate(() => document.querySelectorAll('.ai-preset').length === 8 && document.querySelector('#scenePresets').getAttribute('aria-expanded') === 'true'));
   await settle(220);
   await page.screenshot({ path: `${out}/presets.png` });
   await page.click('.ai-preset');
-  ok('预制只填草稿，不触发生成、不改场景', await page.evaluate(before => window.__aiPanel.textarea.value.length > 0 && !window.__app.ai.busy && !document.querySelector('.ai-preset-tray') && JSON.stringify(window.__app.store.document) === before, beforePreset));
+  ok('选择预制只更新预览，不触发生成、不改草稿或场景', await page.evaluate(before => {
+    const panel = window.__aiPanel;
+    return panel.pendingPreset && panel.browsePresets && !window.__app.ai.busy
+      && document.querySelectorAll('#scenePresetTray .ai-preset[aria-pressed="true"]').length === 1
+      && panel.textarea.value === before.draft && JSON.stringify(window.__app.store.document) === before.document;
+  }, beforePreset));
+  await page.keyboard.press('Escape');
   await page.evaluate(() => { window.__aiPanel.textarea.value = ''; window.__aiPanel.renderInput(); });
   for (const [width, height] of [[2048, 1120], [1440, 900], [900, 700], [680, 700]]) {
     await page.setViewport({ width, height }); await settle(160);

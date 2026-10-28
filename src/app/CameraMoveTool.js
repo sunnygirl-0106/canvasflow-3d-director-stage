@@ -45,7 +45,7 @@ export class CameraMoveTool {
     return manual.every(Number.isFinite) && Math.hypot(...manual.map((v, i) => v - origin.position[i])) > .001 ? manual : aheadPoint({ pos: origin.position, rot: origin.rot });
   }
 
-  /** Explicit intent: replace the full motion, edit its saved tail, or append once. */
+  /** 替换整条运镜、编辑已保存的末段，或追加一段；每次操作只提交一个事务。 */
   applyPreset(cam, name, { params, subject, reset = false, mode = 'replace' } = {}) {
     const current = this.current(cam), last = current?.segments.at(-1);
     const append = mode === 'append', editing = mode === 'edit';
@@ -54,7 +54,8 @@ export class CameraMoveTool {
     const hadMoves = this.hasMoves(cam);
     const { lookAts, rotTrack } = this._anim(cam);
     const needsDefaultLook = name !== 'pan' && !lookAts.length && !rotTrack?.keys.length;
-    if (mode === 'replace' && !reset && !params && subject === undefined && !current?.customPrefix && current?.segments.length === 1 && last.name === name) {
+    const samePreset = !current?.customPrefix && current?.segments.length === 1 && last.name === name;
+    if (mode === 'replace' && !reset && !params && subject === undefined && samePreset) {
       if (needsDefaultLook) return this.applyPreset(cam, name, { mode: 'edit' });
       this.error = null; return true;
     }
@@ -67,6 +68,7 @@ export class CameraMoveTool {
       if (endpoint && Math.hypot(...endpoint.map((v, i) => v - origin.position[i])) > .0001) return this._presetError('轨迹末端正由跟随控制，实际位置与轨迹终点不同。请先调整跟随生效时间，再追加运镜；原轨迹已保留。');
     }
     const editTail = editing && (current.customPrefix || current.segments.length > 1);
+    const extendsMotion = append || editTail;
     if (editing) origin = clone(last.origin);
     const inherit = append && last?.name === name;
     let aim;
@@ -93,18 +95,34 @@ export class CameraMoveTool {
       this.app.history.capture();
       this.app.store.transact(append ? '追加运镜' : editing ? '编辑运镜参数' : '替换运镜', doc => {
         if (editTail) removeCameraMoveTail(doc, cam.id, last);
-        applyCameraMove(doc, cam.id, { name, subject, aim, params: next, preserveConstraints: true, preservePositionKeys: append || editTail, ownPan: mode !== 'edit' || current?.segments.some(s => s.name === 'pan'), mode: append || editTail ? 'append' : 'replace', origin, time: origin.time, lastPan: append && last?.name === 'pan' ? { start: last.origin.time, duration: last.params.duration, rotEnd: origin.rot } : null });
+        applyCameraMove(doc, cam.id, {
+          name, subject, aim, params: next, origin, time: origin.time,
+          preserveConstraints: true,
+          preservePositionKeys: extendsMotion,
+          ownPan: !editing || current?.segments.some(s => s.name === 'pan'),
+          mode: extendsMotion ? 'append' : 'replace',
+          lastPan: append && last?.name === 'pan'
+            ? { start: last.origin.time, duration: last.params.duration, rotEnd: origin.rot }
+            : null,
+        });
         doc.timeline.duration = Math.max(doc.timeline.duration, origin.time + next.duration);
         const segment = { name, subject: clone(subject), aim: aim.slice(), params: next, origin };
         doc.meta.cameraMoves ||= {};
-        doc.meta.cameraMoves[cam.id] = { signature: motionSignature(doc, cam.id), segments: append ? [...(current?.segments || []), segment] : editTail ? [...current.segments.slice(0, -1), segment] : [segment], ...((append || editTail) && (current?.customPrefix || !current && hadMoves) ? { customPrefix: true } : {}) };
+        const state = { signature: motionSignature(doc, cam.id), segments: [segment] };
+        if (append) state.segments = [...(current?.segments || []), segment];
+        else if (editTail) state.segments = [...current.segments.slice(0, -1), segment];
+        if (extendsMotion && (current?.customPrefix || !current && hadMoves)) state.customPrefix = true;
+        doc.meta.cameraMoves[cam.id] = state;
       });
       this.app.history.capture();
       this.error = null;
       toast(`已${append ? '追加' : editing ? '更新' : '替换为'}${PANEL_LABEL[name]}运镜`, { action: { label: '撤销', onClick: () => this.app.history.undo() } });
       this.app.stage.invalidate();
       return true;
-    } catch (err) { this.app.directorDetached = detached; return this._presetError(err.errors?.[0] || err.message); }
+    } catch (err) {
+      this.app.directorDetached = detached;
+      return this._presetError(err.errors?.[0] || err.message);
+    }
   }
 
   _presetError(message) { this.error = message; return false; }
@@ -258,10 +276,10 @@ export class CameraMoveTool {
     let res;
     try {
       app.store.transact('应用运镜', (doc) => {
-      res = clone(applyCameraMove(doc, cam.id, {
-        name, subject, aim: this._aim(subject), params, time: ctx.time,
-        lastPan: segs[segs.length - 1] || null, ownPan: segs.some((s) => s.kind === 'pan'),
-      }));
+        res = clone(applyCameraMove(doc, cam.id, {
+          name, subject, aim: this._aim(subject), params, time: ctx.time,
+          lastPan: segs[segs.length - 1] || null, ownPan: segs.some((s) => s.kind === 'pan'),
+        }));
       });
     } catch (err) { toastError(err); return null; }
     const { move, start, undo } = res;
@@ -287,16 +305,14 @@ export class CameraMoveTool {
     const u = seg.undo;
     try {
       this.app.store.batch('删除运镜段', () => {
-      if (seg.kind === 'path') {
-        if (u.path) tl.updatePath(cur.path.id, u.path);
-        else tl.removePath(cur.path.id);
-      } else {
-        if (u.track) tl.removeTrack(u.track);
+        if (seg.kind === 'path') {
+          if (u.path) tl.updatePath(cur.path.id, u.path);
+          else tl.removePath(cur.path.id);
+        } else if (u.track) tl.removeTrack(u.track);
         else for (const t of u.keys.times) tl.removeKey(u.keys.track, t);
-      }
-      if (u.added && cur.lookAts.some((c) => c.id === u.added)) tl.removeConstraint(u.added);
-      for (const p of u.patched) if (cur.lookAts.some((c) => c.id === p.id)) tl.updateConstraint(p.id, { end: p.end });
-      for (const c of u.removed) tl.addConstraint(c);
+        if (u.added && cur.lookAts.some((c) => c.id === u.added)) tl.removeConstraint(u.added);
+        for (const p of u.patched) if (cur.lookAts.some((c) => c.id === p.id)) tl.updateConstraint(p.id, { end: p.end });
+        for (const c of u.removed) tl.addConstraint(c);
       });
     } catch (err) { toastError(err); return false; }
     // 不截断 meta：签名回到上一段，段列表自然少一段；⌘Z 后签名又等于这一段，列表恢复

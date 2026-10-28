@@ -85,6 +85,19 @@ test('insert sampled height, shift stop indices, preserve timing; prevent seam/d
   assert.equal(editor.insertAt(p.id,0),null);
 });
 
+test('时间轴可对视口尚未显示的路径插点，保留原路径时间和高度', () => {
+  const { app, ent } = setup();
+  const path = app.timeline.addPath({ target: ent.id, points: [[0, 0, 0], [2, 2, 0]], start: 1, duration: 6, interpolation: 'polyline' });
+  let selected;
+  app.pathOverlay = { pathOf: () => null, setSelectedVertex: ref => { selected = ref; } };
+  const editor = Object.assign(Object.create(PathEditor.prototype), { app });
+  assert.deepEqual(editor.insertAt(path.id, Math.sqrt(2)), { index: 1, inserted: true });
+  assert.deepEqual(app.timeline.paths[0].points[1], [1, 1, 0]);
+  assert.deepEqual(selected, { pathId: path.id, index: 1 });
+  assert.equal(app.timeline.paths[0].start, 1);
+  assert.equal(app.timeline.paths[0].duration, 6);
+});
+
 test('20% faster defaults only affect new character paths; saved timing and camera pace remain unchanged', () => {
   const doc=createEmptyDocument(); doc.timeline.duration=100;
   const actor=addCharacter(doc,{name:'角色A',body:'male'});

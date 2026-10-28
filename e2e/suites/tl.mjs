@@ -180,12 +180,16 @@ export async function run() {
   const c2 = await page.evaluate((cam) => window.__app.timeline.toJSON().constraints.filter((c) => c.target === cam), ids.cam);
   await page.evaluate(() => { document.querySelector('#inspector [data-sec="constraint"]').scrollIntoView(); });
   await page.screenshot({ path: `${OUT}/06_constraint.png`, clip: await page.$eval('#rightPanel', (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; }) });
-  await (await cnsSel(0)).select('');
+  const manualPoint = await page.evaluate(id => window.__app.findCamera(id).lookTarget.toArray(), ids.cam);
+  await (await cnsSel()).select('__point');
   await settle();
   const c3 = await page.evaluate((cam) => window.__app.timeline.toJSON().constraints.filter((c) => c.target === cam), ids.cam);
   ok('验收6 约束段：注视 → 角色 产生 lookAt', c1.length === 1 && c1[0].type === 'lookAt' && c1[0].subject === ids.m && c1[0].start === null && c1[0].end === null, JSON.stringify(c1));
   ok('验收6 约束段：start=1 / end=3 写入文档', c2.length === 1 && c2[0].start === 1 && c2[0].end === 3, JSON.stringify(c2.map((c) => [c.start, c.end])));
-  ok('验收6 约束段：选「无」删除', c3.length === 0, JSON.stringify(c3));
+  ok('验收6 约束段：切换手动坐标保留区间和当前焦点', c3.length === 1 && c3[0].id === c2[0].id
+    && c3[0].start === 1 && c3[0].end === 3 && JSON.stringify(c3[0].subject) === JSON.stringify(manualPoint), JSON.stringify(c3));
+  await page.evaluate(id => window.__app.timeline.removeConstraint(id), c3[0].id);
+  ok('验收6 删除约束后清空对应文档记录', await page.evaluate(id => !window.__app.timeline.constraints.some(c => c.target === id), ids.cam));
 
   // ---- 7 播放 / 停止 ----
   await page.evaluate(() => document.activeElement?.blur());

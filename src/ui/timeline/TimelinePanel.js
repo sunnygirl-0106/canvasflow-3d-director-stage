@@ -8,6 +8,7 @@ import { dragKeys, dragBar } from './keyDrag.js';
 import { popupMenu } from '../popupMenu.js';
 import { toggleKey, propState } from './animState.js';
 import { onKey, KEY_PRIORITY } from '../../util/keys.js';
+import { clone } from '../../util/math.js';
 
 const RULER_H = 30;
 const PAD_R = 44;            // 时长之后留白（末尾的键 / 播放头不贴边）
@@ -25,7 +26,7 @@ function savePrefs(p) {
 
 /**
  * 底部时间轴面板。
- * - 面板不持有文档状态：行在 timeline 'change' 时按 toJSON() 重建；写操作一律走 timeline API。
+ * - 面板不持有文档状态：行在 timeline 'change' 时按只读 view() 重建；写操作一律走 timeline API。
  * - 播放头在 playback 'tick' 时只改 transform，不重建行。
  * 事件：'collapse'(bool)。
  */
@@ -261,7 +262,7 @@ export class TimelinePanel extends Emitter {
     const { track, path, constraint } = row.dataset;
     let items;
     if (track) {
-      const data = tl.toJSON().timeline.tracks.find((t) => t.id === track);
+      const data = tl.tracks.find((t) => t.id === track);
       if (!data) return;
       items = [
         { label: `删除轨道（${(this.app.findEntity(data.target)?.type === 'camera' ? CAMERA_PROP_LABEL : PROP_LABEL)[data.property]}）`, onClick: run(() => tl.removeTrack(track)) },
@@ -274,9 +275,9 @@ export class TimelinePanel extends Emitter {
 
   /** 键元素 → 文档里的键 { trackId, t, value, ease }。 */
   _keyData(node) {
-    const tr = this.app.timeline.toJSON().timeline.tracks.find((t) => t.id === node.dataset.track);
+    const tr = this.app.timeline.tracks.find((t) => t.id === node.dataset.track);
     const k = tr?.keys.find((x) => String(x.t) === node.dataset.t);
-    return k ? { trackId: tr.id, ...k } : null;
+    return k ? { trackId: tr.id, ...clone(k) } : null;
   }
 
   /** 删除选中的键（一次撤销）。 */
@@ -325,7 +326,7 @@ export class TimelinePanel extends Emitter {
   /** 删除某实体的全部动画（轨道 / 路径 / 以它为对象的约束），一次撤销。 */
   removeAllAnimation(entId) {
     const tl = this.app.timeline;
-    const { timeline, paths, constraints } = tl.toJSON();
+    const { timeline, paths, constraints } = tl.view();
     this.app.store.batch('删除全部动画', () => {
     for (const t of timeline.tracks) if (t.target === entId) tl.removeTrack(t.id);
     for (const p of paths) if (p.target === entId) tl.removePath(p.id);

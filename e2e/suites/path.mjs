@@ -152,7 +152,15 @@ export async function run() {
     const selectedPaths = d2.paths.filter(p => a.selectedIds.has(p.target)).length;
     return { eq: strip(d1) === strip(d2), paths: d2.paths.length, items: a.pathOverlay.itemCount, selectedPaths, visible: a.pathOverlay.visible };
   });
-  ok('验收11 含手绘路径的文档 导出 → 导入 → 导出 ≡；导演视角显示全部彩色路径', rt.eq && rt.paths === 4 && rt.selectedPaths > 0 && rt.items === rt.paths && rt.visible, JSON.stringify(rt));
+  ok('验收11 含手绘路径的文档往返一致；导入重置选择，无轨迹机位不显示其他对象路径',
+    rt.eq && rt.paths === 4 && rt.selectedPaths === 0 && rt.items === 0 && rt.visible, JSON.stringify(rt));
+  const selectedPath = await page.evaluate(id => {
+    const a = window.__app;
+    a.select(id, { user: true });
+    return { expected: a.timeline.paths.find(p => p.target === id).id, shown: a.pathOverlay._items.map(item => item.json.id) };
+  }, ids.A);
+  ok('验收11 显式选中角色只显示该角色路径',
+    selectedPath.shown.length === 1 && selectedPath.shown[0] === selectedPath.expected, JSON.stringify(selectedPath));
 
   // ---- 5 Explicitly enter editing before dragging existing vertices (round 4). ----
   await pickInOutliner(ids.An);
@@ -358,7 +366,7 @@ export async function run() {
   await settle(200);
   await page.evaluate(id => { const p=window.__timelinePanel; p.trackRows.expandedEnts.add(id); p.rebuild(); }, ids.B);
   await settle();
-  await page.click(`.tl-track[data-path="${p10.id}"] .tl-path-node:nth-of-type(3)`, {button:'right'});
+  await page.click(`.tl-track[data-path="${p10.id}"] .tl-path-node[data-node-index="1"]`, {button:'right'});
   const stopUI0 = await page.$eval('.ctxmenu', n => n.innerText);
   await page.evaluate(() => [...document.querySelectorAll('.ctx-item')].find(n=>n.textContent.includes('在此节点停顿')).click());
   await settle(150);

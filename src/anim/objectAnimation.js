@@ -6,12 +6,23 @@ const transformTrack = (track, target) => track.target === target && ['pos', 'ro
 
 /** 对象自身的变换动画范围；不包含空轨道、约束或群组成员。 */
 export function objectAnimationRange(doc, target) {
-  const times = [];
-  for (const path of doc.paths) if (path.target === target) times.push(path.start, path.start + path.duration);
-  for (const track of doc.timeline.tracks) if (transformTrack(track, target)) {
-    for (const key of track.keys) if (Number.isFinite(key.t)) times.push(key.t);
+  let start = Infinity, end = -Infinity, hasAnimation = false;
+  for (const path of doc.paths) {
+    if (path.target !== target) continue;
+    start = Math.min(start, path.start, path.start + path.duration);
+    end = Math.max(end, path.start, path.start + path.duration);
+    hasAnimation = true;
   }
-  return times.length ? { start: Math.min(...times), end: Math.max(...times) } : null;
+  for (const track of doc.timeline.tracks) {
+    if (!transformTrack(track, target)) continue;
+    for (const key of track.keys) {
+      if (!Number.isFinite(key.t)) continue;
+      start = Math.min(start, key.t);
+      end = Math.max(end, key.t);
+      hasAnimation = true;
+    }
+  }
+  return hasAnimation ? { start, end } : null;
 }
 
 /** 在一次文档事务中统一变换时间；路径内部时间只由 fitStops 缩放一次。 */

@@ -39,7 +39,7 @@ function track(node, e, { onMove, onEnd }) {
 /** 当前文档里的键：keyId → { trackId, t, value, ease }。 */
 function keyIndex(app) {
   const map = new Map();
-  for (const tr of app.timeline.toJSON().timeline.tracks) {
+  for (const tr of app.timeline.tracks) {
     for (const k of tr.keys) map.set(keyId(tr.id, k.t), { trackId: tr.id, ...k });
   }
   return map;
@@ -121,7 +121,8 @@ export function dragBar(panel, e, barEl, edge) {
   const { kind, id } = barEl.dataset;
   const { duration, fps } = tl;
   const minLen = 1 / fps;
-  const data = kind === 'path' ? tl.toJSON().paths.find((p) => p.id === id) : tl.toJSON().constraints.find((c) => c.id === id);
+  const sources = kind === 'path' ? tl.paths : tl.constraints;
+  const data = sources.find((source) => source.id === id);
   if (!data) return;
   const t0 = kind === 'path' ? data.start : (data.start ?? 0);
   const t1 = kind === 'path' ? data.start + data.duration : (data.end ?? duration);

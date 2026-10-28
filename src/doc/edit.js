@@ -14,6 +14,7 @@ import { rampFor } from '../anim/Path.js';
 import { cameraMove, appendMove, lookAtWindows, pathEnd, MoveError } from '../anim/cameraMoves.js';
 import { round6, clone, round4 } from '../util/math.js';
 import { upsertKeys } from '../anim/keyframes.js';
+import { unusedTrailColor } from './trailColor.js';
 
 /** 群众阵列行列数 / 间距的范围与默认间距（界面与 AI 校验共用）。 */
 export const CROWD_LIMITS = { size: [1, 6], spacing: [0.5, 5] };
@@ -96,13 +97,8 @@ export function characterJSON({ id, name, body, pos = [0, 0, 0], rot = [0, 0, 0]
 }
 
 export function nextTrailColor(doc) {
-  const palette = ['#4dd9ed', '#ff897d', '#f4c85c', '#83d69a', '#76a9ff', '#f49ec4'];
   const used = new Set(doc.entities.filter(e => e.type === 'character').map(e => e.trailColor).filter(Boolean));
-  return palette.find(c => !used.has(c)) || (() => {
-    let i = 0, c;
-    do { c = `#${new THREE.Color().setHSL(((i++ * 0.61803398875) + 0.12) % 1, 0.72, 0.66).getHexString()}`; } while (used.has(c));
-    return c;
-  })();
+  return unusedTrailColor(used);
 }
 
 /** 新建角色并加入文档（默认落点 = spawnPoint）。返回条目。 */
