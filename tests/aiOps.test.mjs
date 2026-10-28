@@ -1,4 +1,3 @@
-import { oldFields } from './migrate/pathModel.js';
 // AI ops 词汇表 + 校验器单元测试（阶段 H 第 1 步）：node 直接跑，不起浏览器。
 // 运行：npm run test:unit
 import { test } from 'node:test';
@@ -34,7 +33,7 @@ test('词汇表 ≡ 代码枚举', () => {
   setEq(VOCAB.pathKind, PATH_MODES.map(([k]) => k).filter((k) => k !== 'freehand'), '路径 kind');
   setEq(VOCAB.arcDir, MOVE_DIRS.half_orbit.map(([k]) => k), '环绕方向');
   setEq(VOCAB.ease, EASES, 'ease');
-  setEq(oldFields(VOCAB).speed, PATH_SPEEDS, 'speed');
+  setEq(VOCAB.speed, PATH_SPEEDS, 'speed');
   setEq(VOCAB.orient, PATH_ORIENTS, 'orient');
   setEq(VOCAB.property, TRACK_PROPERTIES, 'property');
   setEq(VOCAB.constraint, CONSTRAINT_TYPES, '约束');
@@ -49,7 +48,7 @@ test('中文解释表的键 ≡ 代码枚举（不多不少）', () => {
   setEq(Object.keys(NOTES.pathKind), VOCAB.pathKind);
   setEq(Object.keys(PATH_FIELDS), VOCAB.pathKind);
   setEq(Object.keys(NOTES.ease), EASES);
-  setEq(Object.keys(oldFields(NOTES).speed), PATH_SPEEDS);
+  setEq(Object.keys(NOTES.speed), PATH_SPEEDS);
   setEq(Object.keys(NOTES.orient), PATH_ORIENTS);
   setEq(Object.keys(NOTES.property), TRACK_PROPERTIES);
   setEq(Object.keys(NOTES.constraint), CONSTRAINT_TYPES);
@@ -59,7 +58,7 @@ test('词汇表文本包含每一个词', () => {
   const text = vocabText() + '\n' + opsText();
   const words = [
     ...VOCAB.body, ...VOCAB.prop, ...VOCAB.pose, ...VOCAB.move, ...VOCAB.pathKind, ...VOCAB.arcDir,
-    ...VOCAB.ease, ...oldFields(VOCAB).speed, ...VOCAB.orient, ...VOCAB.property, ...VOCAB.constraint, ...VOCAB.ratio,
+    ...VOCAB.ease, ...VOCAB.speed, ...VOCAB.orient, ...VOCAB.property, ...VOCAB.constraint, ...VOCAB.ratio,
     ...MOVE_PARAM_KEYS, ...Object.values(MOVE_DIRS).flat().map(([k]) => k), ...OP_NAMES,
   ];
   const missing = words.filter((w) => !text.includes(w));

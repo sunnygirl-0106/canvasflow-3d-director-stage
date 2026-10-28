@@ -1,4 +1,3 @@
-import { oldFields } from './migrate/pathModel.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -16,16 +15,16 @@ test('人物及群众从首帧到末帧匀速，旧 smooth 路径也按总长 / 
       for (const elapsed of [0, 1 / 60, 2.7, 4 - 1 / 60, 0.8, 4]) {
         track.apply(json.start + elapsed, state);
         assert.ok(Math.abs(state.position.x - speed * elapsed) < 2e-4);
-        assert.ok(Math.abs(oldFields(state.motion).speed - (elapsed > 0 && elapsed < 4 ? speed : 0)) < 1e-9);
+        assert.ok(Math.abs(state.motion.speed - (elapsed > 0 && elapsed < 4 ? speed : 0)) < 1e-9);
         assert.ok(Math.abs(state.motion.gaitTime - elapsed) < 1e-8);
       }
       track.apply(json.start - 0.1, state);
-      assert.equal(oldFields(state.motion).speed, 0);
+      assert.equal(state.motion.speed, 0);
       assert.equal(state.position.x, 0);
       track.apply(json.start + json.duration + 0.1, state);
-      assert.equal(oldFields(state.motion).speed, 0);
+      assert.equal(state.motion.speed, 0);
       assert.ok(Math.abs(state.position.x - length) < 1e-9);
-      assert.equal(oldFields(json).speed, 'smooth'); // 运行兼容旧文档，不改写用户文件。
+      assert.equal(json.speed, 'smooth'); // 运行兼容旧文档，不改写用户文件。
     }
   }
 });
