@@ -21,8 +21,8 @@
 }
 #timeline.collapsed .tl-transport { border-bottom: none; }
 .tl-btn {
-  width: 28px; height: 26px; flex: none; border: none; background: none; color: #c7c7cd;
-  border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 26px; flex: none; border: none; background: none; color: var(--text-control);
+  border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 .tl-btn:hover { background: #2a2a30; color: #fff; }
 .tl-btn.on { background: #2b2f3a; color: var(--accent); }
@@ -32,7 +32,7 @@
 .tl-clock { font-variant-numeric: tabular-nums; margin: 0 2px; font-size: 12.5px; }
 .tl-time { color: #fff; }
 .tl-sel, .tl-num {
-  background: var(--panel2); color: var(--txt); border: 1px solid transparent; border-radius: 6px;
+  background: var(--panel2); color: var(--txt); border: 1px solid transparent; border-radius: var(--radius-sm);
   font-size: 12px; height: 24px; padding: 0 6px; outline: none; font-family: inherit;
 }
 .tl-sel:focus, .tl-num:focus { border-color: var(--line2); }
@@ -111,7 +111,7 @@
   transform: translate(-50%, -50%) rotate(45deg);
 }
 .tl-key {
-  width: 8px; height: 8px; background: #c7c7cd; border: 1px solid #0b0b0d; cursor: pointer; z-index: 1;
+  width: 8px; height: 8px; background: var(--text-control); border: 1px solid #0b0b0d; cursor: pointer; z-index: 1;
   box-sizing: content-box;
 }
 .tl-key:hover { background: #fff; }
@@ -162,13 +162,12 @@
 .anim-sec { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 14px; }
 .anim-sec.flash { animation: anim-flash 1.2s ease-out; }
 @keyframes anim-flash { from { background: rgba(2,163,197,.12); } to { background: transparent; } }
-.anim-sec .sec-title { display: flex; align-items: center; gap: 8px; }
+.anim-sec .sec-title { display: flex; align-items: center; gap: var(--space-md); }
 .anim-sec .sec-tag { font-size: 11px; font-weight: 400; padding: 1px 7px; border-radius: 9px; }
 .anim-sec .sec-tag.path { background: rgba(52,199,89,.18); color: var(--green); }
-.anim-sec .sec-tag.cns { background: rgba(167,139,250,.18); color: #c4b5fd; }
-.anim-pair { display: flex; gap: 8px; }
+.anim-pair { display: flex; gap: var(--space-md); }
 .anim-pair > .field { flex: 1; min-width: 0; }
-.num-row { display: flex; align-items: center; gap: 6px; background: var(--panel2); border-radius: 8px; padding: 0 10px; }
+.num-row { display: flex; align-items: center; gap: 6px; background: var(--panel2); border-radius: var(--radius-md); padding: 0 10px; }
 .num-input { flex: 1; min-width: 0; background: none; border: none; color: var(--txt); font-size: 12.5px; padding: 8px 0; outline: none; }
 .num-input::placeholder { color: var(--dim2); }
 .num-unit { color: var(--dim2); font-size: 12px; }
@@ -183,20 +182,12 @@
 .path-speed { color: var(--dim2); }
 .anim-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
 .anim-btns .minibtn { margin: 0; padding: 7px 6px; font-size: 12px; white-space: nowrap; }
-.anim-btns .minibtn.danger:hover { color: #ff8a80; }
+.anim-btns .minibtn.danger:hover { color: var(--text-error); }
 
 /* 运镜段 */
 .anim-btns .minibtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .anim-btns .minibtn.primary:hover { filter: brightness(1.1); }
 .anim-btns .minibtn[disabled] { opacity: .45; cursor: default; filter: none; }
-.move-info.err { color: #ff8a80; }
-.move-segs { display: flex; flex-direction: column; gap: 4px; margin: -4px 0 12px; }
-.move-seg { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 8px; border-radius: 6px; background: rgba(52,199,89,.08); }
-.move-seg-name { flex: 1; color: var(--green); }
-.move-seg-time { color: var(--dim); font-variant-numeric: tabular-nums; }
-.move-seg-del { background: none; border: 0; color: var(--dim); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
-.move-seg-del:hover { color: #ff8a80; }
-.move-seg:not(:last-child) .move-seg-del { opacity: .35; }
 
 /* 首行冻结操作区与标尺共用时间原点；设置弹层向上展开。 */
 #timeline .tl-tools { top: 0; right: 0; z-index: 9; display: flex; align-items: center; justify-content: space-evenly; border-left: 1px solid var(--line); }
@@ -204,14 +195,14 @@
 #timeline .tl-clock .tl-num { width: 57px; padding: 0; background: transparent; color: var(--dim); appearance: textfield; }
 #timeline .tl-num::-webkit-inner-spin-button { appearance: none; }
 #timeline .tl-more summary { list-style: none; cursor: pointer; }
-#timeline .tl-settings { left: 12px; display: flex; flex-wrap: wrap; width: 310px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 18px #0008; }
+#timeline .tl-settings { left: 12px; display: flex; flex-wrap: wrap; width: 310px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: 0 4px 18px #0008; }
 #timeline.collapsed .tl-settings { bottom: 40px; }
 #timeline .tl-value { font-variant-numeric: tabular-nums; color: var(--dim); }
 #timeline button:disabled { opacity: .3; cursor: default; }
 
 #timeline .tl-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
 #timeline .tl-scroll::-webkit-scrollbar-track { background: #202020; }
-#timeline .tl-scroll::-webkit-scrollbar-thumb { border: 2px solid #202020; border-radius: 6px; }
+#timeline .tl-scroll::-webkit-scrollbar-thumb { border: 2px solid #202020; border-radius: var(--radius-sm); }
 
 /* 参考图按 2048 → 1920 换算；窄屏保持操作按钮可用。 */
 #timeline { height: var(--timeline-height, clamp(180px, 24vh, 240px)); min-height: 160px; --tl-playhead: #b3b6bc; }
@@ -293,7 +284,7 @@
   #timeline .tl-tools { gap: 5px; padding: 0 6px; }
   #timeline .tl-zoom { flex-basis: 36px; width: 36px; }
 }
-.path-timing-hint { display: flex; flex-direction: column; gap: 6px; padding: 10px; margin: 0 0 12px; border: 1px solid #35434a; border-radius: 6px; background: #202a2e; color: #a5bbc5; font-size: 11px; line-height: 1.5; }
+.path-timing-hint { display: flex; flex-direction: column; gap: 6px; padding: 10px; margin: 0 0 12px; border: 1px solid #35434a; border-radius: var(--radius-sm); background: #202a2e; color: #a5bbc5; font-size: 11px; line-height: 1.5; }
 .path-timing-hint.fast { background: #302b22; border-color: #5b4b30; color: #d4ba87; }
 .path-timing-hint .minibtn { margin: 2px 0 0; color: #e6ce9e; border: 1px solid #6a5738; }
 /* 轨迹主片段与路径节点：青色区间、矩形边界手柄、菱形节点。 */
@@ -383,7 +374,7 @@ body.resizing-timeline, body.resizing-timeline * { cursor: ns-resize !important;
 #timeline .tl-track .tl-name::after { content: ''; position: absolute; left: 18px; top: 50%; width: 8px; border-top: 1px solid #555; }
 #timeline .tl-track.last-child .tl-name::before { bottom: 50%; }
 #timeline .tl-track button:disabled { opacity: .45; cursor: default; }
-#timeline .tl-clock { background: #383838; border-radius: 6px; padding: 0 5px; margin-left: 4px; }
+#timeline .tl-clock { background: #383838; border-radius: var(--radius-sm); padding: 0 5px; margin-left: 4px; }
 #timeline .tl-time, #timeline .tl-clock .tl-num { font-size: 12px; color: #dedede; }
 #timeline .tl-time-separator, #timeline .tl-unit { color: #999; }
 #timeline .tl-tools .tl-sel { font-size: 12px; color: #ccc; }
