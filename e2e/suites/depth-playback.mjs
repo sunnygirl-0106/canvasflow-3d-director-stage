@@ -116,9 +116,15 @@ export async function run() {
   });
   ok('重绘无确认；取消/无效路径保留旧内容；成功仅替换目标且可撤销', Object.values(replacement).every(Boolean), JSON.stringify(replacement));
 
-  await page.evaluate(async doc => { const a = window.__app; await a.loadDocument(doc, { applyView: true }); window.__timelinePanel.setCollapsed(false); }, seed);
+  await page.evaluate(async doc => { const a = window.__app; await a.loadDocument(doc, { applyView: true }); a.setCameraView(false); window.__timelinePanel.setCollapsed(false); }, seed);
+  // 载入只更新位姿并请求渲染；matrixWorld 要到按需渲染后才与新位姿一致。
+  // 先等待这个条件，避免把旧观察方向的矩阵当作播放前基线。
+  await page.waitForFunction(() => {
+    const c = window.__app.stage.camera;
+    return c.matrixWorld.equals(c.matrixWorld.clone().compose(c.position, c.quaternion, c.scale));
+  });
   const lockCamera = await page.evaluate(() => {
-    const a = window.__app; a.setCameraView(false);
+    const a = window.__app;
     return { shot: a.cameras[0].cam.matrixWorld.toArray(), director: a.stage.camera.matrixWorld.toArray() };
   });
   await page.click('.tl-play');
